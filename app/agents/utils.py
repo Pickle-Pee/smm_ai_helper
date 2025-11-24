@@ -1,0 +1,72 @@
+# app/agents/utils.py
+from __future__ import annotations
+
+from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional
+import json
+
+
+@dataclass
+class BriefContext:
+    """Нормализованный бриф, с которым работают все агенты."""
+
+    task_description: str = ""
+    brand_name: str = "бренд"
+    product_description: str = ""
+    audience: str = ""
+    goals: str = ""
+    channels: List[str] = None
+    tone: str = "дружелюбный, экспертный, без канцелярита"
+    geo: Optional[str] = None
+    price_segment: Optional[str] = None
+    niche: Optional[str] = None
+    budget: Optional[str] = None
+    extra: Dict[str, Any] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        # убираем None, чтобы не засорять промпты
+        return {k: v for k, v in data.items() if v not in (None, [], "")}
+
+
+def normalize_channels(channels: Any) -> List[str]:
+    if channels is None:
+        return []
+    if isinstance(channels, list):
+        return [str(c).strip() for c in channels if str(c).strip()]
+    if isinstance(channels, str):
+        parts = [p.strip() for p in channels.split(",")]
+        return [p for p in parts if p]
+    return [str(channels)]
+
+
+def normalize_brief(raw: Dict[str, Any]) -> BriefContext:
+    """Приводим все ключи к единому виду, добавляем разумные дефолты."""
+    return BriefContext(
+        task_description=str(raw.get("task_description", "")),
+        brand_name=str(raw.get("brand_name") or raw.get("project_name") or "бренд"),
+        product_description=str(raw.get("product_description", "")),
+        audience=str(raw.get("audience", "")),
+        goals=str(raw.get("goals") or raw.get("goal") or ""),
+        channels=normalize_channels(raw.get("channels")),
+        tone=str(raw.get("tone") or "дружелюбный, экспертный, без канцелярита"),
+        geo=raw.get("geo"),
+        price_segment=raw.get("price_segment"),
+        niche=raw.get("niche"),
+        budget=raw.get("budget"),
+        extra=raw.get("extra") or {},
+    )
+
+
+def safe_json_parse(raw: str) -> Dict[str, Any]:
+    """
+    Аккуратно вытаскиваем JSON из ответа модели:
+    - отрезаем мусор до/после фигурных скобок
+    - пытаемся распарсить
+    """
+    raw_str = raw.strip()
+    first = raw_str.find("{")
+    last = raw_str.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        raw_str = raw_str[first : last + 1]
+    return json.loads(raw_str)
