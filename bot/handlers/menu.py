@@ -11,6 +11,7 @@ async def cmd_start(message: types.Message):
     await message.answer(
         "Привет! Я рой SMM-агентов.\n\n"
         "Выбери, с чем нужно помочь сейчас:\n\n"
+        "Есть также генерация изображений по запросу.\n\n"
         "Также ты можешь в любой момент написать /history, чтобы посмотреть последние задачи.",
         reply_markup=main_menu_kb(),
     )

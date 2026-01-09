@@ -52,3 +52,46 @@ class TaskShort(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TaskStartRequest(BaseModel):
+    user: Optional[UserCreate] = None
+    agent_type: str
+    task_description: str
+    answers: Dict[str, Any] = {}
+    mode: str = "text"
+
+
+class TaskAnswerRequest(BaseModel):
+    session_id: str
+    key: str
+    value: str
+
+
+class TaskNeedInfoResponse(BaseModel):
+    status: str
+    session_id: str
+    questions: List[Dict[str, str]]
+
+
+class TaskDoneResponse(BaseModel):
+    status: str
+    session_id: str
+    result: Dict[str, Any]
+    image: Dict[str, Any] | None = None
+
+
+class ImageGenerateRequest(BaseModel):
+    platform: str = "auto"
+    use_case: str = "auto"
+    message: str
+    brand: Dict[str, Any] | None = None
+    overlay: Dict[str, str] | None = None
+    variants: int = 1
+
+
+class ImageGenerateResponse(BaseModel):
+    status: str
+    mode: str
+    preset_id: str
+    images: List[Dict[str, str]]
