@@ -1,5 +1,6 @@
 # bot/handlers/agent_flow.py
 from aiogram import Router, F, types
+from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
@@ -15,6 +16,15 @@ class AgentStates(StatesGroup):
     waiting_task_description = State()
     asking_details = State()
     running_agent = State()
+
+
+class ImageStates(StatesGroup):
+    waiting_platform = State()
+    waiting_use_case = State()
+    waiting_message = State()
+    waiting_variants = State()
+    waiting_overlay = State()
+    running_image = State()
 
 
 AGENT_CONFIG = {
@@ -98,6 +108,9 @@ async def choose_agent(callback: CallbackQuery, state: FSMContext):
         agent_type=cfg["agent_type"],
         answers={},
         task_description=None,
+        session_id=None,
+        current_question=None,
+        use_fallback=False,
     )
     await state.set_state(AgentStates.waiting_task_description)
 
@@ -110,48 +123,243 @@ async def choose_agent(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "generate_image")
+async def choose_image(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(image_payload={})
+    await state.set_state(ImageStates.waiting_platform)
+    await callback.message.edit_text(
+        "Для какой платформы нужна картинка? (instagram/telegram/vk/web/auto)"
+    )
+    await callback.answer()
+
+
+@router.message(ImageStates.waiting_platform)
+async def image_platform(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    payload = data.get("image_payload", {})
+    payload["platform"] = message.text.strip().lower()
+    await state.update_data(image_payload=payload)
+    await state.set_state(ImageStates.waiting_use_case)
+    await message.answer("Какой формат? (post/story/banner/hero/block/auto)")
+
+
+@router.message(ImageStates.waiting_use_case)
+async def image_use_case(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    payload = data.get("image_payload", {})
+    payload["use_case"] = message.text.strip().lower()
+    await state.update_data(image_payload=payload)
+    await state.set_state(ImageStates.waiting_message)
+    await message.answer("Опиши, что должно быть на изображении.")
+
+
+@router.message(ImageStates.waiting_message)
+async def image_message(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    payload = data.get("image_payload", {})
+    payload["message"] = message.text.strip()
+    await state.update_data(image_payload=payload)
+    await state.set_state(ImageStates.waiting_variants)
+    await message.answer("Сколько вариантов нужно? (1-3)")
+
+
+@router.message(ImageStates.waiting_variants)
+async def image_variants(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    payload = data.get("image_payload", {})
+    try:
+        variants = int(message.text.strip())
+    except ValueError:
+        variants = 1
+    payload["variants"] = max(1, min(variants, 3))
+    await state.update_data(image_payload=payload)
+    await state.set_state(ImageStates.waiting_overlay)
+    await message.answer(
+        "Нужен ли текст на картинке? Если да, пришли так: "
+        "Заголовок | Подзаголовок | CTA. Или напиши «-»."
+    )
+
+
+def parse_overlay(text: str) -> dict | None:
+    cleaned = text.strip()
+    if cleaned in {"-", "нет", "no", "без текста"}:
+        return None
+    parts = [p.strip() for p in cleaned.split("|")]
+    overlay = {}
+    if parts:
+        overlay["headline"] = parts[0]
+    if len(parts) > 1:
+        overlay["subtitle"] = parts[1]
+    if len(parts) > 2:
+        overlay["cta"] = parts[2]
+    return overlay
+
+
+@router.message(ImageStates.waiting_overlay)
+async def image_overlay(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    payload = data.get("image_payload", {})
+    overlay = parse_overlay(message.text)
+    if overlay:
+        payload["overlay"] = overlay
+    await state.update_data(image_payload=payload)
+    await state.set_state(ImageStates.running_image)
+    await message.answer("Генерирую изображение 🤖...")
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        resp = await client.post(
+            f"{settings.API_BASE_URL}/images/generate",
+            json=payload,
+        )
+    if resp.status_code >= 400:
+        await state.clear()
+        await message.answer("Ошибка генерации изображения. Попробуй позже.")
+        return
+
+    resp_data = resp.json()
+    images = resp_data.get("images") or []
+    for idx, image in enumerate(images):
+        url = image.get("url")
+        if not url:
+            continue
+        full_url = f"{settings.API_BASE_URL}{url}"
+        caption = "Готово!" if idx == 0 else None
+        await message.answer_photo(full_url, caption=caption)
+
+    await state.clear()
+
+
 @router.message(AgentStates.waiting_task_description)
 async def get_task_description(message: types.Message, state: FSMContext):
     await state.update_data(task_description=message.text)
-
     data = await state.get_data()
     agent_key = data["agent_key"]
+    agent_type = data["agent_type"]
 
-    field, question = get_next_question(agent_key, data.get("answers", {}))
-    if field is None:
-        await run_agent_and_reply(message, state)
+    payload = {
+        "user": {
+            "telegram_id": message.from_user.id,
+            "username": message.from_user.username,
+            "first_name": message.from_user.first_name,
+            "last_name": message.from_user.last_name,
+        },
+        "agent_type": agent_type,
+        "task_description": message.text,
+        "answers": {},
+        "mode": "text",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                f"{settings.API_BASE_URL}/tasks/start",
+                json=payload,
+            )
+        if resp.status_code >= 400:
+            raise RuntimeError("Backend error")
+        resp_data = resp.json()
+    except Exception:
+        await state.update_data(use_fallback=True)
+        field, question = get_next_question(agent_key, data.get("answers", {}))
+        if field is None:
+            await run_agent_and_reply(message, state)
+            return
+        answers = data["answers"]
+        answers[field] = None
+        await state.update_data(current_field=field, answers=answers)
+        await state.set_state(AgentStates.asking_details)
+        await message.answer(question)
         return
 
-    answers = data["answers"]
-    answers[field] = None
-    await state.update_data(current_field=field, answers=answers)
+    if resp_data.get("status") == "need_info":
+        questions = resp_data.get("questions") or []
+        if not questions:
+            await message.answer("Нужно чуть больше деталей. Давай уточним задачу.")
+            return
+        current = questions[0]
+        await state.update_data(
+            session_id=resp_data.get("session_id"),
+            current_question=current,
+        )
+        await state.set_state(AgentStates.asking_details)
+        await message.answer(current["question"])
+        return
 
-    await state.set_state(AgentStates.asking_details)
-    await message.answer(question)
+    if resp_data.get("status") == "done":
+        await state.clear()
+        await send_orchestrator_result(message, resp_data.get("result", {}))
+        return
+
+    await message.answer("Неожиданный ответ от сервера. Попробуй ещё раз.")
 
 
 @router.message(AgentStates.asking_details)
 async def ask_details(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    agent_key = data["agent_key"]
-    answers = data["answers"]
-    current_field = data["current_field"]
+    if data.get("use_fallback"):
+        agent_key = data["agent_key"]
+        answers = data["answers"]
+        current_field = data["current_field"]
+        answers[current_field] = message.text
+        await state.update_data(answers=answers)
 
-    answers[current_field] = message.text
-    await state.update_data(answers=answers)
+        field, question = get_next_question(agent_key, answers)
+        if field is None:
+            await run_agent_and_reply(message, state)
+            return
 
-    field, question = get_next_question(agent_key, answers)
-    if field is None:
-        await run_agent_and_reply(message, state)
+        await state.update_data(current_field=field)
+        await message.answer(question)
         return
 
-    await state.update_data(current_field=field)
-    await message.answer(question)
+    session_id = data.get("session_id")
+    current_question = data.get("current_question")
+    if not session_id or not current_question:
+        await message.answer("Сессия устарела. Начни задачу заново.")
+        await state.clear()
+        return
+
+    key = current_question["key"]
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            f"{settings.API_BASE_URL}/tasks/answer",
+            json={"session_id": session_id, "key": key, "value": message.text},
+        )
+    if resp.status_code >= 400:
+        await message.answer("Ошибка на сервере. Попробуй ещё раз.")
+        await state.clear()
+        return
+
+    resp_data = resp.json()
+    if resp_data.get("status") == "need_info":
+        questions = resp_data.get("questions") or []
+        current = questions[0] if questions else None
+        if not current:
+            await message.answer("Нужны ещё уточнения, но вопросов не пришло.")
+            return
+        await state.update_data(current_question=current)
+        await message.answer(current["question"])
+        return
+
+    if resp_data.get("status") == "done":
+        await state.clear()
+        await send_orchestrator_result(message, resp_data.get("result", {}))
+        return
+
+    await message.answer("Неожиданный ответ от сервера. Попробуй ещё раз.")
 
 
 # ===========================
 # Форматирование ответов агентов
 # ===========================
+
+async def send_orchestrator_result(message: types.Message, result: dict) -> None:
+    content = result.get("content") or "Готово."
+    fmt = result.get("format") or "plain"
+    parse_mode = None
+    if fmt == "markdown":
+        parse_mode = ParseMode.MARKDOWN
+    await message.answer(content[:4000], parse_mode=parse_mode)
 
 def format_strategy_result(result: dict) -> str:
     """
