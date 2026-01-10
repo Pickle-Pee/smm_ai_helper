@@ -3,18 +3,26 @@
 ## Overview
 The system is split into two parts:
 
-- **Telegram bot (`bot/`)** – UI only. It sends every user message to the backend and renders replies, follow-up questions, and action buttons.
-- **FastAPI backend (`app/`)** – all LLM logic: context memory, URL analysis, intent routing, response policy, and quality control.
+- **Telegram bot (`bot/`)** – UI only. It renders questions, sends user answers to the backend, and displays text or images.
+- **FastAPI backend (`app/`)** – all LLM logic, routing, clarification, worker execution, QC, and image generation.
 
-## Backend flow (chat)
+## Backend flow (text)
 
-1. **Chat endpoint** (`POST /chat/message`) receives user text and stores it in `messages`.
-2. **URL analyzer** (`app/services/url_analyzer.py`) extracts and summarizes the first URL (if present) with caching.
-3. **Facts extractor** (`app/services/facts_extractor.py`) updates structured facts (`conversations.facts_json`).
-4. **Summary updater** (`app/services/summary_updater.py`) refreshes `conversations.summary`.
-5. **Assistant core** (`app/services/assistant_core.py`) generates a strict JSON reply.
-6. **QC shortener** (`app/services/qc_shortener.py`) + **response policy** (`app/services/response_policy.py`) enforce brevity and single-question rules.
-7. Assistant reply is stored in `messages` and returned.
+1. **Router** (`app/services/orchestrator.py`) inspects the task and decides:
+   - complexity (`light|hard`)
+   - model (`gpt-4o-mini|gpt-5-mini`)
+   - max output tokens
+   - whether clarification/QC is required
+2. **Clarifier** asks 1–3 questions per step (max 6 total).
+3. **Worker** runs the selected SMM agent (`app/agents/`) using the unified OpenAI text client (`app/llm/openai_text.py`).
+4. **QC** optionally validates the output and triggers one re-run if needed.
+
+API endpoints:
+
+- `POST /tasks/start`
+- `POST /tasks/answer`
+- `GET /tasks/{id}`
+- `GET /tasks/by_user/{telegram_id}`
 
 ## Backend flow (images)
 
