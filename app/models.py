@@ -43,3 +43,38 @@ class Task(Base):
     )
 
     user: Mapped[User | None] = relationship(back_populates="tasks")
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    facts_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("conversations.user_id"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(32))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class UrlCache(Base):
+    __tablename__ = "url_cache"
+
+    url: Mapped[str] = mapped_column(String(2048), primary_key=True)
+    extracted_text_hash: Mapped[str] = mapped_column(String(128))
+    summary_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

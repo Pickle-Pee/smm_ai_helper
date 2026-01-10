@@ -19,6 +19,7 @@ def setup_logging() -> None:
             "image_mode=%(image_mode)s: %(message)s"
         ),
     )
+    logging.getLogger().addFilter(ContextFilter())
 
     f = ContextFilter()
 

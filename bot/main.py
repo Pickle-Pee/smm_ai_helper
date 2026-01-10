@@ -6,7 +6,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
 from app.config import settings
-from bot.handlers import menu, agent_flow, history
+from bot.handlers import menu, agent_flow, history, chat
 
 
 async def main():
