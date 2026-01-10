@@ -19,4 +19,21 @@ def setup_logging() -> None:
             "image_mode=%(image_mode)s: %(message)s"
         ),
     )
-    logging.getLogger().addFilter(ContextFilter())
+
+    f = ContextFilter()
+
+    # 1) Root logger
+    root = logging.getLogger()
+    root.addFilter(f)
+
+    # 2) All existing handlers (важно: фильтр должен стоять на handler'ах,
+    # которые форматируют record)
+    for h in root.handlers:
+        h.addFilter(f)
+
+    # 3) Uvicorn loggers часто имеют свои handlers — добавим и туда
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(logger_name)
+        lg.addFilter(f)
+        for h in lg.handlers:
+            h.addFilter(f)
