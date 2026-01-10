@@ -9,5 +9,6 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     kb.button(text="📊 Аналитика", callback_data="agent_analytics")
     kb.button(text="📣 Продвижение", callback_data="agent_promo")
     kb.button(text="📈 Тренды", callback_data="agent_trends")
-    kb.adjust(2, 2, 1)
+    kb.button(text="🖼 Сгенерировать картинку", callback_data="generate_image")
+    kb.adjust(2, 2, 2)
     return kb.as_markup()

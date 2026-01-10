@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 
 from app.config import settings
-from bot.handlers import menu, agent_flow, history
+from bot.handlers import menu, agent_flow, history, chat
 
 
 async def main():
@@ -14,6 +14,7 @@ async def main():
     dp.include_router(menu.router)
     dp.include_router(agent_flow.router)
     dp.include_router(history.router)   # <- тут
+    dp.include_router(chat.router)
     await dp.start_polling(bot)
 
 
