@@ -37,20 +37,17 @@ def safe_json_parse_any(raw: str) -> Union[Dict[str, Any], List[Any]]:
     - если ответ — JSON-массив, распарсит как list
     """
     s = raw.strip()
-    # быстрый путь: если явно массив
     if s.startswith("["):
         try:
             return json.loads(s)
         except json.JSONDecodeError:
             pass
 
-        # попробуем вырезать от первого [ до последнего ]
         first = s.find("[")
         last = s.rfind("]")
         if first != -1 and last != -1 and last > first:
             return json.loads(s[first : last + 1])
 
-    # иначе — обычный safe_json_parse (объект)
     return safe_json_parse(raw)
 
 
@@ -81,7 +78,7 @@ class OrchestratorService:
         return {
             "complexity": complexity,
             "model": model,
-            "max_output_tokens": 1200,
+            "max_output_tokens": 1200 if complexity == "hard" else 900,
             "needs_clarification": False,
             "next_questions": [],
             "needs_qc": complexity == "hard",
@@ -108,6 +105,7 @@ class OrchestratorService:
 - light → посты, идеи, простые тексты
 - hard → стратегии, анализ, воронки
 - max_output_tokens: light 700–1200, hard 1200–2200
+- по возможности НЕ спрашивай вопросы: если можно продолжить с допущениями — needs_clarification=false
 
 Agent type: {agent_type}
 Описание: {task_description}
@@ -123,7 +121,7 @@ Agent type: {agent_type}
             content, usage = await openai_chat(
                 messages=messages,
                 model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-                temperature=0.2,  # ok для gpt-4o-mini
+                temperature=0.2,
                 max_output_tokens=450,
                 response_format={"type": "json_object"},
             )
@@ -133,15 +131,16 @@ Agent type: {agent_type}
             if complexity not in {"light", "hard"}:
                 complexity = "light"
 
-            # модель выбираем сами по complexity
             model = settings.DEFAULT_TEXT_MODEL_HARD if complexity == "hard" else settings.DEFAULT_TEXT_MODEL_LIGHT
-
             decision["complexity"] = complexity
             decision["model"] = model
 
             mot = decision.get("max_output_tokens")
             if not isinstance(mot, int):
-                decision["max_output_tokens"] = 1200 if complexity == "hard" else 900
+                decision["max_output_tokens"] = 1600 if complexity == "hard" else 900
+            else:
+                # safety clamp
+                decision["max_output_tokens"] = max(600, min(int(mot), 2400))
 
             decision["needs_clarification"] = bool(decision.get("needs_clarification", False))
             decision["next_questions"] = decision.get("next_questions") or []
@@ -190,7 +189,6 @@ Agent type: {agent_type}
         try:
             data = safe_json_parse_any(content)
             if isinstance(data, list):
-                # нормализуем структуру
                 out: List[Dict[str, str]] = []
                 for item in data:
                     if isinstance(item, dict) and "question" in item:
@@ -211,12 +209,10 @@ Agent type: {agent_type}
         Возвращаем более полный текст. Если есть готовый user_answer/full_* — используем.
         """
 
-        # Новый стандарт (если начнёшь внедрять): агенты могут отдавать user_answer
         if isinstance(result.get("user_answer"), str) and result["user_answer"].strip():
             return result["user_answer"].strip()
 
         if agent_type == "strategy":
-            # предпочитаем полный текст стратегии, если он есть
             full = result.get("full_strategy")
             if isinstance(full, str) and full.strip():
                 return full.strip()
@@ -224,7 +220,6 @@ Agent type: {agent_type}
             summary_text = (result.get("summary_text") or "").strip()
             structured = result.get("structured") or {}
 
-            # если только structured — соберём читабельно, но не 3 строки
             parts: List[str] = []
             if summary_text:
                 parts += ["### Кратко", summary_text, ""]
@@ -241,31 +236,51 @@ Agent type: {agent_type}
                     parts += [f"- {x}" for x in utp[:8]]
                     parts.append("")
                 if rtb:
-                    parts.append("### Почему верить")
+                    parts.append("### Почему поверят")
                     parts += [f"- {x}" for x in rtb[:6]]
                     parts.append("")
 
-            rubrics = structured.get("content_rubrics") or []
-            if rubrics:
-                parts.append("### Рубрики контента")
-                for r in rubrics[:7]:
-                    name = r.get("name")
-                    goal = r.get("goal")
-                    ex = r.get("examples") or []
-                    if name:
-                        parts.append(f"- **{name}**" + (f" — {goal}" if goal else ""))
-                        for e in ex[:3]:
-                            parts.append(f"  - {e}")
-                parts.append("")
-
+            # NEW: funnel теперь объектами (goal/content_types/examples)
             funnel = structured.get("funnel") or {}
-            if funnel:
+            if isinstance(funnel, dict) and funnel:
                 parts.append("### Воронка (что делаем)")
                 for stage in ["awareness", "consideration", "conversion", "retention"]:
-                    items = funnel.get(stage) or []
-                    if items:
-                        parts.append(f"- **{stage.capitalize()}**:")
-                        parts += [f"  - {x}" for x in items[:5]]
+                    block = funnel.get(stage) or {}
+                    if isinstance(block, dict) and block:
+                        goal = block.get("goal") or ""
+                        ctypes = block.get("content_types") or []
+                        ex = block.get("examples") or []
+                        parts.append(f"**{stage.capitalize()}**" + (f" — {goal}" if goal else ""))
+                        if ctypes:
+                            parts.append("- Что публикуем:")
+                            parts += [f"  - {x}" for x in ctypes[:6]]
+                        if ex:
+                            parts.append("- Примеры:")
+                            parts += [f"  - {x}" for x in ex[:4]]
+                        parts.append("")
+
+            offers = structured.get("offers") or []
+            if offers:
+                parts.append("### Офферы (что предлагать)")
+                for o in offers[:3]:
+                    name = o.get("name") or "Оффер"
+                    what = o.get("what_user_gets") or ""
+                    cta = o.get("cta_examples") or []
+                    parts.append(f"- **{name}**" + (f": {what}" if what else ""))
+                    for x in cta[:2]:
+                        parts.append(f"  - CTA: {x}")
+                parts.append("")
+
+            first7 = structured.get("first_7_days_plan") or []
+            if first7:
+                parts.append("### План на первые 7 дней")
+                for it in first7[:7]:
+                    day = it.get("day")
+                    ch = it.get("channel") or ""
+                    fmt = it.get("format") or ""
+                    topic = it.get("topic") or ""
+                    cta = it.get("cta") or ""
+                    parts.append(f"- День {day}: **{topic}** ({ch}/{fmt})" + (f" — CTA: {cta}" if cta else ""))
                 parts.append("")
 
             text = "\n".join([p for p in parts if p is not None]).strip()
@@ -279,31 +294,62 @@ Agent type: {agent_type}
             if plan_md:
                 parts += ["### Контент-план", plan_md, ""]
 
-            # показываем несколько постов (не 1)
             if posts:
                 parts.append("### Примеры постов")
                 for i, p in enumerate(posts[:3], start=1):
                     post_obj = p.get("post") or {}
                     title = post_obj.get("title") or f"Пост #{i}"
                     full_text = (post_obj.get("full_text") or "").strip()
+                    notes = post_obj.get("notes_for_design") or []
                     parts.append(f"**{title}**")
                     if full_text:
                         parts.append(full_text)
+                    if isinstance(notes, list) and notes:
+                        parts.append("_Под визуал:_")
+                        parts.extend([f"- {n}" for n in notes[:5]])
                     parts.append("")
 
             text = "\n".join(parts).strip()
             return text or json.dumps(result, ensure_ascii=False, indent=2)
 
         if agent_type == "analytics":
-            # если агент отдаёт next_steps — ок, но попробуем ещё вытянуть summary/plan если есть
+            # NEW: next_steps теперь может быть list[dict]
             next_steps = result.get("next_steps") or []
             if isinstance(next_steps, list) and next_steps:
+                if isinstance(next_steps[0], dict):
+                    lines: List[str] = ["### План действий (следующие шаги)"]
+                    for s in next_steps[:10]:
+                        step = (s.get("step") or "").strip()
+                        impact = (s.get("impact") or "").strip()
+                        effort = (s.get("effort") or "").strip()
+                        how = (s.get("how_to_do") or "").strip()
+
+                        meta = []
+                        if impact and impact != "—":
+                            meta.append(impact)
+                        if effort and effort != "—":
+                            meta.append(f"усилие: {effort}")
+                        meta_txt = f" ({', '.join(meta)})" if meta else ""
+                        lines.append(f"- {step}{meta_txt}")
+                        if how and how != "—":
+                            lines.append(f"  - как сделать: {how}")
+                    return "\n".join(lines).strip()
+
+                # fallback: list[str]
                 lines = ["### План действий (следующие шаги)"]
-                lines += [f"- {step}" for step in next_steps[:12]]
+                lines += [f"- {str(step)}" for step in next_steps[:12]]
                 return "\n".join(lines).strip()
 
-            if isinstance(result.get("user_answer"), str):
-                return result["user_answer"].strip()
+            # если метрик нет — покажем шаблон отчета (если есть)
+            rt = result.get("report_template") or {}
+            if isinstance(rt, dict) and rt.get("fields"):
+                fields = rt.get("fields") or []
+                freq = rt.get("frequency") or "еженедельно"
+                return (
+                    "### Мини-отчёт (шаблон)\n"
+                    f"- Частота: {freq}\n"
+                    f"- Поля: {', '.join([str(x) for x in fields])}"
+                ).strip()
 
             return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -313,25 +359,48 @@ Agent type: {agent_type}
 
             overall = result.get("overall_approach") or []
             hypotheses = result.get("hypotheses") or []
+            testing_plan = result.get("testing_plan") or {}
+
             lines: List[str] = []
             if overall:
                 lines.append("### Подход к рекламе")
                 lines.extend([f"- {line}" for line in overall[:8]])
                 lines.append("")
+
             if hypotheses:
-                lines.append("### Гипотезы")
+                lines.append("### Гипотезы (старт)")
                 for h in hypotheses[:5]:
                     name = h.get("name") or "Гипотеза"
-                    segment = h.get("segment")
-                    offer = h.get("offer")
-                    angle = h.get("angle")
-                    lines.append(f"- **{name}**")
+                    segment = h.get("segment") or ""
+                    offer = h.get("offer") or ""
+                    angle = h.get("angle") or ""
+                    fmt = h.get("format") or ""
+                    lines.append(f"- **{name}**" + (f" ({fmt})" if fmt else ""))
                     if segment:
-                        lines.append(f"  - ЦА: {segment}")
+                        lines.append(f"  - Сегмент: {segment}")
                     if offer:
                         lines.append(f"  - Оффер: {offer}")
                     if angle:
-                        lines.append(f"  - Креативный угол: {angle}")
+                        lines.append(f"  - Угол: {angle}")
+                lines.append("")
+
+            if isinstance(testing_plan, dict) and testing_plan:
+                lines.append("### План тестов")
+                bph = testing_plan.get("budget_per_hypothesis")
+                dur = testing_plan.get("duration")
+                stop = testing_plan.get("stop_rules") or []
+                scale = testing_plan.get("scale_rules") or []
+                if bph:
+                    lines.append(f"- Бюджет на гипотезу: {bph}")
+                if dur:
+                    lines.append(f"- Длительность: {dur}")
+                if stop:
+                    lines.append("- Stop rules:")
+                    lines.extend([f"  - {x}" for x in stop[:4]])
+                if scale:
+                    lines.append("- Scale rules:")
+                    lines.extend([f"  - {x}" for x in scale[:4]])
+
             return "\n".join(lines).strip() or json.dumps(result, ensure_ascii=False, indent=2)
 
         if agent_type == "trends":
@@ -341,16 +410,34 @@ Agent type: {agent_type}
             exp = result.get("experiment_roadmap") or []
             if exp:
                 lines = ["### Эксперименты, которые можно запустить"]
-                for e in exp[:7]:
+                for e in exp[:6]:
                     name = e.get("experiment_name") or "Эксперимент"
-                    hyp = e.get("hypothesis")
-                    fmt = e.get("format")
-                    lines.append(f"- **{name}**")
-                    if fmt:
-                        lines.append(f"  - Формат: {fmt}")
+                    hyp = e.get("hypothesis") or ""
+                    ch = e.get("channel") or ""
+                    fmt = e.get("format") or ""
+                    steps = e.get("steps") or []
+                    meas = e.get("how_to_measure") or {}
+                    pm = meas.get("primary_metric") if isinstance(meas, dict) else None
+                    sc = meas.get("success_criteria") if isinstance(meas, dict) else None
+
+                    lines.append(f"- **{name}**" + (f" ({ch}/{fmt})" if ch or fmt else ""))
                     if hyp:
                         lines.append(f"  - Гипотеза: {hyp}")
+                    if isinstance(steps, list) and steps:
+                        lines.append("  - Шаги:")
+                        lines.extend([f"    - {s}" for s in steps[:4]])
+                    if pm or sc:
+                        lines.append("  - Измерение:")
+                        if pm:
+                            lines.append(f"    - Метрика: {pm}")
+                        if sc:
+                            lines.append(f"    - Успех: {sc}")
                 return "\n".join(lines).strip()
+
+            # частые ошибки
+            dnd = result.get("do_not_do") or []
+            if isinstance(dnd, list) and dnd:
+                return "### Чего лучше не делать\n" + "\n".join([f"- {x}" for x in dnd[:10]])
 
             return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -389,7 +476,6 @@ Agent type: {agent_type}
                 except Exception:
                     pass
 
-        # override на локальном инстансе безопасен
         agent.model_override = model
         agent.max_output_tokens_override = max_output_tokens
 
@@ -499,9 +585,8 @@ Agent type: {agent_type}
                 "questions": questions[:3],
             }
 
-        # run worker
         model = decision.get("model") or settings.DEFAULT_TEXT_MODEL_LIGHT
-        max_output_tokens = int(decision.get("max_output_tokens") or 1200)
+        max_output_tokens = int(decision.get("max_output_tokens") or (1600 if decision.get("complexity") == "hard" else 900))
 
         result = await self._run_worker(
             agent_type=session.agent_type,
@@ -511,12 +596,10 @@ Agent type: {agent_type}
             max_output_tokens=max_output_tokens,
         )
 
-        # QC
         needs_qc = bool(decision.get("needs_qc", False)) or result.get("confidence") == "low"
         if needs_qc:
             issues = await self._run_qc(session.task_description, result["content"])
             if issues:
-                # повторный прогон с учетом QC issues
                 result = await self._run_worker(
                     agent_type=session.agent_type,
                     task_description=session.task_description,
@@ -537,7 +620,6 @@ Agent type: {agent_type}
             },
         )
 
-        # image mode
         image_payload = None
         if session.mode in {"image", "text+image"}:
             image_payload = await self.image_orchestrator.generate(
@@ -551,7 +633,6 @@ Agent type: {agent_type}
                 request_id=session.request_id,
             )
 
-        # cleanup session
         self.sessions.pop(session.session_id, None)
 
         return {
