@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Tuple
 
 import httpx
-import logging
 
 from app.config import settings
 
@@ -16,8 +16,9 @@ RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 async def chat(
     messages: List[Dict[str, str]],
     model: str,
-    temperature: float | None = None,          # <-- важно
+    temperature: float | None = None,
     max_output_tokens: int | None = None,
+    response_format: Dict[str, Any] | None = None,  # <-- добавили
 ) -> Tuple[str, Dict[str, Any]]:
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
@@ -31,8 +32,13 @@ async def chat(
     if temperature is not None:
         payload["temperature"] = temperature
 
+    # Chat Completions: используем max_completion_tokens
     if max_output_tokens is not None:
         payload["max_completion_tokens"] = max_output_tokens
+
+    # Structured output (например json_object / json_schema)
+    if response_format is not None:
+        payload["response_format"] = response_format
 
     timeout = httpx.Timeout(settings.HTTP_TIMEOUT)
     last_error: Exception | None = None
@@ -46,7 +52,7 @@ async def chat(
                     body = resp.text
                     log.error("OpenAI chat error status=%s body=%s", resp.status_code, body[:4000])
 
-                    # fallback: если модель не принимает temperature
+                    # fallback 1: если модель не принимает temperature
                     try:
                         err = resp.json().get("error", {})
                         if (
@@ -56,7 +62,6 @@ async def chat(
                             and "temperature" in payload
                         ):
                             payload.pop("temperature", None)
-                            # повторить один раз без temperature
                             resp = await client.post(url, headers=headers, json=payload)
                             if resp.status_code >= 400:
                                 log.error(
@@ -65,10 +70,29 @@ async def chat(
                                     resp.text[:4000],
                                 )
                             resp.raise_for_status()
+
+                        # fallback 2: если модель не принимает response_format (на всякий случай)
+                        elif (
+                            resp.status_code == 400
+                            and err.get("param") == "response_format"
+                            and err.get("code") in {"unsupported_value", "invalid_request_error"}
+                            and "response_format" in payload
+                        ):
+                            payload.pop("response_format", None)
+                            resp = await client.post(url, headers=headers, json=payload)
+                            if resp.status_code >= 400:
+                                log.error(
+                                    "OpenAI chat error after removing response_format status=%s body=%s",
+                                    resp.status_code,
+                                    resp.text[:4000],
+                                )
+                            resp.raise_for_status()
+
                         else:
                             # 4xx (кроме 408/429) не ретраим
                             if resp.status_code not in RETRYABLE_STATUS_CODES:
                                 resp.raise_for_status()
+
                     except ValueError:
                         # не смогли распарсить json ошибки — просто падаем/ретраим по политике ниже
                         if resp.status_code not in RETRYABLE_STATUS_CODES:
