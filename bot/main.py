@@ -17,7 +17,8 @@ async def main():
     dp = Dispatcher()
     dp.include_router(menu.router)
     dp.include_router(agent_flow.router)
-    dp.include_router(history.router)
+    dp.include_router(history.router)   # <- тут
+    dp.include_router(chat.router)
     await dp.start_polling(bot)
 
 

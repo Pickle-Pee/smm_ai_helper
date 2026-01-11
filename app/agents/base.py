@@ -63,6 +63,7 @@ class BaseAgent(ABC):
             model=selected_model,
             temperature=temperature,
             max_output_tokens=self.max_output_tokens_override,
+            response_format={"type": "json_object"},
         )
         return safe_json_parse(raw)
 

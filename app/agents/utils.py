@@ -1,9 +1,10 @@
 # app/agents/utils.py
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Any, Dict, List, Optional
 import json
+import re
 
 
 @dataclass
@@ -15,13 +16,13 @@ class BriefContext:
     product_description: str = ""
     audience: str = ""
     goals: str = ""
-    channels: List[str] = None
+    channels: List[str] = field(default_factory=list)
     tone: str = "дружелюбный, экспертный, без канцелярита"
     geo: Optional[str] = None
     price_segment: Optional[str] = None
     niche: Optional[str] = None
     budget: Optional[str] = None
-    extra: Dict[str, Any] = None
+    extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -61,12 +62,25 @@ def normalize_brief(raw: Dict[str, Any]) -> BriefContext:
 def safe_json_parse(raw: str) -> Dict[str, Any]:
     """
     Аккуратно вытаскиваем JSON из ответа модели:
-    - отрезаем мусор до/после фигурных скобок
-    - пытаемся распарсить
+    - убираем ```json fences
+    - нормализуем “умные” кавычки
+    - пытаемся распарсить как есть
+    - fallback: берём подстроку между первой '{' и последней '}'
     """
     raw_str = raw.strip()
-    first = raw_str.find("{")
-    last = raw_str.rfind("}")
-    if first != -1 and last != -1 and last > first:
-        raw_str = raw_str[first : last + 1]
-    return json.loads(raw_str)
+    raw_str = re.sub(r"^```(?:json)?", "", raw_str, flags=re.IGNORECASE).strip()
+    raw_str = re.sub(r"```$", "", raw_str).strip()
+    raw_str = (
+        raw_str.replace("“", '"')
+        .replace("”", '"')
+        .replace("’", "'")
+        .replace("‘", "'")
+    )
+    try:
+        return json.loads(raw_str)
+    except json.JSONDecodeError:
+        first = raw_str.find("{")
+        last = raw_str.rfind("}")
+        if first != -1 and last != -1 and last > first:
+            return json.loads(raw_str[first : last + 1])
+        raise

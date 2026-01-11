@@ -96,3 +96,16 @@ class ImageGenerateResponse(BaseModel):
     mode: str
     preset_id: str
     images: List[Dict[str, str]]
+
+
+class ChatMessageRequest(BaseModel):
+    user_id: str
+    text: str
+    attachments: List[Dict[str, Any]] = []
+
+
+class ChatMessageResponse(BaseModel):
+    reply: str
+    follow_up_question: str | None
+    actions: List[Dict[str, str]]
+    debug: Dict[str, Any]
