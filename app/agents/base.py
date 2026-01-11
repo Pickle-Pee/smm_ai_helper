@@ -4,7 +4,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from app.llm_provider import get_llm_provider
+from app.config import settings
+from app.llm.openai_text import chat as openai_chat
 from .utils import safe_json_parse
 
 
@@ -16,6 +17,8 @@ class BaseAgent(ABC):
     """
 
     system_prompt: str = "Ты — опытный SMM-специалист."
+    model_override: str | None = None
+    max_output_tokens_override: int | None = None
 
     async def llm_text(
         self,
@@ -23,12 +26,18 @@ class BaseAgent(ABC):
         temperature: float = 0.7,
         model: str | None = None,
     ) -> str:
-        provider = get_llm_provider()
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_content},
         ]
-        return await provider.chat(messages, model=model, temperature=temperature)
+        selected_model = model or self.model_override or settings.DEFAULT_TEXT_MODEL_LIGHT
+        content, _usage = await openai_chat(
+            messages=messages,
+            model=selected_model,
+            temperature=temperature,
+            max_output_tokens=self.max_output_tokens_override,
+        )
+        return content
 
     async def llm_json(
         self,
@@ -37,7 +46,6 @@ class BaseAgent(ABC):
         temperature: float = 0.7,
         model: str | None = None,
     ) -> Dict[str, Any]:
-        provider = get_llm_provider()
         messages: List[Dict[str, str]] = [
             {
                 "role": "system",
@@ -49,7 +57,14 @@ class BaseAgent(ABC):
             },
             {"role": "user", "content": instruction},
         ]
-        raw = await provider.chat(messages, model=model, temperature=temperature)
+        selected_model = model or self.model_override or settings.DEFAULT_TEXT_MODEL_LIGHT
+        raw, _usage = await openai_chat(
+            messages=messages,
+            model=selected_model,
+            temperature=temperature,
+            max_output_tokens=self.max_output_tokens_override,
+            response_format={"type": "json_object"},
+        )
         return safe_json_parse(raw)
 
     @abstractmethod

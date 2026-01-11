@@ -93,10 +93,25 @@ class ContentAgent(BaseAgent):
             posts.append({"plan_item": item, "post": post_data})
 
         # Markdown-таблица для вывода в чат
-        header = "| Дата | Канал | Тип | Формат | Этап | Рубрика | Тема | Цель |\n|---|---|---|---|---|---|---|---|"
+        def sanitize(value: Any) -> str:
+            return str(value or "").replace("|", "¦")
+
+        header = (
+            "| Дата | Канал | Тип | Формат | Этап | Рубрика | Тема | Цель |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- |"
+        )
         rows = [
-            f"| {i['date']} | {i['channel']} | {i['type']} | {i['format']} | {i['funnel_stage']} | {i['rubric']} | {i['topic']} | {i['goal']} |"
-            for i in plan_items
+            "| {date} | {channel} | {type_} | {format_} | {stage} | {rubric} | {topic} | {goal} |".format(
+                date=sanitize(item.get("date")),
+                channel=sanitize(item.get("channel")),
+                type_=sanitize(item.get("type")),
+                format_=sanitize(item.get("format")),
+                stage=sanitize(item.get("funnel_stage")),
+                rubric=sanitize(item.get("rubric")),
+                topic=sanitize(item.get("topic")),
+                goal=sanitize(item.get("goal")),
+            )
+            for item in plan_items
         ]
         raw_plan_markdown = "\n".join([header, *rows])
 
