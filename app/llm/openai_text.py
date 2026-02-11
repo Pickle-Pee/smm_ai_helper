@@ -6,11 +6,68 @@ from typing import Any, Dict, List, Tuple
 
 import httpx
 
-from app.config import settings
+from app.config import settings, TOKEN_BUDGETS, MAX_OUTPUT_TOKENS_CAP
 
 log = logging.getLogger(__name__)
 
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
+
+def _extract_output_text(data: Dict[str, Any]) -> str:
+    """
+    Responses API возвращает items в data["output"].
+    Нам нужен текст из message(role=assistant)->content(type=output_text).
+
+    Важно: иногда ответ может быть incomplete и содержать только reasoning.
+    В этом случае возвращаем пустую строку, чтобы chat() мог сделать ретрай.
+    """
+    top = data.get("output_text")
+    if isinstance(top, str) and top.strip():
+        return top.strip()
+
+    output = data.get("output") or []
+    texts: list[str] = []
+
+    for item in output:
+        if item.get("type") != "message":
+            continue
+        if item.get("role") != "assistant":
+            continue
+
+        for block in (item.get("content") or []):
+            btype = block.get("type")
+            if btype == "output_text":
+                t = block.get("text")
+                if t:
+                    texts.append(t)
+            elif btype == "refusal":
+                refusal = block.get("refusal") or "Model refused to answer"
+                raise ValueError(refusal)
+
+    return "\n".join(texts).strip()
+
+
+def _is_incomplete_max_tokens(data: Dict[str, Any]) -> bool:
+    return (
+        data.get("status") == "incomplete"
+        and (data.get("incomplete_details") or {}).get("reason") == "max_output_tokens"
+    )
+
+
+def _choose_budget(task: str | None, response_format: Dict[str, Any] | None) -> int:
+    if response_format is not None:
+        if task is None:
+            return TOKEN_BUDGETS.get("facts_json", 1500)
+        return TOKEN_BUDGETS.get(task, TOKEN_BUDGETS.get("facts_json", 1500))
+
+    if task is None:
+        return TOKEN_BUDGETS.get("default", 1200)
+
+    return TOKEN_BUDGETS.get(task, TOKEN_BUDGETS.get("default", 1200))
+
+
+def _clamp_budget(n: int) -> int:
+    return max(256, min(int(n), int(MAX_OUTPUT_TOKENS_CAP)))
 
 
 async def chat(
@@ -18,27 +75,46 @@ async def chat(
     model: str,
     temperature: float | None = None,
     max_output_tokens: int | None = None,
-    response_format: Dict[str, Any] | None = None,  # <-- добавили
+    response_format: Dict[str, Any] | None = None,
+    task: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
-    url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions"
+    """
+    Responses API:
+      POST /responses { model, input, max_output_tokens, text: { format: ... } }
+    """
+    url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
 
     payload: Dict[str, Any] = {
         "model": model,
-        "messages": messages,
+        "input": messages,
+        # "store": False,
     }
 
-    # температуру добавляем только когда это нужно/разрешено
+    if model.startswith("gpt-5"):
+        payload.setdefault("reasoning", {"effort": "low"})
+
     if temperature is not None:
         payload["temperature"] = temperature
 
-    # Chat Completions: используем max_completion_tokens
-    if max_output_tokens is not None:
-        payload["max_completion_tokens"] = max_output_tokens
+    min_budget = _choose_budget(task, response_format)
 
-    # Structured output (например json_object / json_schema)
+    if max_output_tokens is None:
+        payload["max_output_tokens"] = _clamp_budget(min_budget)
+    else:
+        payload["max_output_tokens"] = _clamp_budget(max(int(max_output_tokens), int(min_budget)))
+
     if response_format is not None:
-        payload["response_format"] = response_format
+        fmt = dict(response_format)
+
+        if fmt.get("type") == "json_schema":
+            if "name" not in fmt or not fmt.get("name"):
+                fmt["name"] = task or "structured_output"
+            if "strict" not in fmt:
+                fmt["strict"] = True
+
+        payload["text"] = {"format": fmt}
+        payload["reasoning"] = {"effort": "low"}
 
     timeout = httpx.Timeout(settings.HTTP_TIMEOUT)
     last_error: Exception | None = None
@@ -50,68 +126,62 @@ async def chat(
 
                 if resp.status_code >= 400:
                     body = resp.text
-                    log.error("OpenAI chat error status=%s body=%s", resp.status_code, body[:4000])
+                    log.error("OpenAI responses error status=%s body=%s", resp.status_code, body[:4000])
 
-                    # fallback 1: если модель не принимает temperature
                     try:
-                        err = resp.json().get("error", {})
+                        err = (resp.json() or {}).get("error", {}) or {}
+                        param = err.get("param")
+                        code = err.get("code")
+
                         if (
                             resp.status_code == 400
-                            and err.get("param") == "temperature"
-                            and err.get("code") == "unsupported_value"
+                            and param == "temperature"
+                            and code == "unsupported_value"
                             and "temperature" in payload
                         ):
                             payload.pop("temperature", None)
                             resp = await client.post(url, headers=headers, json=payload)
-                            if resp.status_code >= 400:
-                                log.error(
-                                    "OpenAI chat error after removing temperature status=%s body=%s",
-                                    resp.status_code,
-                                    resp.text[:4000],
-                                )
-                            resp.raise_for_status()
 
-                        # fallback 2: если модель не принимает response_format (на всякий случай)
                         elif (
                             resp.status_code == 400
-                            and err.get("param") == "response_format"
-                            and err.get("code") in {"unsupported_value", "invalid_request_error"}
-                            and "response_format" in payload
+                            and (param in {"text", "text.format"} or "text" in str(param))
+                            and code in {"unsupported_value", "invalid_request_error"}
+                            and "text" in payload
                         ):
-                            payload.pop("response_format", None)
+                            payload.pop("text", None)
                             resp = await client.post(url, headers=headers, json=payload)
-                            if resp.status_code >= 400:
-                                log.error(
-                                    "OpenAI chat error after removing response_format status=%s body=%s",
-                                    resp.status_code,
-                                    resp.text[:4000],
-                                )
+
+                        elif resp.status_code not in RETRYABLE_STATUS_CODES:
                             resp.raise_for_status()
 
-                        else:
-                            # 4xx (кроме 408/429) не ретраим
-                            if resp.status_code not in RETRYABLE_STATUS_CODES:
-                                resp.raise_for_status()
-
                     except ValueError:
-                        # не смогли распарсить json ошибки — просто падаем/ретраим по политике ниже
                         if resp.status_code not in RETRYABLE_STATUS_CODES:
                             resp.raise_for_status()
 
                 resp.raise_for_status()
                 data = resp.json()
 
-                choices = data.get("choices") or []
-                if not choices:
-                    raise ValueError(f"No choices in response: {data}")
+                content = _extract_output_text(data)
 
-                msg = choices[0].get("message") or {}
-                content = msg.get("content")
-                if content is None:
-                    raise ValueError(f"No message.content in response: {data}")
+                if _is_incomplete_max_tokens(data) or not content:
+                    prev = int(payload.get("max_output_tokens") or 0)
+                    payload["max_output_tokens"] = max(2000, prev * 6 if prev else 2000)
+                    payload["reasoning"] = {"effort": "low"}
+
+                    resp2 = await client.post(url, headers=headers, json=payload)
+                    resp2.raise_for_status()
+                    data2 = resp2.json()
+
+                    content2 = _extract_output_text(data2).strip()
+                    usage2 = data2.get("usage", {}) or {}
+
+                    if not content2:
+                        raise RuntimeError(f"Responses returned no text even after retry: {data2}")
+
+                    return content2, usage2
 
                 usage = data.get("usage", {}) or {}
-                return content, usage
+                return content.strip(), usage
 
             except httpx.HTTPStatusError as exc:
                 last_error = exc
@@ -122,10 +192,10 @@ async def chat(
                     break
                 await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
 
-            except (httpx.TimeoutException, httpx.TransportError, ValueError, KeyError) as exc:
+            except (httpx.TimeoutException, httpx.TransportError, ValueError, KeyError, RuntimeError) as exc:
                 last_error = exc
                 if attempt >= settings.HTTP_RETRIES:
                     break
                 await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
 
-    raise RuntimeError("OpenAI chat failed") from last_error
+    raise RuntimeError("OpenAI responses failed") from last_error

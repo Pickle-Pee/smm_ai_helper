@@ -121,8 +121,8 @@ Agent type: {agent_type}
             content, usage = await openai_chat(
                 messages=messages,
                 model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-                temperature=0.2,
-                max_output_tokens=450,
+                temperature=None,
+                max_output_tokens=1500,
                 response_format={"type": "json_object"},
             )
             decision = safe_json_parse(content)
@@ -182,8 +182,8 @@ Agent type: {agent_type}
         content, _usage = await openai_chat(
             messages=messages,
             model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=0.3,
-            max_output_tokens=350,
+            temperature=None,
+            max_output_tokens=1500,
         )
 
         try:
@@ -515,8 +515,8 @@ Agent type: {agent_type}
         content_resp, _usage = await openai_chat(
             messages=messages,
             model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=0.2,
-            max_output_tokens=350,
+            temperature=None,
+            max_output_tokens=1500,
             response_format={"type": "json_object"},
         )
 

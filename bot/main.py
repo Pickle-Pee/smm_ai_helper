@@ -11,8 +11,7 @@ from bot.handlers import menu, agent_flow, history, chat
 
 async def main():
     bot = Bot(
-        token=settings.TELEGRAM_BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        token=settings.TELEGRAM_BOT_TOKEN
     )
     dp = Dispatcher()
     dp.include_router(menu.router)

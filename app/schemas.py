@@ -109,3 +109,4 @@ class ChatMessageResponse(BaseModel):
     follow_up_question: str | None
     actions: List[Dict[str, str]]
     debug: Dict[str, Any]
+    image: Dict[str, Any] | None = None

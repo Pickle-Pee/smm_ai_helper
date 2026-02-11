@@ -12,12 +12,14 @@ from .utils import safe_json_parse
 def _default_temperature_for_model(model: str) -> Optional[float]:
     """
     Политика температуры:
-    - gpt-4o-mini: можно, даём чуть креатива
-    - gpt-5-mini: НЕ передаём temperature (модель может принимать только default=1)
+    - по умолчанию НЕ отправляем temperature для gpt-5*, чтобы не ловить 400 и ретраи
+    - если где-то нужна температура — задаём явно в конкретном месте
     """
+    if model.startswith("gpt-5"):
+        return None
+    # если вдруг оставишь не-gpt-5 модель для light
     if model == settings.DEFAULT_TEXT_MODEL_LIGHT:
         return 0.7
-    # для hard (и любых неизвестных) — безопаснее не передавать
     return None
 
 
@@ -51,7 +53,7 @@ class BaseAgent(ABC):
         content, _usage = await openai_chat(
             messages=messages,
             model=selected_model,
-            temperature=temperature,  # может быть None, chat() сам не отправит
+            temperature=temperature,
             max_output_tokens=self.max_output_tokens_override,
         )
         return content

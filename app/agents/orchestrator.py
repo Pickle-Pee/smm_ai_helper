@@ -83,12 +83,12 @@ class OrchestratorAgent:
             {"role": "user", "content": prompt},
         ]
 
-        content, _usage = await openai_chat(
+        content, usage = await openai_chat(
             messages=messages,
             model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=0.2,
-            max_output_tokens=320,
+            temperature=None,
             response_format={"type": "json_object"},
+            task="qc_json",
         )
         data = safe_json_parse(content)
         if data.get("status") == "revise":
@@ -96,6 +96,7 @@ class OrchestratorAgent:
             if isinstance(issues, list):
                 return [str(x) for x in issues[:8]]
         return []
+
 
     def _extract_user_facing_text(self, agent_name: str, result: Dict[str, Any]) -> str:
         """

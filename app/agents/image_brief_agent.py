@@ -159,12 +159,11 @@ Preset (уже выбран):
             {"role": "user", "content": prompt},
         ]
 
-        content, _usage = await openai_chat(
+        content, usage = await openai_chat(
             messages=messages,
             model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=0.5,
-            max_output_tokens=650,
             response_format={"type": "json_object"},
+            task="image_brief",
         )
 
         data = safe_json_parse(content)

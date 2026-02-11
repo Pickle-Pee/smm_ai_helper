@@ -20,8 +20,8 @@ async def update_summary(previous_summary: str, recent_messages: List[dict]) -> 
     content, _usage = await openai_chat(
         messages=messages,
         model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-        temperature=0.2,
-        max_output_tokens=300,
+        task="summary",
     )
+
     data = safe_json_parse(content)
     return data.get("summary", previous_summary)

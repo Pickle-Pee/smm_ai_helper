@@ -1,17 +1,21 @@
+# bot/handlers/menu.py
+from __future__ import annotations
+
 from aiogram import Router, types
 from aiogram.filters import CommandStart
-
-from bot.keyboards import main_menu_kb
+from html import escape
 
 router = Router()
 
 
 @router.message(CommandStart())
-async def cmd_start(message: types.Message):
-    await message.answer(
-        "Привет! Я рой SMM-агентов.\n\n"
-        "Можешь просто написать задачу в свободной форме — я помогу.\n\n"
-        "Если нужен старый режим, выбери агента ниже:\n\n"
-        "Также ты можешь в любой момент написать /history, чтобы посмотреть последние задачи.",
-        reply_markup=main_menu_kb(),
+async def start(message: types.Message):
+    text = (
+        "Привет! Я помогу с продвижением: стратегия, контент, реклама, аудит.\n\n"
+        "Просто напиши запрос одним сообщением. Например:\n"
+        "• Сделай стратегию продвижения для приложения «Название»\n"
+        "• Посмотри сайт https://example.com и предложи, что улучшить\n"
+        "• Сгенерируй креатив для рекламного поста ВК\n"
     )
+
+    await message.answer(text)
