@@ -5,13 +5,14 @@ from typing import Any, Dict, Tuple
 from app.agents.utils import safe_json_parse
 from app.config import settings
 from app.llm.openai_text import chat as openai_chat
+from app.services.agent_registry import AgentRegistry
 
 
 class TaskRouter:
     """Routes task requests to model/clarification/QC decisions."""
 
     def fallback_decision(self, agent_type: str) -> Dict[str, Any]:
-        complexity = "hard" if agent_type in {"strategy", "analytics"} else "light"
+        complexity = "hard" if AgentRegistry.is_hard(agent_type) else "light"
         model = (
             settings.DEFAULT_TEXT_MODEL_HARD
             if complexity == "hard"
@@ -84,7 +85,7 @@ Agent type: {agent_type}
     ) -> Dict[str, Any]:
         complexity = decision.get("complexity")
         if complexity not in {"light", "hard"}:
-            complexity = "hard" if agent_type in {"strategy", "analytics"} else "light"
+            complexity = "hard" if AgentRegistry.is_hard(agent_type) else "light"
 
         model = (
             settings.DEFAULT_TEXT_MODEL_HARD
