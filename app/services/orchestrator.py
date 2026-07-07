@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from app.config import settings
 from app.llm.openai_text import chat as openai_chat
 from app.services.agent_runner import AgentRunner
 from app.services.image_orchestrator import ImageOrchestrator
+from app.services.task_router import TaskRouter
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 
 logger = logging.getLogger(__name__)
@@ -40,89 +41,13 @@ def safe_json_parse_any(raw: str) -> Union[Dict[str, Any], List[Any]]:
 
 class OrchestratorService:
     def __init__(self) -> None:
+        self.task_router = TaskRouter()
         self.agent_runner = AgentRunner()
         self.image_orchestrator = ImageOrchestrator()
 
     # -------------------------
-    # Routing / clarification
+    # Clarification
     # -------------------------
-
-    def _fallback_decision(self, agent_type: str) -> Dict[str, Any]:
-        complexity = "hard" if agent_type in {"strategy", "analytics"} else "light"
-        model = settings.DEFAULT_TEXT_MODEL_HARD if complexity == "hard" else settings.DEFAULT_TEXT_MODEL_LIGHT
-        return {
-            "complexity": complexity,
-            "model": model,
-            "max_output_tokens": 1200 if complexity == "hard" else 900,
-            "needs_clarification": False,
-            "next_questions": [],
-            "needs_qc": complexity == "hard",
-        }
-
-    async def _route_task(
-        self, agent_type: str, task_description: str, answers: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Роутер всегда работает на LIGHT модели (стабильно/дёшево).
-        Не даём роутеру выбирать произвольные модели — только light/hard через decision.
-        """
-        prompt = f"""
-Ты — маршрутизатор задач SMM. Верни строго JSON:
-{{
-  "complexity": "light|hard",
-  "max_output_tokens": number,
-  "needs_clarification": boolean,
-  "next_questions": [{{"key":"...", "question":"..."}}],
-  "needs_qc": boolean
-}}
-
-Правила:
-- light → посты, идеи, простые тексты
-- hard → стратегии, анализ, воронки
-- max_output_tokens: light 700–1200, hard 1200–2200
-- по возможности НЕ спрашивай вопросы: если можно продолжить с допущениями — needs_clarification=false
-
-Agent type: {agent_type}
-Описание: {task_description}
-Ответы: {answers}
-""".strip()
-
-        messages = [
-            {"role": "system", "content": "Ты — строгий JSON-роутер. Только JSON."},
-            {"role": "user", "content": prompt},
-        ]
-
-        try:
-            content, usage = await openai_chat(
-                messages=messages,
-                model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-                temperature=None,
-                max_output_tokens=1500,
-                response_format={"type": "json_object"},
-            )
-            decision = safe_json_parse(content)
-
-            complexity = decision.get("complexity")
-            if complexity not in {"light", "hard"}:
-                complexity = "light"
-
-            model = settings.DEFAULT_TEXT_MODEL_HARD if complexity == "hard" else settings.DEFAULT_TEXT_MODEL_LIGHT
-            decision["complexity"] = complexity
-            decision["model"] = model
-
-            mot = decision.get("max_output_tokens")
-            if not isinstance(mot, int):
-                decision["max_output_tokens"] = 1600 if complexity == "hard" else 900
-            else:
-                decision["max_output_tokens"] = max(600, min(int(mot), 2400))
-
-            decision["needs_clarification"] = bool(decision.get("needs_clarification", False))
-            decision["next_questions"] = decision.get("next_questions") or []
-            decision["needs_qc"] = bool(decision.get("needs_qc", complexity == "hard"))
-
-            return decision, usage
-        except Exception:
-            return self._fallback_decision(agent_type), {}
 
     async def _clarify(
         self,
@@ -268,7 +193,7 @@ Agent type: {agent_type}
         db_session: AsyncSession,
         session_state: TaskSessionState,
     ) -> Dict[str, Any]:
-        decision, usage = await self._route_task(
+        decision, usage = await self.task_router.route(
             session_state.agent_type, session_state.task_description, session_state.answers
         )
 
