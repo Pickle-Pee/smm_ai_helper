@@ -1,24 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 
-from app.agents import (
-    AnalyticsAgent,
-    ContentAgent,
-    PromoAgent,
-    StrategyAgent,
-    TrendsAgent,
-)
 from app.presenters import format_agent_result
-
-# Храним классы, а не singleton-экземпляры, чтобы не ловить гонки при параллельных запросах.
-AGENT_MAP: Dict[str, Type] = {
-    "strategy": StrategyAgent,
-    "content": ContentAgent,
-    "analytics": AnalyticsAgent,
-    "promo": PromoAgent,
-    "trends": TrendsAgent,
-}
+from app.services.agent_registry import AgentRegistry
 
 
 class AgentRunner:
@@ -33,7 +18,7 @@ class AgentRunner:
         max_output_tokens: int,
         qc_issues: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        agent_cls = AGENT_MAP.get(agent_type)
+        agent_cls = AgentRegistry.get_agent_class(agent_type)
         if not agent_cls:
             raise ValueError("Unknown agent type")
 
