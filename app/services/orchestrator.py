@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.agent_runner import AgentRunner
 from app.services.clarification_service import ClarificationService
-from app.services.image_orchestrator import ImageOrchestrator
 from app.services.qc_service import QCService
+from app.services.task_image_service import TaskImageService
 from app.services.task_router import TaskRouter
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 
@@ -22,7 +22,7 @@ class OrchestratorService:
         self.clarification_service = ClarificationService()
         self.agent_runner = AgentRunner()
         self.qc_service = QCService()
-        self.image_orchestrator = ImageOrchestrator()
+        self.task_image_service = TaskImageService()
 
     async def start_task(
         self,
@@ -139,18 +139,7 @@ class OrchestratorService:
             },
         )
 
-        image_payload = None
-        if session_state.mode in {"image", "text+image"}:
-            image_payload = await self.image_orchestrator.generate(
-                platform=session_state.answers.get("platform", "auto"),
-                use_case=session_state.answers.get("use_case", "auto"),
-                message=session_state.task_description,
-                brand=session_state.answers.get("brand"),
-                overlay=session_state.answers.get("overlay"),
-                variants=int(session_state.answers.get("variants", 1) or 1),
-                user_id=session_state.user_id,
-                request_id=session_state.request_id,
-            )
+        image_payload = await self.task_image_service.generate_for_task_session(session_state)
 
         await TaskSessionService.delete(db_session, session_state.session_id)
         await db_session.commit()
