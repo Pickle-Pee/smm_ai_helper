@@ -96,22 +96,11 @@ async def answer_task(
     )
 
     if response["status"] == "done":
-        session_data.answers[payload.key] = payload.value
-
-        user = None
-        if session_data.user_id != "anonymous":
-            user = await UserService.get_by_telegram_id(
-                session,
-                int(session_data.user_id),
-            )
-
-        await TaskResultService.save_done_task(
+        await TaskResultService.save_done_task_from_session(
             db_session=session,
-            user_id=user.id if user else None,
-            agent_type=session_data.agent_type,
-            task_description=session_data.task_description,
-            answers=session_data.answers,
+            session_state=session_data,
             result=response["result"],
+            extra_answers={payload.key: payload.value},
         )
 
     return response
