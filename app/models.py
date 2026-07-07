@@ -45,6 +45,25 @@ class Task(Base):
     user: Mapped[User | None] = relationship(back_populates="tasks")
 
 
+class TaskSessionRecord(Base):
+    __tablename__ = "task_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True, default="anonymous")
+    agent_type: Mapped[str] = mapped_column(String(50), index=True)
+    task_description: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(String(32), default="text")
+    answers: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    questions_asked: Mapped[int] = mapped_column(Integer, default=0)
+    request_id: Mapped[str] = mapped_column(String(64), default="-")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
