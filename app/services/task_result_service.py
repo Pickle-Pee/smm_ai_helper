@@ -34,6 +34,29 @@ class TaskResultService:
         await db_session.refresh(task)
         return task
 
+    @staticmethod
+    async def save_error_task(
+        db_session: AsyncSession,
+        user_id: int | None,
+        agent_type: str,
+        task_description: str,
+        answers: Dict[str, Any] | None,
+        error: str,
+    ) -> Task:
+        task = Task(
+            user_id=user_id,
+            agent_type=agent_type,
+            task_description=task_description,
+            answers=answers,
+            result=None,
+            status="error",
+            error=error,
+        )
+        db_session.add(task)
+        await db_session.commit()
+        await db_session.refresh(task)
+        return task
+
     @classmethod
     async def save_done_task_from_session(
         cls,
