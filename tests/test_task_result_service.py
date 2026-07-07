@@ -46,6 +46,32 @@ def test_save_done_task_persists_task_with_expected_fields():
     assert task.status == "done"
 
 
+def test_save_error_task_persists_error_with_expected_fields():
+    db_session = FakeDbSession()
+
+    task = asyncio.run(
+        TaskResultService.save_error_task(
+            db_session=db_session,
+            user_id=42,
+            agent_type="content",
+            task_description="Сделай пост",
+            answers={"topic": "AI"},
+            error="Agent failed",
+        )
+    )
+
+    assert db_session.added == [task]
+    assert db_session.committed is True
+    assert db_session.refreshed == [task]
+    assert task.user_id == 42
+    assert task.agent_type == "content"
+    assert task.task_description == "Сделай пост"
+    assert task.answers == {"topic": "AI"}
+    assert task.result is None
+    assert task.status == "error"
+    assert task.error == "Agent failed"
+
+
 def test_save_done_task_from_anonymous_session_adds_extra_answers():
     db_session = FakeDbSession()
     session_state = TaskSessionState(
