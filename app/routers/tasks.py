@@ -13,6 +13,7 @@ from app.schemas import (
     TaskNeedInfoResponse,
     TaskDoneResponse,
 )
+from app.services.agent_registry import AgentRegistry
 from app.services.task_history_service import TaskHistoryService
 from app.services.task_pipeline import TaskPipelineService
 from app.services.task_result_service import TaskResultService
@@ -51,7 +52,7 @@ async def start_task(
     payload: TaskStartRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    if payload.agent_type not in {"strategy", "content", "analytics", "promo", "trends"}:
+    if not AgentRegistry.is_supported(payload.agent_type):
         raise HTTPException(status_code=404, detail="Unknown agent type")
 
     user = await UserService.get_or_create(session, payload.user)
