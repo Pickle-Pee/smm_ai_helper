@@ -66,6 +66,7 @@ async def start_task(
 
     user = await UserService.get_or_create(session, payload.user)
     response = await orchestrator.start_task(
+        db_session=session,
         agent_type=payload.agent_type,
         task_description=payload.task_description,
         answers=payload.answers or {},
@@ -94,17 +95,20 @@ async def answer_task(
     payload: TaskAnswerRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    session_data = orchestrator.get_session(payload.session_id)
+    session_data = await orchestrator.get_session(session, payload.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Unknown session")
 
     response = await orchestrator.answer(
+        db_session=session,
         session_id=payload.session_id,
         key=payload.key,
         value=payload.value,
     )
 
     if response["status"] == "done":
+        session_data.answers[payload.key] = payload.value
+
         user = None
         if session_data.user_id != "anonymous":
             user = await UserService.get_by_telegram_id(
