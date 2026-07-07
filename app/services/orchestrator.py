@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +10,7 @@ from app.agents.utils import safe_json_parse
 from app.config import settings
 from app.llm.openai_text import chat as openai_chat
 from app.services.agent_runner import AgentRunner
+from app.services.clarification_service import ClarificationService
 from app.services.image_orchestrator import ImageOrchestrator
 from app.services.task_router import TaskRouter
 from app.services.task_session_service import TaskSessionService, TaskSessionState
@@ -18,91 +18,18 @@ from app.services.task_session_service import TaskSessionService, TaskSessionSta
 logger = logging.getLogger(__name__)
 
 
-def safe_json_parse_any(raw: str) -> Union[Dict[str, Any], List[Any]]:
-    """
-    Более универсальный парсер:
-    - если ответ — JSON-объект, вернёт dict через safe_json_parse
-    - если ответ — JSON-массив, распарсит как list
-    """
-    s = raw.strip()
-    if s.startswith("["):
-        try:
-            return json.loads(s)
-        except json.JSONDecodeError:
-            pass
-
-        first = s.find("[")
-        last = s.rfind("]")
-        if first != -1 and last != -1 and last > first:
-            return json.loads(s[first : last + 1])
-
-    return safe_json_parse(raw)
-
-
 class OrchestratorService:
     def __init__(self) -> None:
         self.task_router = TaskRouter()
+        self.clarification_service = ClarificationService()
         self.agent_runner = AgentRunner()
         self.image_orchestrator = ImageOrchestrator()
-
-    # -------------------------
-    # Clarification
-    # -------------------------
-
-    async def _clarify(
-        self,
-        task_description: str,
-        answers: Dict[str, Any],
-        remaining: int,
-    ) -> List[Dict[str, str]]:
-        """
-        Уточнение тоже всегда на LIGHT. Возвращаем до 1–3 вопросов.
-        """
-        prompt = f"""
-Нужно уточнить задачу. Верни от 1 до {min(3, remaining)} вопросов строго JSON-массивом:
-[
-  {{"key": "...", "question": "..."}}
-]
-
-Правила:
-- максимум 3 вопроса
-- вопросы должны быть короткими и реально нужными
-- если можно продолжать без вопросов — верни пустой массив []
-
-Описание: {task_description}
-Ответы: {answers}
-""".strip()
-
-        messages = [
-            {"role": "system", "content": "Ты — уточняющий агент. Только JSON (массив)."},
-            {"role": "user", "content": prompt},
-        ]
-
-        content, _usage = await openai_chat(
-            messages=messages,
-            model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=None,
-            max_output_tokens=1500,
-        )
-
-        try:
-            data = safe_json_parse_any(content)
-            if isinstance(data, list):
-                out: List[Dict[str, str]] = []
-                for item in data:
-                    if isinstance(item, dict) and "question" in item:
-                        out.append({"key": str(item.get("key", "details")), "question": str(item.get("question"))})
-                return out[:3]
-        except Exception:
-            pass
-
-        return [{"key": "details", "question": "Расскажи чуть подробнее про задачу (цель + аудитория + площадка)."}]
 
     # -------------------------
     # QC
     # -------------------------
 
-    async def _run_qc(self, task_description: str, content: str) -> List[str]:
+    async def _run_qc(self, task_description: str, content: str) -> list[str]:
         """
         QC всегда на LIGHT модели.
         """
@@ -203,7 +130,7 @@ class OrchestratorService:
         if needs_clarification and session_state.questions_asked < max_questions:
             remaining = max_questions - session_state.questions_asked
             next_questions = decision.get("next_questions") or []
-            questions = next_questions if next_questions else await self._clarify(
+            questions = next_questions if next_questions else await self.clarification_service.generate_questions(
                 session_state.task_description, session_state.answers, remaining
             )
 
