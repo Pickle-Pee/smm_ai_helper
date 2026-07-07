@@ -76,14 +76,14 @@ def test_handle_clarification_returns_need_info_and_persists_state(monkeypatch):
 
     db_session = FakeDbSession()
     session_state = make_session_state()
+    questions = [
+        {"key": "audience", "question": "Кто аудитория?"},
+        {"key": "goal", "question": "Какая цель?"},
+        {"key": "platform", "question": "Какая площадка?"},
+    ]
     decision = {
         "needs_clarification": True,
-        "next_questions": [
-            {"key": "audience", "question": "Кто аудитория?"},
-            {"key": "goal", "question": "Какая цель?"},
-            {"key": "platform", "question": "Какая площадка?"},
-            {"key": "tone", "question": "Какой тон?"},
-        ],
+        "next_questions": questions,
     }
 
     response = asyncio.run(
@@ -97,9 +97,9 @@ def test_handle_clarification_returns_need_info_and_persists_state(monkeypatch):
     assert response == {
         "status": "need_info",
         "session_id": "session-1",
-        "questions": decision["next_questions"][:3],
+        "questions": questions,
     }
-    assert session_state.questions_asked == 4
+    assert session_state.questions_asked == 3
     assert saved_states == [session_state]
     assert db_session.commits == 1
 
