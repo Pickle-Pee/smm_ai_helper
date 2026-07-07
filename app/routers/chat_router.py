@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +11,9 @@ from app.db import get_session
 from app.schemas import ChatMessageRequest, ChatMessageResponse
 from app.services.assistant_core import generate_assistant_reply
 from app.services.assistant_normalizer import normalize_assistant_payload
+from app.services.chat_image_service import ChatImageService
 from app.services.chat_memory_service import ChatMemoryService
 from app.services.facts_extractor import extract_facts
-from app.services.image_orchestrator import ImageOrchestrator
 from app.services.intent_router import detect_intent
 from app.services.qc_shortener import qc_shorten
 from app.services.response_policy import enforce_policy
@@ -32,8 +31,8 @@ async def chat_message(
     payload: ChatMessageRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    image_orchestrator = ImageOrchestrator()
     chat_memory = ChatMemoryService(session)
+    chat_image_service = ChatImageService()
     request_id = uuid.uuid4().hex
     user_id = payload.user_id
 
@@ -128,66 +127,18 @@ async def chat_message(
     # 7) Image intent (если пользователь просит картинку)
     # ---------------------------
     image_payload = None
-
-    txt = (payload.text or "").lower()
-    wants_image = any(
-        k in txt
-        for k in [
-            "сгенерируй картин",
-            "сделай картин",
-            "картинк",
-            "баннер",
-            "креатив",
-            "обложк",
-            "визуал",
-            "изображен",
-        ]
+    image_result = await chat_image_service.generate_if_requested(
+        text=payload.text,
+        user_id=user_id,
+        request_id=request_id,
+        facts=conversation.facts_json or {},
     )
 
-    if wants_image:
-        platform = "vk" if ("вк" in txt or "vk" in txt) else "auto"
-        use_case = "ad_post" if ("реклам" in txt or "промо" in txt) else "post"
-
-        facts = conversation.facts_json or {}
-        brand: Dict[str, Any] = {
-            "brand_name": facts.get("brand_name"),
-            "product_description": facts.get("product_description"),
-            "audience": facts.get("audience"),
-            "tone": facts.get("tone"),
-            "goals": facts.get("goals"),
-            "channels": facts.get("channels"),
-        }
-
-        # Генерация изображения (лучше message=payload.text — ок, но можно улучшить позже)
-        result = await image_orchestrator.generate(
-            platform=platform,
-            use_case=use_case,
-            message=payload.text,
-            brand=brand,
-            overlay=None,
-            variants=1,
-            user_id=user_id,
-            request_id=request_id,
-        )
-
-        image_payload = {
-            "status": "done",
-            "mode": result["mode"],
-            "preset_id": result["preset_id"],
-            "size": result["size"],
-            "images": [{"url": f"/images/{image_id}.png"} for image_id in result["image_ids"]],
-        }
-
-        # UX: переписываем reply, чтобы не было “инструкций”, а было подтверждение
-        assistant["reply"] = (
-            "Сгенерировал креатив ✅\n\n"
-            "Хочешь ещё 2 варианта? Могу сделать: минимализм / яркий-игровой / премиум."
-        )
-        assistant["follow_up_question"] = "Какой стиль выбрать: минимализм / яркий / премиум?"
-        assistant["actions"] = [
-            {"type": "suggestion", "text": "Сделать ещё 2 варианта (разные стили)"},
-            {"type": "suggestion", "text": "Добавить текст на баннер (заголовок + CTA)"},
-        ]
+    if image_result:
+        image_payload = image_result.image
+        assistant["reply"] = image_result.reply
+        assistant["follow_up_question"] = image_result.follow_up_question
+        assistant["actions"] = image_result.actions
 
         # (опционально) можно сохранить ещё одно assistant message уже с новым reply
         # чтобы история совпадала с тем, что увидел пользователь:
