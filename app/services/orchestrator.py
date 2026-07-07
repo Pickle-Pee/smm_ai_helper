@@ -6,12 +6,10 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.utils import safe_json_parse
-from app.config import settings
-from app.llm.openai_text import chat as openai_chat
 from app.services.agent_runner import AgentRunner
 from app.services.clarification_service import ClarificationService
 from app.services.image_orchestrator import ImageOrchestrator
+from app.services.qc_service import QCService
 from app.services.task_router import TaskRouter
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 
@@ -23,52 +21,8 @@ class OrchestratorService:
         self.task_router = TaskRouter()
         self.clarification_service = ClarificationService()
         self.agent_runner = AgentRunner()
+        self.qc_service = QCService()
         self.image_orchestrator = ImageOrchestrator()
-
-    # -------------------------
-    # QC
-    # -------------------------
-
-    async def _run_qc(self, task_description: str, content: str) -> list[str]:
-        """
-        QC всегда на LIGHT модели.
-        """
-        prompt = f"""
-Ты — QC редактор. Проверь ответ и верни строго JSON:
-{{"status": "ok|revise", "issues": ["..."]}}
-
-Правила:
-- issues: только конкретные замечания (что исправить), максимум 6
-- если всё ок — status="ok" и issues=[]
-- обращай внимание на: абстрактные формулировки, отсутствие конкретных шагов/примеров, лишняя вода
-
-Задача: {task_description}
-Ответ: {content}
-""".strip()
-
-        messages = [
-            {"role": "system", "content": "Ты — строгий QC. Только JSON."},
-            {"role": "user", "content": prompt},
-        ]
-
-        content_resp, _usage = await openai_chat(
-            messages=messages,
-            model=settings.DEFAULT_TEXT_MODEL_LIGHT,
-            temperature=None,
-            max_output_tokens=1500,
-            response_format={"type": "json_object"},
-        )
-
-        data = safe_json_parse(content_resp)
-        if data.get("status") == "revise":
-            issues = data.get("issues") or []
-            if isinstance(issues, list):
-                return [str(x) for x in issues[:6]]
-        return []
-
-    # -------------------------
-    # Public API
-    # -------------------------
 
     async def start_task(
         self,
@@ -121,7 +75,9 @@ class OrchestratorService:
         session_state: TaskSessionState,
     ) -> Dict[str, Any]:
         decision, usage = await self.task_router.route(
-            session_state.agent_type, session_state.task_description, session_state.answers
+            session_state.agent_type,
+            session_state.task_description,
+            session_state.answers,
         )
 
         needs_clarification = decision.get("needs_clarification", False)
@@ -131,7 +87,9 @@ class OrchestratorService:
             remaining = max_questions - session_state.questions_asked
             next_questions = decision.get("next_questions") or []
             questions = next_questions if next_questions else await self.clarification_service.generate_questions(
-                session_state.task_description, session_state.answers, remaining
+                session_state.task_description,
+                session_state.answers,
+                remaining,
             )
 
             session_state.questions_asked += len(questions)
@@ -143,8 +101,8 @@ class OrchestratorService:
                 "questions": questions[:3],
             }
 
-        model = decision.get("model") or settings.DEFAULT_TEXT_MODEL_LIGHT
-        max_output_tokens = int(decision.get("max_output_tokens") or (1600 if decision.get("complexity") == "hard" else 900))
+        model = decision["model"]
+        max_output_tokens = int(decision["max_output_tokens"])
 
         result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
@@ -156,7 +114,10 @@ class OrchestratorService:
 
         needs_qc = bool(decision.get("needs_qc", False)) or result.get("confidence") == "low"
         if needs_qc:
-            issues = await self._run_qc(session_state.task_description, result["content"])
+            issues = await self.qc_service.find_issues(
+                session_state.task_description,
+                result["content"],
+            )
             if issues:
                 result = await self.agent_runner.run(
                     agent_type=session_state.agent_type,
