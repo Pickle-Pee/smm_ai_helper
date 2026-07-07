@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from app.presenters import format_agent_result
 from app.services.agent_input_builder import AgentInputBuilder
+from app.services.agent_output_builder import AgentOutputBuilder
 from app.services.agent_registry import AgentRegistry
 
 
@@ -34,13 +34,5 @@ class AgentRunner:
         agent.model_override = model
         agent.max_output_tokens_override = max_output_tokens
 
-        result = await agent.run(agent_input.brief, **agent_input.kwargs)
-        content = format_agent_result(agent_type, result)
-
-        return {
-            "content": content,
-            "format": "markdown",
-            "assumptions": result.get("assumptions") or [],
-            "confidence": result.get("confidence") or "medium",
-            "warnings": result.get("warnings") or [],
-        }
+        raw_result = await agent.run(agent_input.brief, **agent_input.kwargs)
+        return AgentOutputBuilder.build(agent_type, raw_result)
