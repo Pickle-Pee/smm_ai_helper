@@ -16,6 +16,7 @@ from app.schemas import (
     TaskDoneResponse,
 )
 from app.services.task_pipeline import TaskPipelineService
+from app.services.task_result_service import TaskResultService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -76,16 +77,14 @@ async def start_task(
     )
 
     if response["status"] == "done":
-        task = Task(
+        await TaskResultService.save_done_task(
+            db_session=session,
             user_id=user.id if user else None,
             agent_type=payload.agent_type,
             task_description=payload.task_description,
             answers=payload.answers,
             result=response["result"],
-            status="done",
         )
-        session.add(task)
-        await session.commit()
 
     return response
 
@@ -116,15 +115,13 @@ async def answer_task(
                 int(session_data.user_id),
             )
 
-        task = Task(
+        await TaskResultService.save_done_task(
+            db_session=session,
             user_id=user.id if user else None,
             agent_type=session_data.agent_type,
             task_description=session_data.task_description,
             answers=session_data.answers,
             result=response["result"],
-            status="done",
         )
-        session.add(task)
-        await session.commit()
 
     return response
