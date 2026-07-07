@@ -3,10 +3,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 
 from app.db import get_session
-from app.models import Task
 from app.schemas import (
     TaskRead,
     TaskShort,
@@ -15,6 +13,7 @@ from app.schemas import (
     TaskNeedInfoResponse,
     TaskDoneResponse,
 )
+from app.services.task_history_service import TaskHistoryService
 from app.services.task_pipeline import TaskPipelineService
 from app.services.task_result_service import TaskResultService
 from app.services.user_service import UserService
@@ -25,10 +24,7 @@ task_pipeline = TaskPipelineService()
 
 @router.get("/{task_id}", response_model=TaskRead)
 async def get_task(task_id: int, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(
-        select(Task).where(Task.id == task_id)
-    )
-    task = result.scalar_one_or_none()
+    task = await TaskHistoryService.get_task(session, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
@@ -43,18 +39,11 @@ async def get_tasks_by_user(
     """
     История задач по конкретному юзеру (по telegram_id), последние N.
     """
-    user = await UserService.get_by_telegram_id(session, telegram_id)
-    if not user:
-        return []
-
-    tasks_result = await session.execute(
-        select(Task)
-        .where(Task.user_id == user.id)
-        .order_by(desc(Task.created_at))
-        .limit(limit)
+    return await TaskHistoryService.get_recent_tasks_by_telegram_id(
+        db_session=session,
+        telegram_id=telegram_id,
+        limit=limit,
     )
-    tasks = tasks_result.scalars().all()
-    return tasks
 
 
 @router.post("/start", response_model=TaskNeedInfoResponse | TaskDoneResponse)
