@@ -9,7 +9,7 @@ def test_fallback_decision_uses_hard_defaults_for_strategy():
 
     assert decision == {
         "complexity": "hard",
-        "model": "gpt-5",
+        "model": task_router_module.settings.DEFAULT_TEXT_MODEL_HARD,
         "max_output_tokens": 1200,
         "needs_clarification": False,
         "next_questions": [],
@@ -22,7 +22,7 @@ def test_fallback_decision_uses_light_defaults_for_content():
 
     assert decision == {
         "complexity": "light",
-        "model": "gpt-5-mini",
+        "model": task_router_module.settings.DEFAULT_TEXT_MODEL_LIGHT,
         "max_output_tokens": 900,
         "needs_clarification": False,
         "next_questions": [],
@@ -37,7 +37,7 @@ def test_normalize_decision_falls_back_to_agent_complexity():
     )
 
     assert decision["complexity"] == "hard"
-    assert decision["model"] == "gpt-5"
+    assert decision["model"] == task_router_module.settings.DEFAULT_TEXT_MODEL_HARD
     assert decision["max_output_tokens"] == 1600
     assert decision["needs_clarification"] is False
     assert decision["next_questions"] == []
@@ -82,7 +82,7 @@ def test_route_uses_openai_decision(monkeypatch):
 
     assert usage == {"total_tokens": 123}
     assert decision["complexity"] == "hard"
-    assert decision["model"] == "gpt-5"
+    assert decision["model"] == task_router_module.settings.DEFAULT_TEXT_MODEL_HARD
     assert decision["max_output_tokens"] == 2000
     assert decision["needs_clarification"] is True
     assert decision["next_questions"] == [
