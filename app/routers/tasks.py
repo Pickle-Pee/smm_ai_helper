@@ -15,11 +15,11 @@ from app.schemas import (
     TaskNeedInfoResponse,
     TaskDoneResponse,
 )
-from app.services.orchestrator import OrchestratorService
+from app.services.task_pipeline import TaskPipelineService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
-orchestrator = OrchestratorService()
+task_pipeline = TaskPipelineService()
 
 
 @router.get("/{task_id}", response_model=TaskRead)
@@ -65,7 +65,7 @@ async def start_task(
         raise HTTPException(status_code=404, detail="Unknown agent type")
 
     user = await UserService.get_or_create(session, payload.user)
-    response = await orchestrator.start_task(
+    response = await task_pipeline.start_task(
         db_session=session,
         agent_type=payload.agent_type,
         task_description=payload.task_description,
@@ -95,11 +95,11 @@ async def answer_task(
     payload: TaskAnswerRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    session_data = await orchestrator.get_session(session, payload.session_id)
+    session_data = await task_pipeline.get_session(session, payload.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Unknown session")
 
-    response = await orchestrator.answer(
+    response = await task_pipeline.answer(
         db_session=session,
         session_id=payload.session_id,
         key=payload.key,
