@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from app.presenters import format_agent_result
+from app.services.agent_input_builder import AgentInputBuilder
 from app.services.agent_registry import AgentRegistry
 
 
@@ -22,25 +23,18 @@ class AgentRunner:
         if not agent_cls:
             raise ValueError("Unknown agent type")
 
+        agent_input = AgentInputBuilder.build(
+            agent_type=agent_type,
+            task_description=task_description,
+            answers=answers,
+            qc_issues=qc_issues,
+        )
+
         agent = agent_cls()
-
-        brief = {"task_description": task_description, **(answers or {})}
-        if qc_issues:
-            brief["qc_issues"] = qc_issues
-
-        kwargs: Dict[str, Any] = {}
-        if agent_type == "content":
-            period = answers.get("period") or answers.get("days")
-            if period:
-                try:
-                    kwargs["days"] = int(period)
-                except Exception:
-                    pass
-
         agent.model_override = model
         agent.max_output_tokens_override = max_output_tokens
 
-        result = await agent.run(brief, **kwargs)
+        result = await agent.run(agent_input.brief, **agent_input.kwargs)
         content = format_agent_result(agent_type, result)
 
         return {
