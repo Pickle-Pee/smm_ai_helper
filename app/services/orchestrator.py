@@ -3,34 +3,18 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents import (
-    AnalyticsAgent,
-    ContentAgent,
-    PromoAgent,
-    StrategyAgent,
-    TrendsAgent,
-)
 from app.agents.utils import safe_json_parse
 from app.config import settings
 from app.llm.openai_text import chat as openai_chat
-from app.presenters import format_agent_result
+from app.services.agent_runner import AgentRunner
 from app.services.image_orchestrator import ImageOrchestrator
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 
 logger = logging.getLogger(__name__)
-
-# ВАЖНО: храним классы, а не синглтоны (иначе гонки при параллельных запросах)
-AGENT_MAP: Dict[str, Type] = {
-    "strategy": StrategyAgent,
-    "content": ContentAgent,
-    "analytics": AnalyticsAgent,
-    "promo": PromoAgent,
-    "trends": TrendsAgent,
-}
 
 
 def safe_json_parse_any(raw: str) -> Union[Dict[str, Any], List[Any]]:
@@ -56,6 +40,7 @@ def safe_json_parse_any(raw: str) -> Union[Dict[str, Any], List[Any]]:
 
 class OrchestratorService:
     def __init__(self) -> None:
+        self.agent_runner = AgentRunner()
         self.image_orchestrator = ImageOrchestrator()
 
     # -------------------------
@@ -189,50 +174,8 @@ Agent type: {agent_type}
         return [{"key": "details", "question": "Расскажи чуть подробнее про задачу (цель + аудитория + площадка)."}]
 
     # -------------------------
-    # Worker / QC
+    # QC
     # -------------------------
-
-    async def _run_worker(
-        self,
-        agent_type: str,
-        task_description: str,
-        answers: Dict[str, Any],
-        model: str,
-        max_output_tokens: int,
-        qc_issues: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
-        agent_cls = AGENT_MAP.get(agent_type)
-        if not agent_cls:
-            raise ValueError("Unknown agent type")
-
-        agent = agent_cls()
-
-        brief = {"task_description": task_description, **(answers or {})}
-        if qc_issues:
-            brief["qc_issues"] = qc_issues
-
-        kwargs: Dict[str, Any] = {}
-        if agent_type == "content":
-            period = answers.get("period") or answers.get("days")
-            if period:
-                try:
-                    kwargs["days"] = int(period)
-                except Exception:
-                    pass
-
-        agent.model_override = model
-        agent.max_output_tokens_override = max_output_tokens
-
-        result = await agent.run(brief, **kwargs)
-
-        content = format_agent_result(agent_type, result)
-        return {
-            "content": content,
-            "format": "markdown",
-            "assumptions": result.get("assumptions") or [],
-            "confidence": result.get("confidence") or "medium",
-            "warnings": result.get("warnings") or [],
-        }
 
     async def _run_qc(self, task_description: str, content: str) -> List[str]:
         """
@@ -351,7 +294,7 @@ Agent type: {agent_type}
         model = decision.get("model") or settings.DEFAULT_TEXT_MODEL_LIGHT
         max_output_tokens = int(decision.get("max_output_tokens") or (1600 if decision.get("complexity") == "hard" else 900))
 
-        result = await self._run_worker(
+        result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
             task_description=session_state.task_description,
             answers=session_state.answers,
@@ -363,7 +306,7 @@ Agent type: {agent_type}
         if needs_qc:
             issues = await self._run_qc(session_state.task_description, result["content"])
             if issues:
-                result = await self._run_worker(
+                result = await self.agent_runner.run(
                     agent_type=session_state.agent_type,
                     task_description=session_state.task_description,
                     answers=session_state.answers,
