@@ -1,29 +1,31 @@
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents import (
-    StrategyAgent,
-    ContentAgent,
-    AnalyticsAgent,
-    PromoAgent,
-    TrendsAgent,
-)
 from app.db import get_session
-from app.models import Task
 from app.schemas import AgentRunRequest, AgentRunResponse
+from app.services.agent_registry import AgentRegistry
+from app.services.agent_runner import AgentRunner
+from app.services.task_result_service import TaskResultService
+from app.services.task_router import TaskRouter
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+agent_runner = AgentRunner()
+task_router = TaskRouter()
 
-AGENTS_MAP = {
-    "strategy": StrategyAgent(),
-    "content": ContentAgent(),
-    "analytics": AnalyticsAgent(),
-    "promo": PromoAgent(),
-    "trends": TrendsAgent(),
-}
+
+def _normalize_legacy_answers(answers: Dict[str, Any]) -> Dict[str, Any]:
+    """Preserve legacy direct-agent request compatibility."""
+    normalized = dict(answers or {})
+    if "channels" in normalized and isinstance(normalized["channels"], str):
+        normalized["channels"] = [
+            channel.strip()
+            for channel in normalized["channels"].split(",")
+            if channel.strip()
+        ]
+    return normalized
 
 
 @router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True)
@@ -38,37 +40,30 @@ async def run_agent(
     New product flows should use /tasks/start and /tasks/answer so routing,
     clarification, QC, history, and future billing/learning hooks stay in one pipeline.
     """
-    if agent_type not in AGENTS_MAP:
+    if not AgentRegistry.is_supported(agent_type):
         raise HTTPException(status_code=404, detail="Unknown agent type")
-
-    agent = AGENTS_MAP[agent_type]
 
     user = await UserService.get_or_create(session, payload.user)
     user_id = user.id if user else None
-
-    brief: Dict[str, Any] = {
-        "task_description": payload.task_description,
-        **payload.answers,
-    }
-
-    if "channels" in brief and isinstance(brief["channels"], str):
-        brief["channels"] = [
-            c.strip() for c in brief["channels"].split(",") if c.strip()
-        ]
+    run_answers = _normalize_legacy_answers(payload.answers)
+    decision = task_router.fallback_decision(agent_type)
 
     try:
-        result_data = await agent.run(brief)
-        task = Task(
+        result_data = await agent_runner.run(
+            agent_type=agent_type,
+            task_description=payload.task_description,
+            answers=run_answers,
+            model=decision["model"],
+            max_output_tokens=int(decision["max_output_tokens"]),
+        )
+        task = await TaskResultService.save_done_task(
+            db_session=session,
             user_id=user_id,
             agent_type=agent_type,
             task_description=payload.task_description,
             answers=payload.answers,
             result=result_data,
-            status="done",
         )
-        session.add(task)
-        await session.commit()
-        await session.refresh(task)
         return AgentRunResponse(
             task_id=task.id,
             agent_type=agent_type,
@@ -76,16 +71,12 @@ async def run_agent(
             result=result_data,
         )
     except Exception as e:
-        task = Task(
+        await TaskResultService.save_error_task(
+            db_session=session,
             user_id=user_id,
             agent_type=agent_type,
             task_description=payload.task_description,
             answers=payload.answers,
-            result=None,
-            status="error",
             error=str(e),
         )
-        session.add(task)
-        await session.commit()
-        await session.refresh(task)
         raise HTTPException(status_code=500, detail="Agent execution failed")
