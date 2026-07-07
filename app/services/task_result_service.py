@@ -5,6 +5,8 @@ from typing import Any, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task
+from app.services.task_session_service import TaskSessionState
+from app.services.user_service import UserService
 
 
 class TaskResultService:
@@ -31,3 +33,32 @@ class TaskResultService:
         await db_session.commit()
         await db_session.refresh(task)
         return task
+
+    @classmethod
+    async def save_done_task_from_session(
+        cls,
+        db_session: AsyncSession,
+        session_state: TaskSessionState,
+        result: Dict[str, Any],
+        extra_answers: Dict[str, Any] | None = None,
+    ) -> Task:
+        answers = dict(session_state.answers or {})
+        if extra_answers:
+            answers.update(extra_answers)
+
+        user_id = None
+        if session_state.user_id != "anonymous":
+            user = await UserService.get_by_telegram_id(
+                db_session,
+                int(session_state.user_id),
+            )
+            user_id = user.id if user else None
+
+        return await cls.save_done_task(
+            db_session=db_session,
+            user_id=user_id,
+            agent_type=session_state.agent_type,
+            task_description=session_state.task_description,
+            answers=answers,
+            result=result,
+        )
