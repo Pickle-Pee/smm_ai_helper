@@ -17,6 +17,7 @@ from app.agents import (
 from app.agents.utils import safe_json_parse
 from app.config import settings
 from app.llm.openai_text import chat as openai_chat
+from app.presenters import format_agent_result
 from app.services.image_orchestrator import ImageOrchestrator
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 
@@ -188,136 +189,6 @@ Agent type: {agent_type}
         return [{"key": "details", "question": "Расскажи чуть подробнее про задачу (цель + аудитория + площадка)."}]
 
     # -------------------------
-    # Formatting
-    # -------------------------
-
-    def _format_result(self, agent_type: str, result: Dict[str, Any]) -> str:
-        """
-        ВАЖНО: не “скомкивать” ответы.
-        Возвращаем более полный текст. Если есть готовый user_answer/full_* — используем.
-        """
-
-        if isinstance(result.get("user_answer"), str) and result["user_answer"].strip():
-            return result["user_answer"].strip()
-
-        if agent_type == "strategy":
-            full = result.get("full_strategy")
-            if isinstance(full, str) and full.strip():
-                return full.strip()
-
-            structured = result.get("structured") or {}
-            summary_text = (result.get("summary_text") or "").strip()
-            lines: List[str] = []
-            if summary_text:
-                lines += ["### Кратко", summary_text, ""]
-            positioning = structured.get("positioning") or {}
-            if positioning:
-                core = positioning.get("core_message")
-                utp = positioning.get("utp") or []
-                if core:
-                    lines += ["### Позиционирование", f"**Сообщение:** {core}", ""]
-                if utp:
-                    lines.append("### УТП")
-                    lines += [f"- {x}" for x in utp[:8]]
-                    lines.append("")
-            first7 = structured.get("first_7_days_plan") or []
-            if first7:
-                lines.append("### План на первые 7 дней")
-                for it in first7[:7]:
-                    day = it.get("day")
-                    ch = it.get("channel") or ""
-                    fmt = it.get("format") or ""
-                    topic = it.get("topic") or ""
-                    cta = it.get("cta") or ""
-                    lines.append(f"- День {day}: **{topic}** ({ch}/{fmt})" + (f" — CTA: {cta}" if cta else ""))
-            text = "\n".join(lines).strip()
-            return text or json.dumps(result, ensure_ascii=False, indent=2)
-
-        if agent_type == "content":
-            plan_md = (result.get("raw_plan_markdown") or "").strip()
-            posts = result.get("posts") or []
-            parts: List[str] = []
-            if plan_md:
-                parts += ["### Контент-план", plan_md, ""]
-            if posts:
-                parts.append("### Примеры постов")
-                for i, p in enumerate(posts[:3], start=1):
-                    post_obj = p.get("post") or {}
-                    title = post_obj.get("title") or f"Пост #{i}"
-                    full_text = (post_obj.get("full_text") or "").strip()
-                    parts.append(f"**{title}**")
-                    if full_text:
-                        parts.append(full_text)
-                    parts.append("")
-            text = "\n".join(parts).strip()
-            return text or json.dumps(result, ensure_ascii=False, indent=2)
-
-        if agent_type == "analytics":
-            next_steps = result.get("next_steps") or []
-            if isinstance(next_steps, list) and next_steps:
-                lines: List[str] = ["### План действий (следующие шаги)"]
-                for step in next_steps[:10]:
-                    if isinstance(step, dict):
-                        title = (step.get("step") or "").strip()
-                        impact = (step.get("impact") or "").strip()
-                        effort = (step.get("effort") or "").strip()
-                        how = (step.get("how_to_do") or "").strip()
-                        meta = []
-                        if impact and impact != "—":
-                            meta.append(impact)
-                        if effort and effort != "—":
-                            meta.append(f"усилие: {effort}")
-                        lines.append(f"- {title}" + (f" ({', '.join(meta)})" if meta else ""))
-                        if how and how != "—":
-                            lines.append(f"  - как сделать: {how}")
-                    else:
-                        lines.append(f"- {step}")
-                return "\n".join(lines).strip()
-            return json.dumps(result, ensure_ascii=False, indent=2)
-
-        if agent_type == "promo":
-            overall = result.get("overall_approach") or []
-            hypotheses = result.get("hypotheses") or []
-            lines: List[str] = []
-            if overall:
-                lines.append("### Подход к рекламе")
-                lines.extend([f"- {line}" for line in overall[:8]])
-                lines.append("")
-            if hypotheses:
-                lines.append("### Гипотезы (старт)")
-                for h in hypotheses[:5]:
-                    name = h.get("name") or "Гипотеза"
-                    fmt = h.get("format") or ""
-                    segment = h.get("segment") or ""
-                    offer = h.get("offer") or ""
-                    angle = h.get("angle") or ""
-                    lines.append(f"- **{name}**" + (f" ({fmt})" if fmt else ""))
-                    if segment:
-                        lines.append(f"  - Сегмент: {segment}")
-                    if offer:
-                        lines.append(f"  - Оффер: {offer}")
-                    if angle:
-                        lines.append(f"  - Угол: {angle}")
-            return "\n".join(lines).strip() or json.dumps(result, ensure_ascii=False, indent=2)
-
-        if agent_type == "trends":
-            exp = result.get("experiment_roadmap") or []
-            if exp:
-                lines = ["### Эксперименты, которые можно запустить"]
-                for e in exp[:6]:
-                    name = e.get("experiment_name") or "Эксперимент"
-                    hyp = e.get("hypothesis") or ""
-                    ch = e.get("channel") or ""
-                    fmt = e.get("format") or ""
-                    lines.append(f"- **{name}**" + (f" ({ch}/{fmt})" if ch or fmt else ""))
-                    if hyp:
-                        lines.append(f"  - Гипотеза: {hyp}")
-                return "\n".join(lines).strip()
-            return json.dumps(result, ensure_ascii=False, indent=2)
-
-        return json.dumps(result, ensure_ascii=False, indent=2)
-
-    # -------------------------
     # Worker / QC
     # -------------------------
 
@@ -354,7 +225,7 @@ Agent type: {agent_type}
 
         result = await agent.run(brief, **kwargs)
 
-        content = self._format_result(agent_type, result)
+        content = format_agent_result(agent_type, result)
         return {
             "content": content,
             "format": "markdown",
