@@ -6,14 +6,13 @@ from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models import Conversation, Message
 from app.schemas import ChatMessageRequest, ChatMessageResponse
 from app.services.assistant_core import generate_assistant_reply
 from app.services.assistant_normalizer import normalize_assistant_payload
+from app.services.chat_memory_service import ChatMemoryService
 from app.services.facts_extractor import extract_facts
 from app.services.image_orchestrator import ImageOrchestrator
 from app.services.intent_router import detect_intent
@@ -34,6 +33,7 @@ async def chat_message(
     session: AsyncSession = Depends(get_session),
 ):
     image_orchestrator = ImageOrchestrator()
+    chat_memory = ChatMemoryService(session)
     request_id = uuid.uuid4().hex
     user_id = payload.user_id
 
@@ -42,17 +42,8 @@ async def chat_message(
         extra={"request_id": request_id, "user_id": user_id, "agent_type": "assistant"},
     )
 
-    # upsert conversation
-    conversation = await session.get(Conversation, user_id)
-    if not conversation:
-        conversation = Conversation(user_id=user_id, summary="", facts_json={})
-        session.add(conversation)
-        await session.commit()
-
-    # persist user msg
-    user_message = Message(user_id=user_id, role="user", text=payload.text)
-    session.add(user_message)
-    await session.commit()
+    conversation = await chat_memory.get_or_create_conversation(user_id)
+    await chat_memory.append_message(user_id=user_id, role="user", text=payload.text)
 
     # ---------------------------
     # 1) Scope guard (маркетинг only)
@@ -62,11 +53,11 @@ async def chat_message(
         blocked_payload = enforce_policy(blocked_payload)
         blocked_payload = normalize_assistant_payload(blocked_payload)
 
-        assistant_message = Message(
-            user_id=user_id, role="assistant", text=blocked_payload.get("reply", "")
+        await chat_memory.append_message(
+            user_id=user_id,
+            role="assistant",
+            text=blocked_payload.get("reply", ""),
         )
-        session.add(assistant_message)
-        await session.commit()
 
         return {
             "reply": blocked_payload.get("reply", ""),
@@ -79,14 +70,7 @@ async def chat_message(
     # ---------------------------
     # 2) Load recent messages
     # ---------------------------
-    messages_result = await session.execute(
-        select(Message)
-        .where(Message.user_id == user_id)
-        .order_by(desc(Message.created_at))
-        .limit(20)
-    )
-    messages = list(reversed(messages_result.scalars().all()))
-    last_messages = [{"role": m.role, "text": m.text} for m in messages]
+    last_messages = await chat_memory.load_recent_messages(user_id=user_id, limit=20)
 
     # ---------------------------
     # 3) URL analyze (если есть ссылки)
@@ -136,9 +120,7 @@ async def chat_message(
         assistant["reply"] = (assistant.get("reply") or "")
 
     # persist assistant msg (по умолчанию — текст)
-    assistant_message = Message(user_id=user_id, role="assistant", text=assistant.get("reply", ""))
-    session.add(assistant_message)
-    await session.commit()
+    await chat_memory.append_message(user_id=user_id, role="assistant", text=assistant.get("reply", ""))
 
     intent = detect_intent(payload.text)
 
@@ -209,9 +191,7 @@ async def chat_message(
 
         # (опционально) можно сохранить ещё одно assistant message уже с новым reply
         # чтобы история совпадала с тем, что увидел пользователь:
-        assistant_message2 = Message(user_id=user_id, role="assistant", text=assistant["reply"])
-        session.add(assistant_message2)
-        await session.commit()
+        await chat_memory.append_message(user_id=user_id, role="assistant", text=assistant["reply"])
 
     return {
         "reply": assistant.get("reply", ""),
