@@ -11,8 +11,9 @@ from app.agents import (
     TrendsAgent,
 )
 from app.db import get_session
-from app.models import Task, User
-from app.schemas import AgentRunRequest, AgentRunResponse, UserCreate
+from app.models import Task
+from app.schemas import AgentRunRequest, AgentRunResponse
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -25,43 +26,24 @@ AGENTS_MAP = {
 }
 
 
-async def get_or_create_user(session: AsyncSession, user_data: UserCreate | None) -> User | None:
-    if user_data is None:
-        return None
-
-    from sqlalchemy import select
-
-    result = await session.execute(
-        select(User).where(User.telegram_id == user_data.telegram_id)
-    )
-    user = result.scalar_one_or_none()
-    if user:
-        return user
-
-    user = User(
-        telegram_id=user_data.telegram_id,
-        username=user_data.username,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-    )
-    session.add(user)
-    await session.flush()
-    await session.refresh(user)
-    return user
-
-
-@router.post("/{agent_type}/run", response_model=AgentRunResponse)
+@router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True)
 async def run_agent(
     agent_type: str,
     payload: AgentRunRequest,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Legacy direct agent endpoint.
+
+    New product flows should use /tasks/start and /tasks/answer so routing,
+    clarification, QC, history, and future billing/learning hooks stay in one pipeline.
+    """
     if agent_type not in AGENTS_MAP:
         raise HTTPException(status_code=404, detail="Unknown agent type")
 
     agent = AGENTS_MAP[agent_type]
 
-    user = await get_or_create_user(session, payload.user)
+    user = await UserService.get_or_create(session, payload.user)
     user_id = user.id if user else None
 
     brief: Dict[str, Any] = {
