@@ -13,13 +13,13 @@ from app.services.assistant_core import generate_assistant_reply
 from app.services.assistant_normalizer import normalize_assistant_payload
 from app.services.chat_image_service import ChatImageService
 from app.services.chat_memory_service import ChatMemoryService
+from app.services.chat_url_service import ChatUrlService
 from app.services.facts_extractor import extract_facts
 from app.services.intent_router import detect_intent
 from app.services.qc_shortener import qc_shorten
 from app.services.response_policy import enforce_policy
 from app.services.scope_guard import scope_guard  # <-- ДОБАВИЛИ
 from app.services.summary_updater import update_summary
-from app.services.url_analyzer import UrlAnalyzer, extract_urls
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -33,6 +33,7 @@ async def chat_message(
 ):
     chat_memory = ChatMemoryService(session)
     chat_image_service = ChatImageService()
+    chat_url_service = ChatUrlService(session)
     request_id = uuid.uuid4().hex
     user_id = payload.user_id
 
@@ -74,9 +75,9 @@ async def chat_message(
     # ---------------------------
     # 3) URL analyze (если есть ссылки)
     # ---------------------------
-    url_analyzer = UrlAnalyzer(session)
-    url_data = await url_analyzer.analyze(payload.text)
-    used_url = url_data is not None
+    url_context = await chat_url_service.analyze(payload.text)
+    url_data = url_context.data
+    used_url = url_context.used_url
 
     # ---------------------------
     # 4) Facts update
@@ -115,7 +116,7 @@ async def chat_message(
     assistant = enforce_policy(assistant_qc)
     assistant = normalize_assistant_payload(assistant)
 
-    if not used_url and url_data is None and extract_urls(payload.text):
+    if not used_url and url_context.has_url_intent:
         assistant["reply"] = (assistant.get("reply") or "")
 
     # persist assistant msg (по умолчанию — текст)
