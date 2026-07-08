@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,15 +10,14 @@ from app.db import get_session
 from app.schemas import ChatMessageRequest, ChatMessageResponse
 from app.services.assistant_core import generate_assistant_reply
 from app.services.assistant_normalizer import normalize_assistant_payload
+from app.services.chat_context_service import ChatContextService
 from app.services.chat_image_service import ChatImageService
 from app.services.chat_memory_service import ChatMemoryService
 from app.services.chat_url_service import ChatUrlService
-from app.services.facts_extractor import extract_facts
 from app.services.intent_router import detect_intent
 from app.services.qc_shortener import qc_shorten
 from app.services.response_policy import enforce_policy
 from app.services.scope_guard import scope_guard  # <-- ДОБАВИЛИ
-from app.services.summary_updater import update_summary
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -34,6 +32,7 @@ async def chat_message(
     chat_memory = ChatMemoryService(session)
     chat_image_service = ChatImageService()
     chat_url_service = ChatUrlService(session)
+    chat_context_service = ChatContextService(session)
     request_id = uuid.uuid4().hex
     user_id = payload.user_id
 
@@ -80,30 +79,22 @@ async def chat_message(
     used_url = url_context.used_url
 
     # ---------------------------
-    # 4) Facts update
+    # 4) Context update
     # ---------------------------
-    facts_update = await extract_facts(
-        current_facts=conversation.facts_json or {},
-        last_user_message=payload.text,
+    context_update = await chat_context_service.update_context(
+        conversation=conversation,
+        user_message=payload.text,
+        last_messages=last_messages,
         url_summaries=url_data.url_summaries if url_data else None,
     )
-    conversation.facts_json = facts_update["facts"]
 
     # ---------------------------
-    # 5) Summary update
-    # ---------------------------
-    summary = await update_summary(conversation.summary or "", last_messages[-20:])
-    conversation.summary = summary
-    conversation.updated_at = datetime.utcnow()
-    await session.commit()
-
-    # ---------------------------
-    # 6) Assistant core (LLM)
+    # 5) Assistant core (LLM)
     # ---------------------------
     assistant_raw = await generate_assistant_reply(
         user_message=payload.text,
-        summary=conversation.summary or "",
-        facts_json=conversation.facts_json or {},
+        summary=context_update.summary,
+        facts_json=context_update.facts_json,
         last_messages=last_messages[-10:],
         url_summaries=url_data.url_summaries if url_data else None,
     )
@@ -125,14 +116,14 @@ async def chat_message(
     intent = detect_intent(payload.text)
 
     # ---------------------------
-    # 7) Image intent (если пользователь просит картинку)
+    # 6) Image intent (если пользователь просит картинку)
     # ---------------------------
     image_payload = None
     image_result = await chat_image_service.generate_if_requested(
         text=payload.text,
         user_id=user_id,
         request_id=request_id,
-        facts=conversation.facts_json or {},
+        facts=context_update.facts_json,
     )
 
     if image_result:
