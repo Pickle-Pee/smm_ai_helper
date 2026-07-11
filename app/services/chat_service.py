@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.brand_profile_service import BrandProfileService
 from app.services.chat_context_service import ChatContextService
 from app.services.chat_image_service import ChatImageService
 from app.services.chat_memory_service import ChatMemoryService
@@ -27,6 +28,7 @@ class ChatService:
         context_service: ChatContextService | None = None,
         response_service: ChatResponseService | None = None,
         image_service: ChatImageService | None = None,
+        brand_profile_service: BrandProfileService | None = None,
         logger: logging.Logger | None = None,
         request_id_factory: Callable[[], str] | None = None,
     ) -> None:
@@ -37,6 +39,7 @@ class ChatService:
         self.chat_context_service = context_service or ChatContextService(db_session)
         self.chat_response_service = response_service or ChatResponseService(self.logger)
         self.chat_image_service = image_service or ChatImageService()
+        self.brand_profile_service = brand_profile_service or BrandProfileService()
         self.request_id_factory = request_id_factory or (lambda: uuid.uuid4().hex)
 
     async def handle(self, user_id: str, text: str) -> Dict[str, Any]:
@@ -86,10 +89,19 @@ class ChatService:
             url_summaries=url_summaries,
         )
 
+        profile_context = await self.brand_profile_service.get_context_for_chat_user(
+            self.db_session,
+            user_id,
+        )
+        brand_context = self.brand_profile_service.merge_context(
+            profile_context,
+            context_update.facts_json,
+        )
+
         assistant = await self.chat_response_service.generate(
             user_message=text,
             summary=context_update.summary,
-            facts_json=context_update.facts_json,
+            facts_json=brand_context,
             last_messages=last_messages[-10:],
             url_summaries=url_summaries,
         )
@@ -108,7 +120,7 @@ class ChatService:
             text=text,
             user_id=user_id,
             request_id=request_id,
-            facts=context_update.facts_json,
+            facts=brand_context,
         )
 
         image_payload = None
