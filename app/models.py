@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 
@@ -22,7 +24,11 @@ class User(Base):
         DateTime, default=datetime.utcnow
     )
 
-    tasks: Mapped[list["Task"]] = relationship(back_populates="user")
+    tasks: Mapped[list[Task]] = relationship(back_populates="user")
+    brand_profile: Mapped[BrandProfile | None] = relationship(
+        back_populates="user",
+        uselist=False,
+    )
 
 
 class Task(Base):
@@ -43,6 +49,32 @@ class Task(Base):
     )
 
     user: Mapped[User | None] = relationship(back_populates="tasks")
+
+
+class BrandProfile(Base):
+    __tablename__ = "brand_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        unique=True,
+        index=True,
+    )
+    brand_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    product_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    goals: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    channels: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    extra_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user: Mapped[User] = relationship(back_populates="brand_profile")
 
 
 class TaskSessionRecord(Base):
@@ -72,7 +104,7 @@ class Conversation(Base):
     facts_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    messages: Mapped[list[Message]] = relationship(back_populates="conversation")
 
 
 class Message(Base):
