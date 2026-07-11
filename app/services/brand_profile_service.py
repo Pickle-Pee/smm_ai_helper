@@ -46,6 +46,23 @@ class BrandProfileService:
         return await cls.get_by_user_id(session, user.id)
 
     @classmethod
+    async def get_context_for_chat_user(
+        cls,
+        session: AsyncSession,
+        chat_user_id: str,
+    ) -> Dict[str, Any]:
+        """Resolve a stable brand context for numeric Telegram chat IDs."""
+        normalized_user_id = (chat_user_id or "").strip()
+        if not normalized_user_id.isdigit():
+            return {}
+
+        profile = await cls.get_by_telegram_id(
+            session,
+            int(normalized_user_id),
+        )
+        return cls.to_context(profile)
+
+    @classmethod
     async def upsert_for_user(
         cls,
         session: AsyncSession,
@@ -96,6 +113,29 @@ class BrandProfileService:
             if value is not None:
                 context[field] = value
         return context
+
+    @classmethod
+    def merge_context(
+        cls,
+        profile_context: Dict[str, Any] | None,
+        chat_facts: Dict[str, Any] | None,
+    ) -> Dict[str, Any]:
+        """Overlay non-empty chat facts on top of the stable brand profile."""
+        merged = dict(profile_context or {})
+        for key, value in (chat_facts or {}).items():
+            if cls._has_context_value(value):
+                merged[key] = value
+        return merged
+
+    @staticmethod
+    def _has_context_value(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, tuple, dict, set)):
+            return bool(value)
+        return True
 
     @classmethod
     def _validate_and_normalize(cls, values: Dict[str, Any]) -> Dict[str, Any]:
