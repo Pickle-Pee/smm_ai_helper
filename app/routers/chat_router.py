@@ -8,15 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.schemas import ChatMessageRequest, ChatMessageResponse
-from app.services.assistant_core import generate_assistant_reply
-from app.services.assistant_normalizer import normalize_assistant_payload
 from app.services.chat_context_service import ChatContextService
 from app.services.chat_image_service import ChatImageService
 from app.services.chat_memory_service import ChatMemoryService
+from app.services.chat_response_service import ChatResponseService
 from app.services.chat_url_service import ChatUrlService
 from app.services.intent_router import detect_intent
-from app.services.qc_shortener import qc_shorten
-from app.services.response_policy import enforce_policy
 from app.services.scope_guard import scope_guard  # <-- ДОБАВИЛИ
 
 
@@ -33,6 +30,7 @@ async def chat_message(
     chat_image_service = ChatImageService()
     chat_url_service = ChatUrlService(session)
     chat_context_service = ChatContextService(session)
+    chat_response_service = ChatResponseService(logger)
     request_id = uuid.uuid4().hex
     user_id = payload.user_id
 
@@ -49,8 +47,7 @@ async def chat_message(
     # ---------------------------
     ok, blocked_payload = await scope_guard(payload.text, use_llm_fallback=True)
     if not ok and blocked_payload:
-        blocked_payload = enforce_policy(blocked_payload)
-        blocked_payload = normalize_assistant_payload(blocked_payload)
+        blocked_payload = chat_response_service.normalize(blocked_payload)
 
         await chat_memory.append_message(
             user_id=user_id,
@@ -89,23 +86,15 @@ async def chat_message(
     )
 
     # ---------------------------
-    # 5) Assistant core (LLM)
+    # 5) Assistant response
     # ---------------------------
-    assistant_raw = await generate_assistant_reply(
+    assistant = await chat_response_service.generate(
         user_message=payload.text,
         summary=context_update.summary,
         facts_json=context_update.facts_json,
         last_messages=last_messages[-10:],
         url_summaries=url_data.url_summaries if url_data else None,
     )
-    assistant_raw = enforce_policy(assistant_raw)
-    try:
-        assistant_qc = await qc_shorten(assistant_raw)
-    except Exception:
-        logger.exception("qc_shorten failed unexpectedly")
-        assistant_qc = assistant_raw
-    assistant = enforce_policy(assistant_qc)
-    assistant = normalize_assistant_payload(assistant)
 
     if not used_url and url_context.has_url_intent:
         assistant["reply"] = (assistant.get("reply") or "")
