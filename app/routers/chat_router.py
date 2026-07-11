@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.schemas import ChatMessageRequest, ChatMessageResponse
-from app.services.chat_context_service import ChatContextService
-from app.services.chat_image_service import ChatImageService
-from app.services.chat_memory_service import ChatMemoryService
-from app.services.chat_response_service import ChatResponseService
-from app.services.chat_url_service import ChatUrlService
-from app.services.intent_router import detect_intent
-from app.services.scope_guard import scope_guard  # <-- ДОБАВИЛИ
+from app.services.chat_service import ChatService
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -26,109 +19,7 @@ async def chat_message(
     payload: ChatMessageRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    chat_memory = ChatMemoryService(session)
-    chat_image_service = ChatImageService()
-    chat_url_service = ChatUrlService(session)
-    chat_context_service = ChatContextService(session)
-    chat_response_service = ChatResponseService(logger)
-    request_id = uuid.uuid4().hex
-    user_id = payload.user_id
-
-    logger.info(
-        "chat_request",
-        extra={"request_id": request_id, "user_id": user_id, "agent_type": "assistant"},
-    )
-
-    conversation = await chat_memory.get_or_create_conversation(user_id)
-    await chat_memory.append_message(user_id=user_id, role="user", text=payload.text)
-
-    # ---------------------------
-    # 1) Scope guard (маркетинг only)
-    # ---------------------------
-    ok, blocked_payload = await scope_guard(payload.text, use_llm_fallback=True)
-    if not ok and blocked_payload:
-        blocked_payload = chat_response_service.normalize(blocked_payload)
-
-        await chat_memory.append_message(
-            user_id=user_id,
-            role="assistant",
-            text=blocked_payload.get("reply", ""),
-        )
-
-        return {
-            "reply": blocked_payload.get("reply", ""),
-            "follow_up_question": blocked_payload.get("follow_up_question"),
-            "actions": blocked_payload.get("actions", []),
-            "debug": {"intent": "other", "used_url": False, "scope_blocked": True},
-            "image": None,
-        }
-
-    # ---------------------------
-    # 2) Load recent messages
-    # ---------------------------
-    last_messages = await chat_memory.load_recent_messages(user_id=user_id, limit=20)
-
-    # ---------------------------
-    # 3) URL analyze (если есть ссылки)
-    # ---------------------------
-    url_context = await chat_url_service.analyze(payload.text)
-    url_data = url_context.data
-    used_url = url_context.used_url
-
-    # ---------------------------
-    # 4) Context update
-    # ---------------------------
-    context_update = await chat_context_service.update_context(
-        conversation=conversation,
-        user_message=payload.text,
-        last_messages=last_messages,
-        url_summaries=url_data.url_summaries if url_data else None,
-    )
-
-    # ---------------------------
-    # 5) Assistant response
-    # ---------------------------
-    assistant = await chat_response_service.generate(
-        user_message=payload.text,
-        summary=context_update.summary,
-        facts_json=context_update.facts_json,
-        last_messages=last_messages[-10:],
-        url_summaries=url_data.url_summaries if url_data else None,
-    )
-
-    if not used_url and url_context.has_url_intent:
-        assistant["reply"] = (assistant.get("reply") or "")
-
-    # persist assistant msg (по умолчанию — текст)
-    await chat_memory.append_message(user_id=user_id, role="assistant", text=assistant.get("reply", ""))
-
-    intent = detect_intent(payload.text)
-
-    # ---------------------------
-    # 6) Image intent (если пользователь просит картинку)
-    # ---------------------------
-    image_payload = None
-    image_result = await chat_image_service.generate_if_requested(
+    return await ChatService(session, logger=logger).handle(
+        user_id=payload.user_id,
         text=payload.text,
-        user_id=user_id,
-        request_id=request_id,
-        facts=context_update.facts_json,
     )
-
-    if image_result:
-        image_payload = image_result.image
-        assistant["reply"] = image_result.reply
-        assistant["follow_up_question"] = image_result.follow_up_question
-        assistant["actions"] = image_result.actions
-
-        # (опционально) можно сохранить ещё одно assistant message уже с новым reply
-        # чтобы история совпадала с тем, что увидел пользователь:
-        await chat_memory.append_message(user_id=user_id, role="assistant", text=assistant["reply"])
-
-    return {
-        "reply": assistant.get("reply", ""),
-        "follow_up_question": assistant.get("follow_up_question"),
-        "actions": assistant.get("actions", []),
-        "debug": {"intent": intent, "used_url": used_url},
-        "image": image_payload,
-    }
