@@ -1,7 +1,8 @@
 # app/schemas.py
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UserCreate(BaseModel):
@@ -110,3 +111,31 @@ class ChatMessageResponse(BaseModel):
     actions: List[Dict[str, str]]
     debug: Dict[str, Any]
     image: Dict[str, Any] | None = None
+
+
+class BrandProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    brand_name: str | None = None
+    product_description: str | None = None
+    audience: str | None = None
+    tone: str | None = None
+    goals: List[str] | str | None = None
+    channels: List[str] | str | None = None
+    extra_json: Dict[str, Any] | None = None
+
+
+class BrandProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    brand_name: str | None
+    product_description: str | None
+    audience: str | None
+    tone: str | None
+    goals: Any | None
+    channels: Any | None
+    extra_json: Dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
