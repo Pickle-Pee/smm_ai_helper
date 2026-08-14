@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -29,6 +29,7 @@ class User(Base):
         back_populates="user",
         uselist=False,
     )
+    marketing_runs: Mapped[list[MarketingRun]] = relationship(back_populates="user")
 
 
 class Task(Base):
@@ -75,6 +76,66 @@ class BrandProfile(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="brand_profile")
+
+
+class MarketingRun(Base):
+    __tablename__ = "marketing_runs"
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+    workflow_type: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="created", index=True)
+    current_step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    input_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    state_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user: Mapped[User | None] = relationship(back_populates="marketing_runs")
+    artifacts: Mapped[list[MarketingArtifact]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class MarketingArtifact(Base):
+    __tablename__ = "marketing_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "artifact_key",
+            name="uq_marketing_artifacts_run_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("marketing_runs.run_id", ondelete="CASCADE"),
+        index=True,
+    )
+    artifact_key: Mapped[str] = mapped_column(String(128))
+    artifact_type: Mapped[str] = mapped_column(String(64), index=True)
+    step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_json: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    run: Mapped[MarketingRun] = relationship(back_populates="artifacts")
 
 
 class TaskSessionRecord(Base):
