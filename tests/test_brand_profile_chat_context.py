@@ -4,9 +4,9 @@ from types import SimpleNamespace
 from app.services.brand_profile_service import BrandProfileService
 
 
-def test_get_context_for_chat_user_skips_non_numeric_ids(monkeypatch):
+def test_get_context_for_chat_user_skips_non_telegram_ids(monkeypatch):
     async def unexpected_lookup(cls, session, telegram_id):
-        raise AssertionError("Telegram lookup must not run for non-numeric chat IDs")
+        raise AssertionError("Telegram lookup must not run for unsupported chat IDs")
 
     monkeypatch.setattr(
         BrandProfileService,
@@ -74,6 +74,52 @@ def test_get_context_for_chat_user_loads_numeric_telegram_profile(monkeypatch):
         "goals": ["Growth"],
         "channels": ["Telegram"],
     }
+
+
+def test_get_context_for_chat_user_loads_prefixed_telegram_profile(monkeypatch):
+    db_session = object()
+    profile = SimpleNamespace(
+        brand_name="Telegram Brand",
+        product_description=None,
+        audience=None,
+        tone=None,
+        goals=None,
+        channels=["Telegram"],
+        extra_json={},
+    )
+    calls = []
+
+    async def fake_lookup(cls, session, telegram_id):
+        calls.append((session, telegram_id))
+        return profile
+
+    monkeypatch.setattr(
+        BrandProfileService,
+        "get_by_telegram_id",
+        classmethod(fake_lookup),
+    )
+
+    result = asyncio.run(
+        BrandProfileService.get_context_for_chat_user(
+            session=db_session,
+            chat_user_id=" tg:12345 ",
+        )
+    )
+
+    assert calls == [(db_session, 12345)]
+    assert result == {
+        "brand_name": "Telegram Brand",
+        "channels": ["Telegram"],
+    }
+
+
+def test_resolve_telegram_id_supports_numeric_and_prefixed_ids():
+    assert BrandProfileService._resolve_telegram_id("12345") == 12345
+    assert BrandProfileService._resolve_telegram_id(" tg:12345 ") == 12345
+    assert BrandProfileService._resolve_telegram_id("TG:12345") == 12345
+    assert BrandProfileService._resolve_telegram_id("anonymous") is None
+    assert BrandProfileService._resolve_telegram_id("tg:anonymous") is None
+    assert BrandProfileService._resolve_telegram_id("") is None
 
 
 def test_merge_context_overlays_only_non_empty_chat_facts():

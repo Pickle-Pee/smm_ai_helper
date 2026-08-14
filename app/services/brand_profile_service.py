@@ -51,16 +51,23 @@ class BrandProfileService:
         session: AsyncSession,
         chat_user_id: str,
     ) -> Dict[str, Any]:
-        """Resolve a stable brand context for numeric Telegram chat IDs."""
-        normalized_user_id = (chat_user_id or "").strip()
-        if not normalized_user_id.isdigit():
+        """Resolve stable brand context for Telegram chat user IDs."""
+        telegram_id = cls._resolve_telegram_id(chat_user_id)
+        if telegram_id is None:
             return {}
 
-        profile = await cls.get_by_telegram_id(
-            session,
-            int(normalized_user_id),
-        )
+        profile = await cls.get_by_telegram_id(session, telegram_id)
         return cls.to_context(profile)
+
+    @staticmethod
+    def _resolve_telegram_id(chat_user_id: str) -> int | None:
+        normalized_user_id = (chat_user_id or "").strip()
+        if normalized_user_id.lower().startswith("tg:"):
+            normalized_user_id = normalized_user_id[3:].strip()
+
+        if not normalized_user_id.isdigit():
+            return None
+        return int(normalized_user_id)
 
     @classmethod
     async def upsert_for_user(
