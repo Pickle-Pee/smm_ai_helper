@@ -33,8 +33,8 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run `python -m compileall app bot`.
-- [ ] 5.2 Run `alembic upgrade head` against PostgreSQL.
-- [ ] 5.3 Run `python -m pytest`.
-- [ ] 5.4 Run `openspec validate --all --strict`.
-- [ ] 5.5 Review the final diff and confirm no routers, Telegram handlers, existing endpoint contracts, or unrelated runtime behavior changed.
+- [x] 5.1 Run `python -m compileall app bot`.
+- [x] 5.2 Run `alembic upgrade head` against PostgreSQL.
+- [x] 5.3 Run `python -m pytest`.
+- [x] 5.4 Run `openspec validate --all --strict`.
+- [x] 5.5 Review the final diff and confirm no routers, Telegram handlers, existing endpoint contracts, or unrelated runtime behavior changed.
