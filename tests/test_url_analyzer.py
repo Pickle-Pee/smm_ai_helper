@@ -9,7 +9,7 @@ def test_extract_urls():
 
 def test_extract_urls_normalizes_deduplicates_and_limits_targets():
     text = (
-        "https://example.com/ https://example.com "
+        "https://example.com https://example.com "
         "https://second.example/path/ https://third.example "
         "https://fourth.example"
     )
@@ -27,5 +27,5 @@ def test_extract_targets_resolves_telegram_handle():
     ]
 
 
-def test_normalize_url_drops_fragment_and_trailing_slash():
+def test_normalize_url_drops_fragment_and_non_root_trailing_slash():
     assert normalize_url("HTTPS://Example.COM/path/#section") == "https://example.com/path"
