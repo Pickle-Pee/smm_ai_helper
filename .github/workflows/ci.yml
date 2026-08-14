@@ -56,7 +56,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
-        run: pytest
+        run: python -m pytest
 
   openspec:
     runs-on: ubuntu-latest
