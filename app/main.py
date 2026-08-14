@@ -4,7 +4,13 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.logging import setup_logging
-from app.routers import agents_router, tasks_router, images_router, chat_router
+from app.routers import (
+    agents_router,
+    brand_profile_router,
+    chat_router,
+    images_router,
+    tasks_router,
+)
 
 setup_logging()
 
@@ -20,6 +26,7 @@ app.include_router(agents_router)
 app.include_router(tasks_router)
 app.include_router(images_router)
 app.include_router(chat_router)
+app.include_router(brand_profile_router)
 
 
 @app.get("/health")
