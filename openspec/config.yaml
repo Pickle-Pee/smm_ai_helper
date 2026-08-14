@@ -1,0 +1,63 @@
+schema: spec-driven
+
+context: |
+  Product: Telegram-first AI marketing copilot for marketers, experts, and small businesses.
+
+  MVP product flow:
+  competitor analysis -> commercial creative package -> mentor explanation.
+
+  Stack:
+  - Python 3.11
+  - FastAPI
+  - aiogram
+  - PostgreSQL 15
+  - SQLAlchemy async
+  - Alembic
+  - OpenAI text and image APIs
+  - Docker Compose
+  - Redis planned for asynchronous job processing
+
+  Current architecture:
+  - thin FastAPI routers
+  - thin Telegram handlers
+  - service-layer business logic
+  - TaskPipelineService for one marketing task/session
+  - ChatService for conversational flow
+  - BrandProfile for persistent brand context
+  - Conversation facts for temporary chat context
+  - UrlAnalyzer for URL/handle analysis and caching
+  - ImageOrchestrator for image generation/rendering
+
+  Planned architecture:
+  - MarketingWorkflowService for multi-step MVP workflows
+  - durable workflow/artifact/job state in PostgreSQL
+  - Redis as queue/coordination transport
+  - separate workers for long-running AI/image/delivery work
+
+  Compatibility:
+  Existing /chat, /tasks, /images, and /brand-profile contracts remain stable unless a reviewed OpenSpec change explicitly modifies them.
+
+rules:
+  proposal:
+    - State the user/product problem and why the change is needed.
+    - State explicitly what is in scope and what is out of scope.
+    - Identify affected capabilities and public API contracts.
+    - Identify persistence, migration, external integration, cost, and rollout impact when relevant.
+    - Keep the change small enough for one reviewable PR unless the proposal explicitly defines phases.
+  specs:
+    - Describe observable behavior, not class names or implementation mechanics.
+    - Use SHALL/MUST language for requirements and GIVEN/WHEN/THEN/AND scenarios.
+    - Cover success and important failure/edge cases.
+    - Preserve backward compatibility unless the proposal explicitly approves a breaking change.
+  design:
+    - Name the existing layers/components that will be reused before proposing new parallel abstractions.
+    - Document data ownership and transaction boundaries for persistence changes.
+    - For asynchronous work, document idempotency, retries, recovery, ordering, cancellation, and the durable source of truth.
+    - For external integrations, document timeout/failure behavior and cost/rate-limit considerations.
+    - List expected files/layers to change and components that must remain untouched.
+  tasks:
+    - Break work into ordered, independently verifiable implementation steps.
+    - Include migrations when schema changes are required.
+    - Include unit/integration/regression tests matching the spec scenarios.
+    - Include explicit verification commands.
+    - Do not include unrelated cleanup in the implementation checklist.
