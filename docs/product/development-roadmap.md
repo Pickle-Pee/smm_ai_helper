@@ -8,12 +8,13 @@
 
 ## Current
 
-- [ ] Review and apply `add-expert-core-foundation`.
-- [ ] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
+- [x] Apply `add-expert-core-foundation` (merged by PR #40).
+- [x] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
+- [ ] Reconcile and review `add-module-registry-foundation` before runtime implementation.
 
 ## Foundation next
 
-- [ ] `add-module-registry-foundation`.
+- [ ] Implement `add-module-registry-foundation` after the reconciled specification is accepted.
 - [ ] `add-durable-job-persistence`.
 - [ ] `add-redis-worker-foundation`.
 - [ ] `add-marketing-orchestrator-foundation`.

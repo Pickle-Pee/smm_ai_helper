@@ -2,7 +2,9 @@
 
 # AI MARKETING SYSTEM
 
-# Version: 1.0
+# Source Version: 1.0.0
+
+> Approved source material for the initial import into the canonical runtime resource `app/module_registry/v1.0.0.json`. This Markdown file is not read at runtime and must not become a second descriptor source.
 
 ## PURPOSE
 
