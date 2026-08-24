@@ -13,8 +13,18 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 
 - [ ] 2.1 Create `app/marketing_orchestrator/quality_gates/` with only the designed internal modules and minimal `__init__.py` exports.
 - [ ] 2.2 Implement every canonical enum and prove exact membership and absence of duplicate synonyms.
-- [ ] 2.3 Implement every frozen, slotted input/output dataclass with the exact required/optional/default/empty/ordering rules.
-- [ ] 2.4 Reuse Registry `ModuleId` and `ModuleResultStatus`; add no competing module/status vocabulary.
+- [ ] 2.3 Implement normalized caller result/claim/evidence/assumption contracts; prove their field tables and deep freeze independently.
+- [ ] 2.4 Implement caller `LimitationRecord`; prove caller ownership and absence of fingerprint cycles.
+- [ ] 2.5 Implement `GateDecision`; prove every field source set, empty policy and identity.
+- [ ] 2.6 Implement `ContradictionInput`; prove exact selected-evidence fields and membership rules.
+- [ ] 2.7 Implement `ContradictionRecord`; prove state-specific tuple coherence and batch association.
+- [ ] 2.8 Implement `DerivedLimitationRecord`; prove output-only ownership, references and batch association.
+- [ ] 2.9 Implement `ExclusionRecord`; prove subject coherence and all four closed reasons.
+- [ ] 2.10 Implement `BatchEvaluationResult`; prove one-to-one nested outputs, ordering and reference resolution.
+- [ ] 2.11 Implement `DecisionRequest`; prove exact trigger containers and batch/fingerprint match.
+- [ ] 2.12 Implement `DecisionResult`; prove matrix-specific fields and reason emptiness.
+- [ ] 2.13 Implement `SynthesisEligibilityManifest`; prove exact source sets and deep freeze.
+- [ ] 2.14 Reuse Registry `ModuleId` and `ModuleResultStatus`; add no competing module/status vocabulary.
 
 ## 3. Exact input and error boundary
 
@@ -74,7 +84,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 7.5 Implement accepted-gate replan precedence for material finding, invalidated dependency and reversible-test value.
 - [ ] 7.6 Implement lower accepted-gate stop precedence for diminishing/tool/capability limits and deterministic duplicate-trigger rejection.
 - [ ] 7.7 Build the immutable manifest with resolved evaluated/accepted IDs, unresolved contradictions, limitations and exclusion records.
-- [ ] 7.8 Test inclusion of eligible accepted results/claims and exclusion of failed, blocked and unresolved claims.
+- [ ] 7.8 Test inclusion of eligible accepted results/claims and exclusion of failed, blocked, unresolved and precedence-losing claims.
 - [ ] 7.9 Prove decisions/manifests generate no plan, prose, raw dump, chain-of-thought or public response DTO.
 
 ## 8. Architectural isolation and compatibility
@@ -98,7 +108,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 ## 10. Closed output-contract implementation evidence
 
 - [ ] 10.1 Implement and test exact `BatchId` prefix/type validation.
-- [ ] 10.2 Implement canonical JSON batch fingerprint construction and prove stability for equal normalized batches.
+- [ ] 10.2 Implement the exact RFC 8785 tagged-scalar source tree and prove byte/fingerprint stability for equal normalized batches.
 - [ ] 10.3 Prove fingerprint sensitivity to every contract-relevant field and rejection of caller fingerprint injection.
 - [ ] 10.4 Implement and test every exact `GateDecision` field, empty policy, ordering rule and stable identity.
 - [ ] 10.5 Implement explicit left/right contradiction evidence selection and selected-evidence claim-membership validation.
@@ -113,4 +123,12 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 10.14 Test every exhaustive, non-overlapping exclusion production path.
 - [ ] 10.15 Prove no unreachable exclusion member or catch-all production path exists.
 - [ ] 10.16 Prove every derived output carries exact batch ID/fingerprint and rejects cross-stage mismatch without object-identity reliance.
-- [ ] 10.17 Prove all remaining input/output contracts match their normative field tables without unrestricted `Any`, untyped mappings or prose normalization.
+- [ ] 10.17 Prove outputs generate no user-facing prose, with focused evaluator/manifest assertions.
+- [ ] 10.18 Prove outputs contain no raw module dump, with aggregate field-shape assertions.
+- [ ] 10.19 Prove outputs expose no hidden chain-of-thought, with public/internal export inspection.
+- [ ] 10.20 Prove no universal public DTO is added, with public-schema diff evidence.
+- [ ] 10.21 Prove zero LLM or `QCService` calls, with isolated call-failure fakes.
+- [ ] 10.22 Prove zero persistence or workflow calls, with service-boundary isolation fakes.
+- [ ] 10.23 Prove agents and presenters remain unchanged, with compatibility hashes/tests.
+- [ ] 10.24 Prove API and Telegram contracts remain unchanged, with router/schema compatibility tests.
+- [ ] 10.25 Prove `TaskPipelineService` remains unchanged, with focused compatibility tests.

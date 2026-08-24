@@ -97,7 +97,7 @@ OpenSpec change `add-orchestrator-quality-gates` defines the next internal plann
 ```text
 caller-supplied immutable normalized module result
  -> exact contract and Registry metadata validation
- -> batch-fingerprinted gate / selected-evidence contradiction / next-step decisions
+ -> RFC-8785 batch fingerprint / selected-evidence contradiction / typed aggregate decisions
  -> synthesis-eligibility manifest (data only)
 ```
 

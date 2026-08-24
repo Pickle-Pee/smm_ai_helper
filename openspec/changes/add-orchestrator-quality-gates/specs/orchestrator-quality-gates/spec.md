@@ -6,7 +6,7 @@ Defines a deterministic internal boundary that validates immutable normalized mo
 
 ### Requirement: Exact normalized contracts
 
-The system SHALL accept only the exact enums, fields, optionality, defaults, scalar/container types and prefixed ASCII IDs defined by the design, including `bat_` batch identity, SHALL reuse Registry `ModuleId` and `ModuleResultStatus`, and SHALL deeply freeze accepted caller data. It SHALL derive the canonical batch SHA-256 fingerprint and carry batch ID/fingerprint on every output.
+The system SHALL accept only the exact enums, fields, optionality, defaults, scalar/container types and prefixed ASCII IDs defined by the design, including `bat_` batch identity, SHALL reuse Registry `ModuleId` and `ModuleResultStatus`, and SHALL deeply freeze accepted caller data. It SHALL derive the RFC 8785 schema-tagged SHA-256 fingerprint and carry batch ID/fingerprint on every derived output, including separate derived limitations and the complete batch aggregate.
 
 #### Scenario: Exact immutable construction
 - **WHEN** an exact normalized evaluation batch is constructed and caller containers later mutate
@@ -143,7 +143,12 @@ The system SHALL validate triggers after final gate derivation and SHALL enforce
 
 ### Requirement: Immutable synthesis eligibility manifest
 
-The system SHALL derive the exact batch-identified manifest fields, deterministic contradiction limitations and exhaustive `RESULT_FAILED`, `RESULT_BLOCKED` or `UNRESOLVED_CONTRADICTION` exclusions defined by the design. Equal derived preimages SHALL deduplicate and different-preimage ID collisions SHALL raise `QualityGateContractError`.
+The system SHALL derive the exact batch-identified manifest fields, deterministic contradiction limitations and exhaustive `RESULT_FAILED`, `RESULT_BLOCKED`, `UNRESOLVED_CONTRADICTION` or `CONTRADICTION_PRECEDENCE` exclusions defined by the design. Equal derived preimages SHALL deduplicate and different-preimage ID collisions SHALL raise `QualityGateContractError`.
+
+#### Scenario: Prioritized non-preferred claim
+- **WHEN** a contradiction is prioritized
+- **THEN** both claims remain preserved
+- **AND** the non-preferred claim receives a `CONTRADICTION_PRECEDENCE` exclusion without a derived limitation
 
 #### Scenario: Stable batch and derived identity
 - **WHEN** equal normalized batches and contradiction adjustments are evaluated

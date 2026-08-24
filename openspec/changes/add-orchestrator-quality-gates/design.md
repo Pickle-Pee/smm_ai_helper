@@ -46,7 +46,7 @@ Every value is an exact enum instance; raw strings and duplicate synonyms are re
 - `ContradictionState`: `UNRESOLVED`, `PRIORITIZED`, `INCOMPARABLE`.
 - `ContradictionPrecedenceReason`: `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`.
 - `FreshnessComparison`: `NEWER`, `OLDER`, `SAME`, `UNKNOWN`.
-- `ExclusionReason`: `RESULT_FAILED`, `RESULT_BLOCKED`, `UNRESOLVED_CONTRADICTION`.
+- `ExclusionReason`: `RESULT_FAILED`, `RESULT_BLOCKED`, `UNRESOLVED_CONTRADICTION`, `CONTRADICTION_PRECEDENCE`.
 - `ExclusionSubjectType`: `RESULT`, `CLAIM`.
 - `ReplanningDecision`: `CONTINUE_CURRENT_PLAN`, `REPLAN_REQUIRED`, `STOP`, `BLOCKED`.
 - `ReplanReason`: `MATERIAL_FINDING`, `DEPENDENCY_INVALIDATED`, `REVERSIBLE_TEST_HIGHER_VALUE`.
@@ -79,12 +79,12 @@ All are frozen/slotted. “Empty forbidden” means empty string/container is a 
 | `AssumptionRecord.assumption_id` | prefixed `str` | required | unique batch-wide | caller |
 | `.description` | exact non-empty `str` | required | prose only | caller |
 | `.materiality` | `Materiality` | required | n/a | caller |
-| `LimitationRecord.limitation_id` | prefixed `str` | required | unique batch-wide | caller |
-| `.reason/.materiality` | `LimitationReason`, `Materiality` | required | exact enums | caller or derived |
-| `.related_result_ids` | tuple of `ResultId` | default `()` | unique lexical; batch-resolved | caller or derived |
-| `.related_claim_ids` | tuple of `ClaimId` | default `()` | unique lexical; batch-resolved; caller limitation must reference a result or claim | caller or derived |
-| `.related_contradiction_ids` | tuple of `ContradictionId` | default `()` | unique lexical; batch-resolved | caller or derived |
-| `.description` | exact non-empty `str | None` | default `None` | derived contradiction limitation is `None` | caller or derived |
+| `LimitationRecord.limitation_id` | `LimitationId` | required | unique batch-wide | caller only |
+| `.reason/.materiality` | `LimitationReason`, `Materiality` | required | exact enums | caller only |
+| `.related_result_ids` | tuple of `ResultId` | default `()` | unique lexical; batch-resolved | caller only |
+| `.related_claim_ids` | tuple of `ClaimId` | default `()` | unique lexical; batch-resolved; caller limitation must reference a result or claim | caller only |
+| `.related_contradiction_ids` | tuple of `ContradictionId` | default `()` | unique lexical; batch-resolved | caller only |
+| `.description` | exact non-empty `str | None` | default `None` | no normalization | caller only |
 | `NormalizedClaim.claim_id` | prefixed `str` | required | unique batch-wide | caller |
 | `.declared_output_name` | exact non-empty `str` | required | exact Registry membership | caller |
 | `.claim_type` | `ClaimType` | required | exact enum | caller |
@@ -139,11 +139,41 @@ Every tuple below is deeply immutable, duplicate-free, and lexically ordered by 
 
 All are frozen/slotted. `GateDecision` fields are copied or derived exactly as named: emitted validity is `VALID`; readiness is `PLANNING_ONLY`; accepted/excluded claims are disjoint; preserved evidence/assumption/limitation IDs are batch-resolved; `FAIL` has non-empty failure reasons and no accepted claims; `BLOCKED` has non-empty blockers and no accepted claims. Its authority is `WITHIN_SCOPE` if every accepted claim is within scope, otherwise `REQUIRES_REVIEW`; empty-claim failed/blocked results use `WITHIN_SCOPE`. `(batch_id, batch_fingerprint, result_id)` is the decision identity and no separate ID exists.
 
-`INCOMPARABLE`/`UNRESOLVED` contradiction records have no preferred claim/reason, exclude both claims, and contain derived limitation IDs. `PRIORITIZED` has exactly one preferred claim and `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`, excludes neither claim in the record, preserves both, and permits only the preferred claim into unqualified accepted IDs.
+Every contradiction record copies batch association. `preserved_claim_ids` is exactly both IDs, unique lexical. `INCOMPARABLE`/`UNRESOLVED` have no preferred claim/reason, exclude both claims, and contain one derived limitation per affected result, unique lexical. `PRIORITIZED` has exactly one preferred claim and `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`, excludes the one non-preferred claim, has no derived limitation, preserves both, and permits only the preferred claim into unqualified accepted IDs.
 
-An exclusion has exactly one of result/claim ID. Failed result produces `RESULT_FAILED`; blocked result produces `RESULT_BLOCKED`; unresolved/incomparable claim produces `UNRESOLVED_CONTRADICTION` with contradiction and related limitation. These paths are exhaustive and non-overlapping.
+An exclusion has exactly one of result/claim ID. Failed result produces `RESULT_FAILED`; blocked result produces `RESULT_BLOCKED`; unresolved/incomparable claim produces `UNRESOLVED_CONTRADICTION` with contradiction and related limitation; prioritized non-preferred claim produces `CONTRADICTION_PRECEDENCE` with contradiction and no limitation. A claim may have multiple records for distinct contradiction preimages and is excluded if any exists; being preferred elsewhere does not override exclusion. These paths are exhaustive at ID-set level.
 
 `DecisionRequest` accepts only exact built-in containers before freezing and exact enums; duplicates are rejected. Its batch ID and fingerprint must both equal the exact evaluator-produced gate decision. `DecisionResult` uses the matrix below for tuple emptiness and identity. One manifest is identified by `(batch_id, batch_fingerprint)`; every result occurs once in evaluated IDs, failed/blocked results are not accepted, unresolved claims are not accepted, exclusions are exhaustive, and the output contains no prose or public DTO.
+
+### Derived limitations and complete evaluation output
+
+`DerivedLimitationRecord` is a frozen/slotted output-only contract; callers cannot supply it.
+
+| Field | Exact type and policy |
+| --- | --- |
+| `batch_id` | `BatchId`, required, copied from batch |
+| `batch_fingerprint` | `BatchFingerprint`, required, copied |
+| `limitation_id` | `LimitationId`, required, derived |
+| `reason` | `LimitationReason`, required; contradiction path exactly `UNRESOLVED_CONTRADICTION` |
+| `materiality` | `Materiality`, required; contradiction path exactly `MATERIAL` |
+| `related_result_ids` | non-empty tuple of `ResultId`, unique lexical, same-batch resolved |
+| `related_claim_ids` | non-empty tuple of `ClaimId`, unique lexical, same-batch resolved |
+| `related_contradiction_ids` | non-empty tuple of `ContradictionId`, unique lexical, same-batch resolved |
+| `description` | exact `None`, required; no prose |
+
+Derived records use the canonical `lim_` algorithm, collision rules and lexical limitation-ID order. Gate decisions and manifests may reference caller and derived limitation IDs. Actual records are exposed by the aggregate below.
+
+`BatchEvaluationResult` is frozen/slotted and contains: `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `gate_decisions: tuple[GateDecision,...]` exactly one per result ordered by result ID; `contradiction_records: tuple[ContradictionRecord,...]` exactly one per input ordered by contradiction ID; `derived_limitations: tuple[DerivedLimitationRecord,...]` unique by canonical preimage and ordered by limitation ID; `exclusions: tuple[ExclusionRecord,...]` unique by canonical preimage and ordered by exclusion ID; `synthesis_manifest: SynthesisEligibilityManifest`; and `execution_readiness: ExecutionReadiness` exactly `PLANNING_ONLY`. Every nested output carries identical batch ID/fingerprint. References resolve against caller records in the validated batch or derived records in this aggregate, never object identity.
+
+### Exact GateDecision and manifest source sets
+
+For each result, `evidence_ids` is every declared evidence ID; `assumption_ids` is every declared assumption ID; `limitation_ids` is the union of every declared caller limitation and every derived limitation whose related results contain it; and `contradiction_ids` is every contradiction whose left or right claim belongs to it. Each is unique lexical and may be empty.
+
+`accepted_claim_ids` is exactly usable result claims with no claim exclusion. `excluded_claim_ids` is exactly result claims with at least one claim exclusion. They are unique lexical, disjoint, and for accepted results exhaustive over its claims. `failure_reasons` is caller validated reasons union exact derived reasons such as `NO_USABLE_CLAIMS`, unique enum-value order and non-empty only for `FAIL`. `blocking_reasons` is exactly caller validated blockers, unique enum-value order and non-empty only for `BLOCKED`.
+
+Manifest `evaluated_result_ids` is all batch results once, lexical. `accepted_result_ids` is exactly final `PASS`/`PASS_WITH_LIMITATIONS`. `accepted_claim_ids` unions accepted-claim IDs from accepted results. `limitation_ids` unions limitation IDs from accepted results only. `unresolved_contradiction_ids` is exactly unresolved/incomparable records touching an accepted result. All are unique lexical.
+
+Manifest exclusions contain exactly one result exclusion per failed/blocked result and claim contradiction exclusions only for claims belonging to accepted results; no separate claim exclusions are emitted inside failed/blocked results. Every evaluated result is accepted or has one result exclusion; every claim in an accepted result is accepted or has at least one claim exclusion; these ID sets are disjoint. Multiple claim exclusions are allowed for distinct contradiction preimages; identical preimages deduplicate.
 
 ## Namespace and reference rules
 
@@ -153,7 +183,38 @@ Evidence, assumption and caller-limitation references are result-local. Lineage 
 
 ### Canonical batch fingerprint and derived IDs
 
-After normalization, serialize every contract-relevant batch value except `batch_fingerprint` as canonical UTF-8 JSON: sorted object keys; enum `.value`; IDs unchanged; UTC `Z` timestamps preserving microseconds; order-significant tuples preserved; set-like collections lexically sorted; no whitespace or locale formatting. Lowercase SHA-256 hex is the fingerprint. Every derived output copies batch ID/fingerprint; both must match across stages.
+Fingerprinting builds the exact schema-tagged tree below and serializes it with RFC 8785 JSON Canonicalization Scheme, then SHA-256 over its RFC 8785 UTF-8 bytes. Valid Unicode scalar values are accepted; lone UTF-16 surrogates are rejected; NFC/NFD, case and whitespace normalization are forbidden. RFC 8785 escaping and object-key ordering are normative.
+
+```json
+{"schema":"quality-gates-batch-v1","batch_id":"<BatchId>","evaluation_at":"<datetime-or-null-node>","results":["<normalized-result-node>"],"contradictions":["<contradiction-input-node>"]}
+```
+
+Generic scalar nodes are exactly `{"t":"null"}`, `{"t":"bool","v":true}`, `{"t":"str","v":"text"}`, `{"t":"int","v":"-123"}`, or `{"t":"float64","v":"3ff0000000000000"}`. Bool is checked before int. Integer text is base ten with no plus/leading zeros and zero `"0"`. Finite floats use exact IEEE-754 binary64 big-endian 16-character lowercase hex; NaN/infinities are rejected and negative zero remains `8000000000000000`. Thus `1`, `1.0`, `0.0`, and `-0.0` differ. Enums are `{"t":"enum","n":"ExactEnumClassName","v":"EXACT_MEMBER_VALUE"}`. Datetimes are `{"t":"datetime","v":"YYYY-MM-DDTHH:MM:SS.ffffffZ"}` with exactly six digits. Sequences are `{"t":"array","v":[...]}`; mappings are `{"t":"object","v":{...}}` with exact accepted string keys. Exact list/tuple inputs are frozen before canonicalization.
+
+| Canonical subtree | Exact caller source and order |
+| --- | --- |
+| root `batch_id` | canonical BatchId unchanged |
+| root `evaluation_at` | datetime node or null node |
+| root `results` | every `NormalizedModuleResult`, result-ID lexical |
+| result node | all fields in the input table: IDs/enums/scalar through tagged nodes; claims/evidence/assumptions/limitations in respective ID order; failure/blocking enum sets by enum value; handoffs by `ModuleId.value` |
+| claim node | every caller field: IDs/output name/type/confidence/authority/value/lineage; all ID tuples lexical |
+| evidence node | evidence ID, source enum, provenance string and datetime-or-null node |
+| assumption node | assumption ID, description string and materiality enum |
+| caller limitation node | all caller fields; related ID tuples lexical; description string-or-null node |
+| root `contradictions` | every `ContradictionInput`, contradiction-ID lexical; every listed ID/key field included, selected evidence as string-or-null node |
+
+The recursive record nodes have these exact keys; no additional key exists:
+
+| Node | Canonical keys -> source/transformation |
+| --- | --- |
+| result | `result_id` -> canonical ID string; `module_id`, `module_status`, `evidence_sufficiency` -> enum nodes; `claims`, `evidence`, `assumptions`, `limitations` -> array nodes in respective ID order; `failure_reasons`, `blocking_reasons` -> enum-node arrays by enum value; `handoff_module_ids` -> enum-node array by `ModuleId.value` |
+| claim | `claim_id` -> ID string; `declared_output_name` -> string node; `claim_type`, `confidence`, `authority_status`, `lineage_type` -> enum nodes; `value` -> generic tagged scalar; `parent_claim_ids`, `evidence_ids`, `assumption_ids`, `limitation_ids` -> ID-string array nodes in lexical order |
+| evidence | `evidence_id` -> ID string; `source_class` -> enum node; `provenance` -> string node; `observed_at` -> datetime node or null node |
+| assumption | `assumption_id` -> ID string; `description` -> string node; `materiality` -> enum node |
+| caller limitation | `limitation_id` -> ID string; `reason`, `materiality` -> enum nodes; `related_result_ids`, `related_claim_ids`, `related_contradiction_ids` -> ID-string array nodes in lexical order; `description` -> string node or null node |
+| contradiction input | `contradiction_id`, `left_claim_id`, `right_claim_id` -> ID strings; `left_evidence_id`, `right_evidence_id` -> ID string or null node; `object_key`, `segment_key`, `period_key`, `metric_definition_key` -> string nodes |
+
+Fields declared order-significant preserve their frozen tuple order; all other order is exactly stated above. The source contains every caller-supplied contract field and excludes `batch_fingerprint`, all gate/contradiction output records, derived limitations, exclusions, decision requests/results, manifest and readiness. No cycle exists. The resulting lowercase 64-hex fingerprint is derived only. Equal normalized input is byte-identical; changing a caller contract value changes the preimage. Every output copies batch ID/fingerprint and both must match across stages.
 
 Encode derived-ID preimage components as `<UTF-8-byte-length>:<UTF-8-bytes>` and concatenate. A contradiction limitation uses `quality-gates-v1`, `limitation`, fingerprint, result ID, contradiction ID, `UNRESOLVED_CONTRADICTION`; ID is `lim_` plus the first 32 lowercase SHA-256 hex characters. It is material, relates to that result, unique lexical affected claims and contradiction, and has no description. An exclusion uses `quality-gates-v1`, `exclusion`, fingerprint, subject type, result-or-empty, claim-or-empty, reason, contradiction-or-empty; empty encodes `0:` and ID is `exc_` plus the first 32 hex characters. Identical preimages deduplicate; different preimages producing one ID raise. Derived records sort by ID.
 
@@ -200,7 +261,7 @@ Callers supply only module status and normalized content. Structural validity, r
 
 All other combinations raise. Explicit first-error order after earlier phases is: both failure+blocking reasons; executable/readiness injection; `OUT_OF_SCOPE` accepted status; missing required reason; forbidden reason; claim-presence rule; evidence-sufficiency rule; material-limitation rule; then remaining coherence. Explicitly invalid: `PASS` with material limitation; limited status without one; accepted status with `INSUFFICIENT`/`NOT_ASSESSED`; `FAIL`/`BLOCKED` synthesis injection; `FAIL` without failure; `BLOCKED` without blocker; and any caller-supplied/`EXECUTABLE` readiness.
 
-Contradiction adjustment preserves every claim. Unresolved/incomparable claims receive one exclusion per claim/contradiction and one limitation per affected result/contradiction. If none remain, outcome is `FAIL/NO_USABLE_CLAIMS`; otherwise acceptance is limited. For prioritized contradictions, both remain preserved but only the preferred claim may be unqualified accepted.
+Contradiction adjustment preserves every claim. Unresolved/incomparable claims receive one exclusion per claim/contradiction and one derived limitation per affected result/contradiction. Prioritized non-preferred claims receive `CONTRADICTION_PRECEDENCE` exclusion without a limitation. A claim with any exclusion is excluded; preferred status elsewhere cannot override it. If none remain, outcome is `FAIL/NO_USABLE_CLAIMS`; otherwise acceptance is limited when unresolved/incomparable limitations exist.
 
 ## Confidence and propagation
 

@@ -9,7 +9,7 @@ Status: pre-implementation evidence template. Runtime Quality Gates have not bee
 - Scope: OpenSpec and directly related architecture/product/governance documentation only
 - Runtime implementation: pending separate apply step
 - Planned runtime owner: `app/marketing_orchestrator/quality_gates/`
-- Task state after contract completion: 4 reconciliation tasks complete; 79 runtime/runtime-test/verification tasks pending
+- Task state after contract completion: 4 reconciliation tasks complete; 97 runtime/runtime-test/verification tasks pending
 
 ## Verified prerequisite baseline
 
@@ -43,15 +43,16 @@ The follow-up design review resolved the nine pre-implementation findings by def
 
 - every finite enum and the sole confidence order `UNKNOWN < LOW < MEDIUM < HIGH`, with the unreachable catch-all exclusion removed;
 - exact field optionality/default/empty/ordering and caller-versus-derived ownership;
-- batch-owned prefixed ID namespaces, canonical batch fingerprint and duplicate-before-reference validation;
-- complete output/cross-stage field contracts, explicit contradiction evidence selection and collision-checked derived IDs;
+- batch-owned prefixed IDs, RFC 8785 tagged-scalar fingerprint source tree and duplicate-before-reference validation;
+- separate caller/derived limitations, complete batch aggregate and exact output source sets;
+- explicit contradiction evidence selection, precedence exclusions and collision-checked derived IDs;
 - exact aware-datetime UTC normalization with no ambient time;
 - ordered validation and closed caller-error normalization;
 - exhaustive base gate and contradiction-adjustment rules;
 - explicit lineage/confidence propagation and contradiction precedence;
 - complete gate × decision compatibility and synthesis-manifest fields;
 - concrete private package ownership and dependency direction;
-- 83 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked.
+- 101 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked.
 
 This section records design completeness only. It is not runtime test evidence.
 
