@@ -1,78 +1,35 @@
-# SMM AI Helper
+# AI Marketing System repository package
 
-Telegram-first AI marketing copilot built with FastAPI, aiogram, PostgreSQL, and OpenAI APIs.
+Этот пакет подготовлен для копирования в корень репозитория `smm_ai_helper`.
 
-## Local run
+## Содержимое
 
-```bash
-docker-compose up --build
-```
+- `docs/product/ai-marketing-system.md` — продуктовая архитектура системы.
+- `docs/product/prompt-source-map.md` — карта исходных DOCX и нормативных версий.
+- `docs/product/expert-core.md` — продуктовый контракт EXPERT CORE.
+- `docs/product/marketing-orchestrator.md` — продуктовый контракт ORCHESTRATOR.
+- `docs/product/module-registry.md` — продуктовый контракт MODULE REGISTRY.
+- `docs/product/development-roadmap.md` — порядок OpenSpec changes.
+- `docs/product/prompts/` — канонические production-промпты, преобразованные в Markdown.
+- `docs/development/prompt-governance.md` — правила владения и изменения промптов.
+- `openspec/changes/add-module-registry-foundation/` — первый новый change после EXPERT CORE.
+- `openspec/changes/add-marketing-orchestrator-foundation/` — планирование multi-module workflows.
+- `openspec/changes/add-orchestrator-quality-gates/` — quality gates, evidence/confidence propagation и replanning.
 
-## Chat assistant
+## Перед копированием
 
-Example request:
+1. Не заменять существующий `openspec/changes/add-expert-core-foundation`: он уже создан и валидирован отдельно.
+2. Скопировать содержимое пакета в корень репозитория с сохранением путей.
+3. Проверить `git diff` и поправить ссылки, если фактические имена существующих документов отличаются.
+4. Выполнить `openspec validate --all --strict`.
+5. Не применять сразу все changes. Один change = одна ветка = один PR.
 
-```bash
-curl -X POST http://localhost:8000/chat/message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "tg:123",
-    "text": "Нужен контент-план для телеграм-канала про финансы для подростков",
-    "attachments": []
-  }'
-```
+## Нормативный порядок реализации
 
-Example with URL context:
+1. Завершить и проверить `add-expert-core-foundation`.
+2. Создать/применить `add-module-registry-foundation`.
+3. Реализовать `add-durable-job-persistence` и `add-redis-worker-foundation`.
+4. Создать/применить `add-marketing-orchestrator-foundation`.
+5. Создать/применить `add-orchestrator-quality-gates`.
+6. Подключать конкретные competitor, creative и mentor modules отдельными changes.
 
-```bash
-curl -X POST http://localhost:8000/chat/message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "tg:123",
-    "text": "Посмотри сайт https://example.com и предложи, как улучшить первый экран",
-    "attachments": []
-  }'
-```
-
-## Development workflow
-
-This repository uses OpenSpec + Codex + `AGENTS.md` + Git for spec-driven changes.
-
-Start here:
-
-- `AGENTS.md` — coding-agent rules and architecture invariants;
-- `docs/development/openspec-codex.md` — branch/OpenSpec/Codex workflow;
-- `openspec/config.yaml` — shared OpenSpec project context and artifact rules;
-- `openspec/specs/` — current behavioral contracts;
-- `ARCHITECTURE.md` — current and planned architecture;
-- `docs/product/mvp-functional-scope.md` — product vision and MVP scope.
-
-Install OpenSpec and configure Codex on a developer machine:
-
-```bash
-npm install -g @fission-ai/openspec@latest
-openspec init --tools codex --profile core
-openspec update
-openspec validate --all --strict
-```
-
-OpenSpec-generated `.codex/skills/openspec-*` files should be regenerated through the CLI rather than edited manually.
-
-## Baseline checks
-
-```bash
-pytest
-python -m compileall app bot
-```
-
-For schema-changing work:
-
-```bash
-alembic upgrade head
-```
-
-For OpenSpec work:
-
-```bash
-openspec validate --all --strict
-```
