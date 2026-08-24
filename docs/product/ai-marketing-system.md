@@ -44,6 +44,10 @@ Competitor analysis
 
 Orchestrator не является универсальным CMO и не подменяет специализированные модули.
 
+Текущий runtime foundation реализует только deterministic planning и всегда возвращает `PLANNING_ONLY`. Quality Gates, replanning, synthesis и execution из полного product concept не следует считать уже подключённым поведением.
+
+Планируемый Quality Gates foundation принимает только caller-supplied typed normalized results и возвращает deterministic structural decisions. Он не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Пользовательский synthesis остаётся отдельной будущей интеграцией; foundation может сформировать только manifest eligibility.
+
 ### 3. Module Registry
 
 Декларативный источник маршрутизации. Для каждого модуля описывает:
@@ -135,6 +139,9 @@ PostgreSQL — durable source of truth. Redis — transport и coordination, н�
 - Не выдавать synthetic AI personas за customer evidence.
 - Не пытаться детерминированным кодом доказать истинность произвольного маркетингового вывода.
 - Не показывать пользователю внутренний routing trace или hidden chain-of-thought.
+- Не считать contract completeness доказательством истинности claim.
+- Не повышать confidence из-за повторения claim или непроверенной «независимости» нового evidence.
+- Не подключать существующие agent dictionaries к normalized Quality Gates без явного adapter contract.
 
 ## Product success criteria
 
