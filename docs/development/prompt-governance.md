@@ -1,41 +1,41 @@
 # Prompt governance
 
-## Sources of truth
+## Sources and ownership
 
-- `docs/product/prompts/expert-core-production.md` — shared reasoning policy.
-- `docs/product/prompts/orchestrator-production.md` — orchestration policy.
-- `docs/product/prompts/module-registry-production.md` — canonical registry policy.
-- Specialized module prompts — task-specific expertise only.
+- Expert Core has one versioned runtime resource for shared non-negotiable reasoning rules.
+- `docs/product/marketing-orchestrator.md` is the Orchestrator product contract.
+- `docs/product/prompts/orchestrator-production.md` is approved product source material, not a deterministic-foundation runtime prompt.
+- `app/module_registry/v1.0.0.json` owns runtime module descriptors, aliases and authority boundaries.
+- Specialized module prompts own task-specific expertise only.
 
-## Ownership boundaries
+A rule is written once under its owner. Shared reasoning belongs to Core; planning/workflow rules to Orchestrator; capability metadata to Registry; expert methods to modules.
 
-- CORE владеет общими non-negotiable reasoning rules.
-- ORCHESTRATOR владеет goal interpretation, planning, routing, quality-gate flow, replanning, synthesis и stopping.
-- MODULE REGISTRY владеет descriptors, aliases, activation/return contracts и authority limits.
-- Modules владеют domain methods и module-specific outputs.
+## Deterministic Orchestrator foundation
 
-Одинаковое правило не должно копироваться во все слои. Если правило общее — оно принадлежит CORE. Если оно управляет workflow — ORCHESTRATOR. Если описывает capability — REGISTRY. Если относится к методике эксперта — module prompt.
+For `add-marketing-orchestrator-foundation`, executable planning behavior is typed code plus explicit OpenSpec scenarios and invariants. The foundation must not load `orchestrator-production.md`, copy it into Python, create `app/prompts/orchestrator` or call an LLM. Product source and typed code are not described as two canonical runtime prompts.
+
+A model-driven planner requires a separate OpenSpec change, exactly one versioned runtime prompt, deterministic contract tests, model evals, and token/call-budget and latency review.
 
 ## Change process
 
-1. Определить owner правила.
-2. Описать observable behavior в OpenSpec.
-3. Изменить один canonical source.
-4. Обновить explicit version.
-5. Добавить deterministic tests и, где нужно, model-based evals.
-6. Проверить prompt conflicts, ordering и duplicate injection.
-7. Измерить token overhead и latency на representative scenarios.
-8. Обновить product docs и roadmap.
+1. Identify the rule owner and product rationale.
+2. Describe observable/internal contract behavior in OpenSpec.
+3. Change the single runtime source, if one exists.
+4. Version runtime prompts when applicable.
+5. Add deterministic tests and stabilized model evals where applicable.
+6. Check conflicts, ordering and duplicate injection.
+7. Measure token/call budget and latency for model-driven behavior.
+8. Update product docs and roadmap.
+
+For deterministic work with no runtime prompt, prompt version/token review is recorded as not applicable rather than fabricated.
 
 ## Review checklist
 
-- Инструкция сформулирована один раз.
-- Нет конфликта CORE и module prompt.
-- Нет второго routing layer.
-- Пользовательский context не помещён в static prompt.
-- Dynamic/current facts не зашиты как timeless truth.
-- Prompt не требует раскрывать chain-of-thought.
-- Простые запросы не обязаны использовать complex response template.
-- Prompt не обещает гарантированный marketing result.
-- Изменение имеет rollback path.
-
+- No duplicated rule or second routing layer.
+- Product source is not labeled runtime unless runtime loads it.
+- User context is not embedded in static prompts; dynamic facts are not timeless truth.
+- Hidden chain-of-thought is not requested or exposed.
+- Simple requests are not forced into a complex response template.
+- No guaranteed marketing result.
+- Deterministic planner tests prove zero model/prompt calls.
+- Rollback path exists.
