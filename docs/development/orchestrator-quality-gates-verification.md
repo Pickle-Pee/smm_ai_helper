@@ -1,6 +1,6 @@
 # Orchestrator Quality Gates verification
 
-Status: runtime foundation implemented and verified on `agent/add-orchestrator-quality-gates` without execution-path integration.
+Status: runtime apply paused after independent review. OpenSpec now defines the previously missing propagation output ownership; reviewed runtime and evidence remain incomplete until the unchecked remediation tasks pass.
 
 ## Identity and ownership
 
@@ -21,7 +21,7 @@ Status: runtime foundation implemented and verified on `agent/add-orchestrator-q
 | Baseline before apply | 269 passed; nine pre-existing warnings |
 | Full suite after apply | 329 passed; nine pre-existing warnings |
 
-Focused tests prove exact closed enums and field shapes, defensive freezing, prefixed IDs, caller/output ownership, legal/illegal gate states, parent-confidence ceilings, stable identity unions, all contradiction states, decision precedence, exhaustive manifest accounting and closed internal exports.
+The historical focused run above is retained as executed evidence for commit `af28b9273d881e6e8ff89b62930fe36bbf401388`; it does not prove the reconciled propagation contexts, controlled construction, full trigger retention, exhaustive hostile graph, independent enum membership or complete fingerprint matrix.
 
 ## Canonical vectors
 
@@ -59,10 +59,10 @@ Dedicated tests reject hostile list, tuple, set, dict, string, datetime subclass
 - Existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `TaskPipelineService`, API and Telegram paths do not import Quality Gates and remain unchanged in the branch diff.
 - Outputs contain no plan, prose, raw module dump, chain-of-thought field or public response DTO.
 
-## Final checks
+## Historical implementation checks
 
-Full pytest passed with 329 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot`, strict change validation, strict all-OpenSpec validation (11 items), and both branch/working-tree diff checks passed. There is no configured lint/type tool, Docker/dependency change, or manual runtime integration step because the package is intentionally unused by current execution paths.
+At reviewed runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388`, full pytest passed with 329 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot`, strict change validation, strict all-OpenSpec validation (11 items), and both branch/working-tree diff checks passed. These historical results do not close the unchecked reconciliation tasks; the complete validation matrix must be rerun after the separate runtime apply.
 
 ## Remaining limitations
 
-Adapters from existing heterogeneous agent dictionaries, workflow integration, persistence and user-facing synthesis remain separate reviewed changes. Evidence independence and semantic authority inference remain intentionally deferred.
+Runtime remediation is required before this change is implementation-complete: controlled construction across every caller-owned contract; evaluator-integrated propagated contexts and source sets; full trigger retention; public Registry error imports; and independent enum, hostile-input and fingerprint evidence. The fixed evidence vectors must remain unchanged and be rerun. Adapters from existing heterogeneous agent dictionaries, workflow integration, persistence and user-facing synthesis remain separate reviewed changes. Evidence independence and semantic authority inference remain intentionally deferred.

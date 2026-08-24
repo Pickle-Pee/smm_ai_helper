@@ -37,7 +37,7 @@ Evidence time accepts only exact aware `datetime`, normalizes explicit offsets t
 
 ## Propagation and contradictions
 
-Only explicit resolved lineage IDs propagate. Provenance, assumptions and limitations are identity-unioned in stable order. Repetition/reformulation/derivation never exceeds the most conservative parent confidence; `UNKNOWN` remains `UNKNOWN`. New evidence is preserved but cannot increase confidence; evidence independence remains deferred.
+Only explicit resolved acyclic lineage IDs propagate. Each claim receives an output-only aggregate context containing recursive evidence, assumption, material/non-material limitation IDs and conservative effective confidence. Identical stable IDs deduplicate, unequal content collides, and all sets are lexically ordered. Owning result decisions expose these effective IDs; accepted-result propagated limitations also reach the manifest. Repetition/reformulation/derivation never exceeds the most conservative effective parent confidence; `UNKNOWN` remains `UNKNOWN`. New evidence is preserved but cannot increase confidence; evidence independence remains deferred.
 
 Contradictions compare exact keys using only one caller-selected evidence record per side, validated as belonging to that claim. The evaluator never selects or aggregates evidence. First-party may be prioritized only over selected generic-benchmark evidence with equal/newer explicit time, using `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`; every other case is unresolved/incomparable.
 
@@ -45,9 +45,11 @@ Unresolved/incomparable claims stay preserved but receive typed exclusions and p
 
 ## Decisions and synthesis eligibility
 
-`BLOCKED` gates produce only matching `BLOCKED`; `FAIL` produces only `STOP/RESULT_FAILED`. For accepted gates, completion/sufficient evidence stops first, material finding/dependency invalidation/reversible-test value replans second, diminishing/tool/capability limits stop third, and no trigger continues. Decisions never execute work.
+`BLOCKED` gates produce only matching `BLOCKED`; `FAIL` produces only `STOP/RESULT_FAILED`. For accepted gates, completion/sufficient evidence stops first, material finding/dependency invalidation/reversible-test value replans second, diminishing/tool/capability limits stop third, and no trigger continues. Precedence chooses only the final decision; all validated stop and replan reasons remain visible in their corresponding ordered output tuples. Decisions never execute work.
 
-The batch aggregate exposes decisions, contradiction records, actual derived limitations, exclusions and the manifest. Manifest source sets include limitations from accepted results only and contradiction claim exclusions only for accepted results; failed/blocked results use one result exclusion. It generates no prose, raw dumps, hidden reasoning or public DTO.
+The batch aggregate exposes decisions, one propagated context per claim, contradiction records, actual derived limitations, exclusions and the manifest. Manifest source sets include complete decision limitations from accepted results only and contradiction claim exclusions only for accepted results; failed/blocked results use one result exclusion. It generates no prose, raw dumps, hidden reasoning or public DTO.
+
+Every public caller-owned contract has a controlled construction boundary: missing, unknown, conflicting, or output-only arguments fail as `QualityGateContractError`, while exact valid positional/keyword construction and deep immutability remain supported.
 
 ## Compatibility
 

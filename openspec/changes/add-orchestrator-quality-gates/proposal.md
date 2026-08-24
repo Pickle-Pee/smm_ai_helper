@@ -9,7 +9,8 @@ The planning-only Marketing Orchestrator needs an exact deterministic boundary f
 - Separate caller limitations from batch-associated derived limitations, expose a complete batch evaluation aggregate, and require byte-exact RFC 8785 fingerprints.
 - Require immutable caller-supplied left/right contradiction sides with complete typed scope keys and caller-selected evidence; derive comparability before evidence precedence, with deterministic limitation/exclusion identities and no catch-all states.
 - Derive gate outcomes, execution readiness, decisions and synthesis eligibility rather than trusting caller-supplied values.
-- Preserve provenance, assumptions, limitations and explicit lineage with conservative confidence propagation.
+- Preserve provenance, assumptions, material/non-material limitations and explicit lineage through an output-only per-claim propagated context, with conservative confidence propagation reflected in the aggregate, gate decisions and manifest source sets.
+- Close every public caller-owned constructor behind `QualityGateContractError`, and preserve every validated decision trigger while precedence selects only the final decision.
 - Add exact contradiction, stop/replan and synthesis-manifest rules.
 - Add independently verifiable negative, adversarial, isolation and compatibility tasks.
 
