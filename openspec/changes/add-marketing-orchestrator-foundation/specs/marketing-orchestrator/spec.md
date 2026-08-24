@@ -1,142 +1,84 @@
 ## ADDED Requirements
 
-### Requirement: Typed interpretation boundary
+### Requirement: Request interpretation
 
-The foundation SHALL validate an internal structured interpretation containing requested output, decision goal, business goal, intent, object, depth, mode, constraints and exactly one explicit module/alias or supported scenario selector, and SHALL NOT infer arbitrary free text or connect to user-facing routers.
+The orchestrator SHALL represent the requested output, decision goal, business goal, intent, object, response depth and constraints before building a multi-module plan.
 
-#### Scenario: Preserve distinct goals
+#### Scenario: Distinguish output from goal
 
-- **WHEN** a caller supplies requested output, decision goal and business goal
-- **THEN** all three remain distinct immutable fields
+- **WHEN** a user requests a creative while describing a broader sales problem
+- **THEN** the interpretation preserves the requested creative output
+- **AND** records the broader decision or business goal separately
 
-#### Scenario: Reject unstructured request
+### Requirement: Minimum sufficient plan
 
-- **WHEN** no structured module or scenario selector is supplied
-- **THEN** interpretation fails instead of guessing from text
+The orchestrator SHALL select the minimum set of registered modules capable of producing a sufficiently reliable result.
 
-### Requirement: Exact scenario catalog
+#### Scenario: Simple request
 
-The deterministic catalog SHALL contain exactly `explicit_single_module_v1` and `new_positioning_v1` in this foundation.
+- **WHEN** one registered module can complete the requested scope with available context
+- **THEN** the plan contains one execution node
+- **AND** unrelated modules are not added for completeness
 
-#### Scenario: Explicit module
+#### Scenario: Complex request
 
-- **WHEN** a canonical module ID or approved alias is selected
-- **THEN** the system returns a one-node planning graph using the canonical ID
+- **WHEN** the requested result depends on outputs from multiple modules
+- **THEN** the plan contains only the required nodes and dependencies
 
-#### Scenario: New positioning
+### Requirement: Dependency-aware planning
 
-- **WHEN** `new_positioning_v1` is selected
-- **THEN** `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` are independent parallelizable upstream nodes
-- **AND** `POSITIONING` sequentially depends on both
-- **AND** each node's selected handoff outputs and quality gate are validated against its Registry descriptor
+The orchestrator SHALL distinguish independent work from sequential dependencies.
 
-#### Scenario: Unsupported scenario
+#### Scenario: Parallelizable analyses
 
-- **WHEN** any other scenario key is supplied
-- **THEN** the result is explicitly unsupported and no guessed graph is returned
+- **WHEN** market and competitor analyses use independent inputs
+- **THEN** the plan may mark them parallelizable
 
-### Requirement: Immutable planning contracts
+#### Scenario: Positioning depends on analyses
 
-The foundation SHALL return immutable internal plan, node, dependency, input-requirement and context-packet contracts with deterministic identities and ordering.
+- **WHEN** positioning requires upstream market or competitor findings
+- **THEN** the positioning node depends on those upstream nodes
 
-#### Scenario: Stable identity and order
+### Requirement: Scoped context packet
 
-- **WHEN** equivalent interpretations and tagged context are planned against the same Registry version/checksum
-- **THEN** plan ID, node order, dependency order and topological order are identical
-- **AND** no random ID is required
+The orchestrator SHALL build a context packet containing only information relevant to a module objective.
 
-#### Scenario: Separate dependency concepts
+#### Scenario: Exclude unrelated context
 
-- **WHEN** a node depends on an upstream node and also requires an input
-- **THEN** the graph edge and the `REQUIRED`/`BLOCKING`/`PREFERRED`/`OPTIONAL` input classification are represented separately
+- **WHEN** a module is activated
+- **THEN** its packet contains relevant project context, known facts, upstream findings, evidence, assumptions, confidence, constraints, tools and open questions
+- **AND** unrelated conversation history is not required
 
-### Requirement: Deterministic context scoping
+### Requirement: Data sufficiency
 
-The foundation SHALL accept only already-authorized structured facts with explicit module/scenario relevance metadata and SHALL NOT query BrandProfile, conversation, URL or artifact services.
+The orchestrator SHALL classify critical input sufficiency as sufficient, partial or insufficient.
 
-#### Scenario: Include relevant known context
+#### Scenario: Missing blocking input
 
-- **WHEN** an authorized fact is tagged for a node or selected scenario
-- **THEN** it may enter that node's packet and satisfies a matching input before questions are generated
+- **WHEN** a blocking input cannot be obtained from existing context or tools
+- **THEN** the plan is blocked before the dependent node
+- **AND** the orchestrator requests no more than three decision-changing clarifications
 
-#### Scenario: Exclude unrelated or secret context
+#### Scenario: Missing optional input
 
-- **WHEN** a fact lacks matching relevance or explicit secret authorization
-- **THEN** it is excluded from the packet
+- **WHEN** an optional input is missing
+- **THEN** the plan may continue with an explicit limitation
 
-#### Scenario: Scope upstream findings
+### Requirement: Plan validation
 
-- **WHEN** an upstream finding exists
-- **THEN** it is included only in packets for nodes declaring that upstream dependency
+The orchestrator SHALL reject plans containing unknown modules, unresolved aliases, dependency cycles or invalid blocking dependencies.
 
-#### Scenario: Optional input absent
+#### Scenario: Cyclic plan
 
-- **WHEN** a preferred or optional input is missing
-- **THEN** the plan records a limitation and is not blocked solely for that absence
+- **WHEN** generated dependencies contain a cycle
+- **THEN** plan validation fails before execution
 
-### Requirement: Graph and descriptor validation
+### Requirement: Architectural isolation
 
-The foundation SHALL validate unique node IDs, canonical registered modules, resolved aliases, dependency targets, self-edges, cycles, deterministic topology, parallel metadata, descriptor-compatible outputs and quality gates, and explicit blocking inputs before returning a plan.
+The orchestrator SHALL NOT convert `TaskPipelineService` into a multi-step workflow engine.
 
-#### Scenario: Invalid dependency structure
+#### Scenario: Existing single task
 
-- **WHEN** a dependency target is missing, a self-edge exists or a cycle exists
-- **THEN** plan validation returns `INVALID_PLAN`
+- **WHEN** a standalone single-task request is processed
+- **THEN** it continues through the existing single-task pipeline
 
-#### Scenario: Invalid parallel metadata
-
-- **WHEN** a node is marked parallel with a direct or transitive dependency
-- **THEN** plan validation returns `INVALID_PLAN`
-
-#### Scenario: Descriptor mismatch
-
-- **WHEN** an expected output or quality-gate item is absent from the module descriptor
-- **THEN** plan validation returns `INVALID_PLAN`
-
-### Requirement: Bounded blocking questions
-
-The foundation SHALL ask at most three unique questions, each mapped to a missing decision-changing required/blocking input after known context is checked.
-
-#### Scenario: Known input
-
-- **WHEN** tagged context already contains an input
-- **THEN** no blocking question asks for it again
-
-#### Scenario: More than three gaps
-
-- **WHEN** more than three decision-changing inputs are missing
-- **THEN** deterministic ordering selects at most the first three unique questions
-
-### Requirement: Separate validity, sufficiency, status and readiness
-
-The plan SHALL separately represent structural validity, `SUFFICIENT`/`PARTIAL`/`INSUFFICIENT` data sufficiency, planning status and execution readiness.
-
-#### Scenario: Metadata-only modules
-
-- **WHEN** a graph is structurally valid against Module Registry `1.0.0`
-- **THEN** its execution readiness is `PLANNING_ONLY`
-- **AND** registered module existence is not treated as an execution binding
-
-### Requirement: Planning-only lifecycle and isolation
-
-The foundation SHALL end at `RETURN_PLAN_OR_BLOCK` and SHALL make zero module, agent, model, QC, database, Redis, worker or persistence calls.
-
-#### Scenario: Existing standalone request
-
-- **WHEN** an existing standalone request is processed
-- **THEN** it continues through the unchanged `TaskRouter`, `AgentRunner` and `TaskPipelineService` path
-
-#### Scenario: Plan returned
-
-- **WHEN** planning returns `PLAN_COMPLETE` or `BLOCKING_INPUT_MISSING`
-- **THEN** no execution, runtime validation, replanning, synthesis, delivery or learning begins
-
-### Requirement: Source governance
-
-The deterministic foundation SHALL use typed code and rules approved by this OpenSpec as its runtime planning source and SHALL NOT load or copy the product Orchestrator source material as a runtime prompt.
-
-#### Scenario: Foundation initialization
-
-- **WHEN** the deterministic planner is initialized
-- **THEN** no Orchestrator prompt resource is loaded and no LLM call is made
-- **AND** no `app/prompts/orchestrator` resource is required

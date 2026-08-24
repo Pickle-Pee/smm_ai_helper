@@ -1,6 +1,6 @@
 # Prompt governance
 
-## Sources and ownership
+## Sources of truth
 
 - `docs/product/prompts/expert-core-production.md` — shared reasoning policy.
 - `docs/product/prompts/orchestrator-production.md` — orchestration policy.
@@ -8,39 +8,37 @@
 - `docs/product/prompts/module-registry-production.md` — approved initial-import material, not runtime data.
 - Specialized module prompts — task-specific expertise only.
 
-A rule is written once under its owner. Shared reasoning belongs to Core; planning/workflow rules to Orchestrator; capability metadata to Registry; expert methods to modules.
+## Ownership boundaries
 
 - CORE владеет общими non-negotiable reasoning rules.
 - ORCHESTRATOR владеет goal interpretation, planning, routing, quality-gate flow, replanning, synthesis и stopping.
 - MODULE REGISTRY владеет read-only descriptors, aliases, internal activation/return contracts и authority limits; current task routing and execution remain outside it.
 - Modules владеют domain methods и module-specific outputs.
 
-For `add-marketing-orchestrator-foundation`, executable planning behavior is typed code plus explicit OpenSpec scenarios and invariants. The foundation must not load `orchestrator-production.md`, copy it into Python, create `app/prompts/orchestrator` or call an LLM. Product source and typed code are not described as two canonical runtime prompts.
-
-A model-driven planner requires a separate OpenSpec change, exactly one versioned runtime prompt, deterministic contract tests, model evals, and token/call-budget and latency review.
+Одинаковое правило не должно копироваться во все слои. Если правило общее — оно принадлежит CORE. Если оно управляет workflow — ORCHESTRATOR. Если описывает capability — REGISTRY. Если относится к методике эксперта — module prompt.
 
 ## Change process
 
-1. Identify the rule owner and product rationale.
-2. Describe observable/internal contract behavior in OpenSpec.
-3. Change the single runtime source, if one exists.
-4. Version runtime prompts when applicable.
-5. Add deterministic tests and stabilized model evals where applicable.
-6. Check conflicts, ordering and duplicate injection.
-7. Measure token/call budget and latency for model-driven behavior.
-8. Update product docs and roadmap.
+1. Определить owner правила.
+2. Описать observable behavior в OpenSpec.
+3. Изменить один canonical source.
+4. Обновить explicit version.
+5. Добавить deterministic tests и, где нужно, model-based evals.
+6. Проверить prompt conflicts, ordering и duplicate injection.
+7. Измерить token overhead и latency на representative scenarios.
+8. Обновить product docs и roadmap.
 
 For Module Registry changes, descriptor content is edited once in the versioned JSON. Python constants and Markdown must not duplicate descriptors. Import/version evidence belongs in `docs/development/module-registry-verification.md`, optionally with normalized JSON SHA-256.
 
 ## Review checklist
 
-## Review checklist
+- Инструкция сформулирована один раз.
+- Нет конфликта CORE и module prompt.
+- Нет второго routing layer.
+- Пользовательский context не помещён в static prompt.
+- Dynamic/current facts не зашиты как timeless truth.
+- Prompt не требует раскрывать chain-of-thought.
+- Простые запросы не обязаны использовать complex response template.
+- Prompt не обещает гарантированный marketing result.
+- Изменение имеет rollback path.
 
-- No duplicated rule or second routing layer.
-- Product source is not labeled runtime unless runtime loads it.
-- User context is not embedded in static prompts; dynamic facts are not timeless truth.
-- Hidden chain-of-thought is not requested or exposed.
-- Simple requests are not forced into a complex response template.
-- No guaranteed marketing result.
-- Deterministic planner tests prove zero model/prompt calls.
-- Rollback path exists.
