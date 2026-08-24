@@ -21,6 +21,28 @@ class EvidenceCatalogError(AssertionError):
     pass
 
 
+class OrderingTarget(str, Enum):
+    RESULTS = "RESULTS"
+    CLAIMS = "CLAIMS"
+    EVIDENCE = "EVIDENCE"
+    ASSUMPTIONS = "ASSUMPTIONS"
+    LIMITATIONS = "LIMITATIONS"
+    CONTRADICTIONS = "CONTRADICTIONS"
+    FAILURE_REASONS = "FAILURE_REASONS"
+    BLOCKING_REASONS = "BLOCKING_REASONS"
+    HANDOFF_MODULE_IDS = "HANDOFF_MODULE_IDS"
+    PARENT_CLAIM_IDS = "PARENT_CLAIM_IDS"
+    EVIDENCE_IDS = "EVIDENCE_IDS"
+    ASSUMPTION_IDS = "ASSUMPTION_IDS"
+    LIMITATION_IDS = "LIMITATION_IDS"
+    CONTRADICTION_SIDES = "CONTRADICTION_SIDES"
+
+
+class OrderingSemantics(str, Enum):
+    NORMALIZED = "NORMALIZED"
+    POSITIONAL = "POSITIONAL"
+
+
 @dataclass(frozen=True)
 class MembershipExpectation:
     path: str
@@ -44,24 +66,48 @@ class RawOrderingInput:
 
 @dataclass(frozen=True)
 class OrderingWitness:
-    target_path: str
     baseline_raw: RawOrderingInput
     mutated_raw: RawOrderingInput
+
+
+@dataclass(frozen=True)
+class OrderingBatchFactory:
+    target: OrderingTarget | object
+    raw: RawOrderingInput
+
+
+@dataclass(frozen=True)
+class OrderingAdapter:
+    target: OrderingTarget
+    semantic_path: str
+    raw_input_path: str
     builder: Callable[[RawOrderingInput], EvaluationBatch]
+    projection: Callable[[EvaluationBatch], tuple[object, ...]]
+    element_identity: Callable[[object], str]
+    semantics: OrderingSemantics
+    fingerprint_equal: bool
 
 
 @dataclass(frozen=True)
 class FingerprintCase:
     case_id: str
-    source: str
-    baseline: BatchFactory
-    mutated: BatchFactory
-    equal: bool = False
+    declared_source: str | None
+    baseline: BatchFactory | OrderingBatchFactory
+    mutated: BatchFactory | OrderingBatchFactory
     category: str = "leaf"
     expected_changed_paths: frozenset[str] = frozenset()
     membership: MembershipExpectation | None = None
     ordering: OrderingWitness | None = None
+    ordering_target: OrderingTarget | object | None = None
     element_count: int | None = None
+
+    @property
+    def source(self):
+        if self.ordering_target is None:
+            return self.declared_source
+        if type(self.ordering_target) is not OrderingTarget:
+            raise EvidenceCatalogError("UNKNOWN_ORDERING_TARGET")
+        return ORDERING_ADAPTER_BY_TARGET[self.ordering_target].semantic_path
 
 
 def _pass(rid="res_one", cid="clm_one", **kwargs):
@@ -332,18 +378,6 @@ def _membership_cases():
 MEMBERSHIP_CASES = _membership_cases()
 
 
-def _ordering_case(case_id, source, values, builder, *, equal=True, extra_fields=()):
-    baseline_raw = RawOrderingInput(((source, tuple(values)), *extra_fields))
-    mutated_raw = RawOrderingInput(((source, tuple(reversed(values))), *extra_fields))
-    witness = OrderingWitness(source, baseline_raw, mutated_raw, builder)
-    return FingerprintCase(
-        case_id, source,
-        lambda witness=witness: witness.builder(witness.baseline_raw),
-        lambda witness=witness: witness.builder(witness.mutated_raw),
-        equal=equal, category="order", ordering=witness,
-    )
-
-
 def _nested_order_builder(collection):
     evidence = (EvidenceRecord("evd_a", EvidenceSourceClass.FIRST_PARTY, "a", UTC), EvidenceRecord("evd_b", EvidenceSourceClass.UNKNOWN, "b", UTC))
     assumptions = (AssumptionRecord("asm_a", "a", Materiality.MATERIAL), AssumptionRecord("asm_b", "b", Materiality.NON_MATERIAL))
@@ -381,30 +415,151 @@ def _id_order_builder(field_name):
     return defaults[field_name], builder
 
 
-def _order_cases():
+def _ordering_adapters():
     result_a, result_b = _pass("res_a", "clm_a"), _pass("res_b", "clm_b")
-    cases = [_ordering_case("results-order", "batch.results", (result_a, result_b), lambda raw: EvaluationBatch("bat_order", raw.value("batch.results")))]
-    for name in ("claims", "evidence", "assumptions", "limitations"):
-        values, builder = _nested_order_builder(name)
-        cases.append(_ordering_case(f"{name}-order", f"result.{name}", values, builder))
-    contradictions = (ContradictionInput("ctr_a", _side("clm_a"), _side("clm_b")), ContradictionInput("ctr_b", _side("clm_a"), _side("clm_b")))
-    cases.append(_ordering_case("contradictions-order", "batch.contradictions", contradictions, lambda raw: EvaluationBatch("bat_order", (result_a, result_b), raw.value("batch.contradictions"))))
-    cases.extend((
-        _ordering_case("failure-reasons-order", "result.failure_reasons", (FailureReason.AUTHORITY_VIOLATION, FailureReason.MODULE_DECLARED_FAILURE), lambda raw: batch(results=(_fail(reasons=raw.value("result.failure_reasons")),))),
-        _ordering_case("blocking-reasons-order", "result.blocking_reasons", (BlockingReason.MISSING_CAPABILITY, BlockingReason.TOOL_UNAVAILABLE), lambda raw: batch(results=(_blocked(reasons=raw.value("result.blocking_reasons")),))),
-        _ordering_case("handoffs-order", "result.handoff_module_ids", (ModuleId.POSITIONING, ModuleId.EXPERIMENTS), lambda raw: batch(results=(_pass(handoff_module_ids=raw.value("result.handoff_module_ids")),))),
-    ))
-    for field_name in ("parent_claim_ids", "evidence_ids", "assumption_ids", "limitation_ids"):
-        values, builder = _id_order_builder(field_name)
-        cases.append(_ordering_case(f"{field_name}-order", f"claim.{field_name}", values, builder))
-    base = _contradiction_batch()
-    sides = (base.contradictions[0].left, base.contradictions[0].right)
-    cases.append(_ordering_case(
-        "contradiction-side-position", "contradiction.left/right", sides,
-        lambda raw: replace(base, contradictions=(replace(base.contradictions[0], left=raw.value("contradiction.left/right")[0], right=raw.value("contradiction.left/right")[1]),)),
-        equal=False,
-    ))
-    return tuple(cases)
+    claims, claims_builder = _nested_order_builder("claims")
+    evidence, evidence_builder = _nested_order_builder("evidence")
+    assumptions, assumptions_builder = _nested_order_builder("assumptions")
+    limitations, limitations_builder = _nested_order_builder("limitations")
+    parent_ids, parent_builder = _id_order_builder("parent_claim_ids")
+    evidence_ids, evidence_ids_builder = _id_order_builder("evidence_ids")
+    assumption_ids, assumption_ids_builder = _id_order_builder("assumption_ids")
+    limitation_ids, limitation_ids_builder = _id_order_builder("limitation_ids")
+    contradictions = (
+        ContradictionInput("ctr_a", _side("clm_a"), _side("clm_b")),
+        ContradictionInput("ctr_b", _side("clm_a"), _side("clm_b")),
+    )
+    contradiction_base = _contradiction_batch()
+
+    def adapter(target, path, builder, projection, identity, *, positional=False):
+        return OrderingAdapter(
+            target, path, path, builder, projection, identity,
+            OrderingSemantics.POSITIONAL if positional else OrderingSemantics.NORMALIZED,
+            not positional,
+        )
+
+    adapters = (
+        adapter(
+            OrderingTarget.RESULTS,
+            "batch.results",
+            lambda raw: EvaluationBatch("bat_order", raw.value("batch.results")),
+            lambda value: value.results,
+            lambda item: item.result_id,
+        ),
+        adapter(OrderingTarget.CLAIMS, "result.claims", claims_builder, lambda value: value.results[0].claims, lambda item: item.claim_id),
+        adapter(OrderingTarget.EVIDENCE, "result.evidence", evidence_builder, lambda value: value.results[0].evidence, lambda item: item.evidence_id),
+        adapter(OrderingTarget.ASSUMPTIONS, "result.assumptions", assumptions_builder, lambda value: value.results[0].assumptions, lambda item: item.assumption_id),
+        adapter(OrderingTarget.LIMITATIONS, "result.limitations", limitations_builder, lambda value: value.results[0].limitations, lambda item: item.limitation_id),
+        adapter(
+            OrderingTarget.CONTRADICTIONS,
+            "batch.contradictions",
+            lambda raw: EvaluationBatch("bat_order", (result_a, result_b), raw.value("batch.contradictions")),
+            lambda value: value.contradictions,
+            lambda item: item.contradiction_id,
+        ),
+        adapter(
+            OrderingTarget.FAILURE_REASONS,
+            "result.failure_reasons",
+            lambda raw: batch(results=(_fail(reasons=raw.value("result.failure_reasons")),)),
+            lambda value: tuple(value.results[0].failure_reasons),
+            lambda item: item.value,
+        ),
+        adapter(
+            OrderingTarget.BLOCKING_REASONS,
+            "result.blocking_reasons",
+            lambda raw: batch(results=(_blocked(reasons=raw.value("result.blocking_reasons")),)),
+            lambda value: tuple(value.results[0].blocking_reasons),
+            lambda item: item.value,
+        ),
+        adapter(
+            OrderingTarget.HANDOFF_MODULE_IDS,
+            "result.handoff_module_ids",
+            lambda raw: batch(results=(_pass(handoff_module_ids=raw.value("result.handoff_module_ids")),)),
+            lambda value: tuple(value.results[0].handoff_module_ids),
+            lambda item: item.value,
+        ),
+        adapter(OrderingTarget.PARENT_CLAIM_IDS, "claim.parent_claim_ids", parent_builder, lambda value: value.results[0].claims[2].parent_claim_ids, lambda item: item),
+        adapter(OrderingTarget.EVIDENCE_IDS, "claim.evidence_ids", evidence_ids_builder, lambda value: value.results[0].claims[2].evidence_ids, lambda item: item),
+        adapter(OrderingTarget.ASSUMPTION_IDS, "claim.assumption_ids", assumption_ids_builder, lambda value: value.results[0].claims[2].assumption_ids, lambda item: item),
+        adapter(OrderingTarget.LIMITATION_IDS, "claim.limitation_ids", limitation_ids_builder, lambda value: value.results[0].claims[2].limitation_ids, lambda item: item),
+        adapter(
+            OrderingTarget.CONTRADICTION_SIDES,
+            "contradiction.left/right",
+            lambda raw: replace(
+                contradiction_base,
+                contradictions=(
+                    replace(
+                        contradiction_base.contradictions[0],
+                        left=raw.value("contradiction.left/right")[0],
+                        right=raw.value("contradiction.left/right")[1],
+                    ),
+                ),
+            ),
+            lambda value: (value.contradictions[0].left, value.contradictions[0].right),
+            lambda item: _stable_text(item),
+            positional=True,
+        ),
+    )
+    values = {
+        OrderingTarget.RESULTS: (result_a, result_b),
+        OrderingTarget.CLAIMS: claims,
+        OrderingTarget.EVIDENCE: evidence,
+        OrderingTarget.ASSUMPTIONS: assumptions,
+        OrderingTarget.LIMITATIONS: limitations,
+        OrderingTarget.CONTRADICTIONS: contradictions,
+        OrderingTarget.FAILURE_REASONS: (FailureReason.AUTHORITY_VIOLATION, FailureReason.MODULE_DECLARED_FAILURE),
+        OrderingTarget.BLOCKING_REASONS: (BlockingReason.MISSING_CAPABILITY, BlockingReason.TOOL_UNAVAILABLE),
+        OrderingTarget.HANDOFF_MODULE_IDS: (ModuleId.POSITIONING, ModuleId.EXPERIMENTS),
+        OrderingTarget.PARENT_CLAIM_IDS: parent_ids,
+        OrderingTarget.EVIDENCE_IDS: evidence_ids,
+        OrderingTarget.ASSUMPTION_IDS: assumption_ids,
+        OrderingTarget.LIMITATION_IDS: limitation_ids,
+        OrderingTarget.CONTRADICTION_SIDES: (contradiction_base.contradictions[0].left, contradiction_base.contradictions[0].right),
+    }
+    return adapters, values
+
+
+ORDERING_ADAPTERS, ORDERING_VALUES = _ordering_adapters()
+ORDERING_ADAPTER_BY_TARGET = {adapter.target: adapter for adapter in ORDERING_ADAPTERS}
+
+
+def _ordering_case(case_id, target, values=None, *, extra_fields=()):
+    adapter = ORDERING_ADAPTER_BY_TARGET[target]
+    values = tuple(values if values is not None else ORDERING_VALUES[target])
+    baseline_raw = RawOrderingInput(((adapter.raw_input_path, values), *extra_fields))
+    mutated_raw = RawOrderingInput(((adapter.raw_input_path, tuple(reversed(values))), *extra_fields))
+    witness = OrderingWitness(baseline_raw, mutated_raw)
+    return FingerprintCase(
+        case_id,
+        None,
+        OrderingBatchFactory(target, baseline_raw),
+        OrderingBatchFactory(target, mutated_raw),
+        category="order",
+        ordering=witness,
+        ordering_target=target,
+    )
+
+
+def _order_cases():
+    return tuple(
+        _ordering_case(case_id, target)
+        for case_id, target in (
+            ("results-order", OrderingTarget.RESULTS),
+            ("claims-order", OrderingTarget.CLAIMS),
+            ("evidence-order", OrderingTarget.EVIDENCE),
+            ("assumptions-order", OrderingTarget.ASSUMPTIONS),
+            ("limitations-order", OrderingTarget.LIMITATIONS),
+            ("contradictions-order", OrderingTarget.CONTRADICTIONS),
+            ("failure-reasons-order", OrderingTarget.FAILURE_REASONS),
+            ("blocking-reasons-order", OrderingTarget.BLOCKING_REASONS),
+            ("handoffs-order", OrderingTarget.HANDOFF_MODULE_IDS),
+            ("parent_claim_ids-order", OrderingTarget.PARENT_CLAIM_IDS),
+            ("evidence_ids-order", OrderingTarget.EVIDENCE_IDS),
+            ("assumption_ids-order", OrderingTarget.ASSUMPTION_IDS),
+            ("limitation_ids-order", OrderingTarget.LIMITATION_IDS),
+            ("contradiction-side-position", OrderingTarget.CONTRADICTION_SIDES),
+        )
+    )
 
 
 ORDER_CASES = _order_cases()
@@ -550,46 +705,98 @@ def _logical_path(path):
 
 def _raw_fields(raw):
     values = dict(raw.fields)
-    _require(len(values) == len(raw.fields), "raw ordering field names must be unique")
+    _require(len(values) == len(raw.fields), "ORDERING_UNRELATED_RAW_CHANGE")
     return values
 
 
-def _validate_ordering_witness(case):
+def _validate_ordering_adapter_registry(adapters):
+    _require(type(adapters) is tuple and adapters, "INVALID_ORDERING_ADAPTER_REGISTRY")
+    for adapter in adapters:
+        _require(type(adapter) is OrderingAdapter, "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(type(adapter.target) is OrderingTarget, "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(type(adapter.semantic_path) is str and adapter.semantic_path, "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(type(adapter.raw_input_path) is str and adapter.raw_input_path, "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(callable(adapter.builder) and callable(adapter.projection) and callable(adapter.element_identity), "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(type(adapter.semantics) is OrderingSemantics, "INVALID_ORDERING_ADAPTER_REGISTRY")
+        _require(type(adapter.fingerprint_equal) is bool, "INVALID_ORDERING_ADAPTER_REGISTRY")
+    targets = tuple(adapter.target for adapter in adapters)
+    semantic_paths = tuple(adapter.semantic_path for adapter in adapters)
+    raw_paths = tuple(adapter.raw_input_path for adapter in adapters)
+    _require(len(targets) == len(set(targets)), "DUPLICATE_ORDERING_TARGET")
+    _require(len(semantic_paths) == len(set(semantic_paths)), "DUPLICATE_ORDERING_SEMANTIC_PATH")
+    _require(len(raw_paths) == len(set(raw_paths)), "DUPLICATE_ORDERING_RAW_PATH")
+    return {adapter.target: adapter for adapter in adapters}
+
+
+def _resolve_ordering_adapter(case, adapter_by_target):
+    target = case.ordering_target
+    if type(target) is not OrderingTarget:
+        aliases = {
+            *(item.value for item in OrderingTarget),
+            *(adapter.semantic_path for adapter in adapter_by_target.values()),
+            *(adapter.raw_input_path for adapter in adapter_by_target.values()),
+        }
+        code = "ORDERING_TARGET_ALIAS" if type(target) is str and target in aliases else "UNKNOWN_ORDERING_TARGET"
+        raise EvidenceCatalogError(code)
+    _require(target in adapter_by_target, "UNKNOWN_ORDERING_TARGET")
+    _require(case.declared_source is None, "ORDERING_ADAPTER_MISMATCH")
+    return adapter_by_target[target]
+
+
+def _ordered_adapter_values(adapter, values):
+    values = tuple(values)
+    if adapter.semantics is OrderingSemantics.NORMALIZED:
+        values = tuple(sorted(values, key=adapter.element_identity))
+    return tuple(_stable_text(item) for item in values)
+
+
+def _validate_ordering_witness(case, adapter_by_target):
+    adapter = _resolve_ordering_adapter(case, adapter_by_target)
     witness = case.ordering
-    _require(witness is not None, "ordering evidence requires a raw witness")
-    _require(case.element_count in (None, 0), "legacy element_count metadata is forbidden")
-    _require(witness.target_path == case.source, "ordering witness target must match case source")
+    _require(type(witness) is OrderingWitness, "ORDERING_WITNESS_NOT_USED")
+    _require(
+        type(case.baseline) is OrderingBatchFactory
+        and type(case.mutated) is OrderingBatchFactory
+        and case.baseline.target is adapter.target
+        and case.mutated.target is adapter.target
+        and _stable_text(case.baseline.raw) == _stable_text(witness.baseline_raw)
+        and _stable_text(case.mutated.raw) == _stable_text(witness.mutated_raw),
+        "ORDERING_WITNESS_NOT_USED",
+    )
+    _require(case.element_count in (None, 0), "LEGACY_ELEMENT_COUNT_FORBIDDEN")
     before_fields = _raw_fields(witness.baseline_raw)
     after_fields = _raw_fields(witness.mutated_raw)
-    _require(set(before_fields) == set(after_fields), "raw ordering field membership changed")
-    raw_diffs = {name for name in before_fields if _stable_text(before_fields[name]) != _stable_text(after_fields[name])}
-    _require(raw_diffs == {witness.target_path}, "only the declared raw ordering path may change")
-    before = before_fields[witness.target_path]
-    after = after_fields[witness.target_path]
-    _require(type(before) is tuple and type(after) is tuple, "raw ordering targets must be exact tuples")
-    _require(len(before) >= 2 and len(after) >= 2, "ordering evidence requires at least two elements")
+    _require(adapter.raw_input_path in before_fields and adapter.raw_input_path in after_fields, "ORDERING_ADAPTER_MISMATCH")
+    before = before_fields[adapter.raw_input_path]
+    after = after_fields[adapter.raw_input_path]
+    _require(type(before) is tuple and type(after) is tuple, "ORDERING_ADAPTER_MISMATCH")
+    _require(len(before) >= 2 and len(after) >= 2, "ORDERING_TOO_SHORT")
     before_keys = tuple(_stable_text(item) for item in before)
     after_keys = tuple(_stable_text(item) for item in after)
-    _require(len(set(before_keys)) >= 2, "ordering evidence requires at least two distinct elements")
-    _require(after_keys == tuple(reversed(before_keys)), "mutated raw sequence must be the exact reverse")
-    _require(before_keys != after_keys, "raw ordering must change")
-    _require(Counter(before_keys) == Counter(after_keys), "raw ordering membership must remain unchanged")
-    built_before = witness.builder(witness.baseline_raw)
-    built_after = witness.builder(witness.mutated_raw)
-    supplied_before = case.baseline()
-    supplied_after = case.mutated()
-    _require(_stable_text(supplied_before) == _stable_text(built_before), "baseline batch was not built from its raw witness")
-    _require(_stable_text(supplied_after) == _stable_text(built_after), "mutated batch was not built from its raw witness")
-    if not case.equal:
-        _require(supplied_before != supplied_after, "order-significant caller trees must remain different")
-    return supplied_before, supplied_after
+    _require(len(set(before_keys)) >= 2 and len(set(after_keys)) >= 2, "ORDERING_ELEMENTS_NOT_DISTINCT")
+    _require(Counter(before_keys) == Counter(after_keys), "ORDERING_MEMBERSHIP_CHANGED")
+    _require(before_keys != after_keys, "ORDERING_NO_CHANGE")
+    _require(after_keys == tuple(reversed(before_keys)), "ORDERING_NOT_EXACT_REVERSE")
+    _require(set(before_fields) == set(after_fields), "ORDERING_UNRELATED_RAW_CHANGE")
+    raw_diffs = {name for name in before_fields if _stable_text(before_fields[name]) != _stable_text(after_fields[name])}
+    _require(raw_diffs == {adapter.raw_input_path}, "ORDERING_UNRELATED_RAW_CHANGE")
+    built_before = adapter.builder(witness.baseline_raw)
+    built_after = adapter.builder(witness.mutated_raw)
+    projected_before = adapter.projection(built_before)
+    projected_after = adapter.projection(built_after)
+    _require(type(projected_before) is tuple and type(projected_after) is tuple, "ORDERING_ADAPTER_MISMATCH")
+    _require(_ordered_adapter_values(adapter, before) == _ordered_adapter_values(adapter, projected_before), "ORDERING_ADAPTER_MISMATCH")
+    _require(_ordered_adapter_values(adapter, after) == _ordered_adapter_values(adapter, projected_after), "ORDERING_ADAPTER_MISMATCH")
+    if adapter.semantics is OrderingSemantics.POSITIONAL:
+        _require(built_before != built_after, "ORDERING_ADAPTER_MISMATCH")
+    return built_before, built_after, adapter
 
 
 def _validate_membership(case, baseline, mutated, actual_paths):
     expected = case.membership
     _require(expected is not None, "membership evidence requires a declaration")
-    _require(actual_paths == set(case.expected_changed_paths) == {expected.path}, "membership diff path does not match its declaration")
-    _require(_logical_path(expected.path) == case.source, "membership source label does not match its actual path")
+    _require(actual_paths == set(case.expected_changed_paths) == {expected.path}, "MEMBERSHIP_PATH_MISMATCH")
+    _require(_logical_path(expected.path) == case.source, "MEMBERSHIP_PATH_MISMATCH")
     before = _get_path(baseline, expected.path)
     after = _get_path(mutated, expected.path)
     _require(type(before) is tuple and type(after) is tuple, "membership target must be an exact tuple")
@@ -605,23 +812,33 @@ def _validate_membership(case, baseline, mutated, actual_paths):
     _require(all(before_records[item] == after_records[item] for item in set(before_ids) & set(after_ids)), "existing membership content changed")
 
 
-def _mutation_signature(case, baseline, mutated, actual_paths):
+def _unordered_stable_pair(left, right):
+    endpoints = (_stable_text(left), _stable_text(right))
+    return tuple(sorted(endpoints, key=lambda item: item.encode("utf-8")))
+
+
+def _mutation_signature(case, baseline, mutated, actual_paths, adapter=None):
     changed_values = [
-        [path, _stable(_get_path(baseline, path)), _stable(_get_path(mutated, path))]
+        [path, _unordered_stable_pair(_get_path(baseline, path), _get_path(mutated, path))]
         for path in sorted(actual_paths)
     ]
     raw = None
-    if case.ordering is not None:
-        raw = [_stable(case.ordering.baseline_raw), _stable(case.ordering.mutated_raw)]
-    payload = [_stable(baseline), _stable(mutated), sorted(actual_paths), changed_values, raw]
+    if adapter is not None:
+        before = case.ordering.baseline_raw.value(adapter.raw_input_path)
+        after = case.ordering.mutated_raw.value(adapter.raw_input_path)
+        raw = [adapter.semantic_path, _unordered_stable_pair(before, after)]
+    payload = [_unordered_stable_pair(baseline, mutated), sorted(actual_paths), changed_values, raw]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def validate_fingerprint_case(case):
+def validate_fingerprint_case(case, *, adapter_by_target=None):
+    adapter_by_target = adapter_by_target or _validate_ordering_adapter_registry(ORDERING_ADAPTERS)
+    adapter = None
     if case.category == "order":
-        baseline, mutated = _validate_ordering_witness(case)
+        baseline, mutated, adapter = _validate_ordering_witness(case, adapter_by_target)
     else:
         _require(case.ordering is None, "non-ordering evidence must not carry an ordering witness")
+        _require(case.ordering_target is None, "non-ordering evidence must not carry an ordering target")
         _require(case.element_count in (None, 0), "legacy element_count metadata is forbidden")
         baseline = case.baseline()
         mutated = case.mutated()
@@ -629,7 +846,7 @@ def validate_fingerprint_case(case):
     actual_paths = _diff_paths(baseline, mutated)
     if case.category == "leaf":
         _require(actual_paths == set(case.expected_changed_paths) and len(actual_paths) == 1, "isolated leaf paths do not match their declaration")
-        _require(_logical_path(next(iter(actual_paths))) == case.source, "leaf source label does not match the actual mutation")
+        _require(_logical_path(next(iter(actual_paths))) == case.source, "LEAF_SOURCE_MISMATCH")
     elif case.category == "identity":
         _require(actual_paths == set(case.expected_changed_paths), "identity closure does not match its declaration")
         _require(case.source in {_logical_path(path) for path in actual_paths}, "identity source is absent from its actual closure")
@@ -644,11 +861,12 @@ def validate_fingerprint_case(case):
     baseline_output = evaluator.evaluate(baseline)
     mutated_output = evaluator.evaluate(mutated)
     _require(all(output.execution_readiness is ExecutionReadiness.PLANNING_ONLY for output in (baseline_output, mutated_output)), "evaluation must remain PLANNING_ONLY")
-    if case.equal:
+    fingerprint_equal = adapter.fingerprint_equal if adapter is not None else False
+    if fingerprint_equal:
         _require(baseline.batch_fingerprint == mutated.batch_fingerprint, "fingerprints must normalize equally")
     else:
         _require(baseline.batch_fingerprint != mutated.batch_fingerprint, "fingerprints must differ")
-    return baseline, mutated, actual_paths, _mutation_signature(case, baseline, mutated, actual_paths)
+    return baseline, mutated, actual_paths, _mutation_signature(case, baseline, mutated, actual_paths, adapter)
 
 
 def validate_evidence_catalog(
@@ -659,16 +877,23 @@ def validate_evidence_catalog(
     required_membership=frozenset(),
     required_order=frozenset(),
     structural_coverage=None,
+    ordering_adapters=ORDERING_ADAPTERS,
 ):
+    adapter_by_target = _validate_ordering_adapter_registry(ordering_adapters)
     case_ids = tuple(case.case_id for case in cases)
     _require(len(case_ids) == len(set(case_ids)), "case IDs must be unique")
-    validated = [(case, validate_fingerprint_case(case)) for case in cases]
+    validated = [(case, validate_fingerprint_case(case, adapter_by_target=adapter_by_target)) for case in cases]
     signatures = tuple(result[3] for _, result in validated)
-    _require(len(signatures) == len(set(signatures)), "actual mutation signatures must be unique")
+    _require(len(signatures) == len(set(signatures)), "DUPLICATE_MUTATION_SIGNATURE")
     _require(required_leaves <= {case.source for case in cases if case.category in ("leaf", "identity", "coherence")}, "normative leaf coverage is incomplete")
     _require(required_identities == {case.source for case in cases if case.category == "identity"}, "identity coverage is incomplete")
     _require(required_membership == {case.source for case in cases if case.category == "membership"}, "membership coverage is incomplete")
-    _require(required_order == {case.source for case in cases if case.category == "order"}, "ordering coverage is incomplete")
+    ordering_sources = {
+        _resolve_ordering_adapter(case, adapter_by_target).semantic_path
+        for case in cases
+        if case.category == "order"
+    }
+    _require(required_order == ordering_sources, "ordering coverage is incomplete")
     actual_leaf_paths = {}
     for case, (_, _, paths, _) in validated:
         if case.category == "leaf":
@@ -677,7 +902,7 @@ def validate_evidence_catalog(
     for node, descendants in (structural_coverage or {}).items():
         _require(descendants, f"structural node has no descendants: {node}")
         for descendant in descendants:
-            _require(descendant in actual_leaf_paths, f"structural descendant lacks an actual leaf mutation: {descendant}")
+            _require(descendant in actual_leaf_paths, "MISSING_STRUCTURAL_DESCENDANT")
             _require(len(actual_leaf_paths[descendant]) == 1, f"structural descendant is counted by multiple leaf cases: {descendant}")
     sources = {case.source for case in cases}
     _require("batch.batch_fingerprint" not in sources and "propagated_claim_contexts" not in sources, "derived fields must remain excluded")
@@ -706,7 +931,7 @@ def test_catalog_rejects_a_mislabelled_leaf_mutation():
         "mislabelled", "claim.confidence", "batch.evaluation_at",
         lambda: batch(evaluation_at=UTC), lambda value: replace(value, evaluation_at=UTC + timedelta(seconds=1)),
     )
-    with pytest.raises(EvidenceCatalogError, match="source label"):
+    with pytest.raises(EvidenceCatalogError, match="^LEAF_SOURCE_MISMATCH$"):
         validate_evidence_catalog((case,), required_leaves=frozenset({"claim.confidence"}))
 
 
@@ -716,8 +941,45 @@ def test_catalog_rejects_duplicate_actual_mutations_with_different_case_ids():
         lambda: batch(evaluation_at=UTC), lambda value: replace(value, evaluation_at=UTC + timedelta(seconds=1)),
     )
     second = replace(first, case_id="duplicate-b")
-    with pytest.raises(EvidenceCatalogError, match="signatures"):
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
         validate_evidence_catalog((first, second), required_leaves=frozenset({"batch.evaluation_at"}))
+
+
+def _evaluation_at_case(case_id, before, after):
+    return _leaf(
+        case_id,
+        "batch.evaluation_at",
+        "batch.evaluation_at",
+        lambda before=before: batch(evaluation_at=before),
+        lambda value, after=after: replace(value, evaluation_at=after),
+    )
+
+
+def test_catalog_rejects_the_same_leaf_mutation_in_reverse():
+    first = _evaluation_at_case("reverse-leaf-a", UTC, UTC + timedelta(seconds=1))
+    reversed_case = _evaluation_at_case("reverse-leaf-b", UTC + timedelta(seconds=1), UTC)
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
+        validate_evidence_catalog((first, reversed_case), required_leaves=frozenset({"batch.evaluation_at"}))
+
+
+def test_catalog_rejects_independently_rebuilt_reverse_endpoints():
+    first = _evaluation_at_case("rebuilt-reverse-a", UTC, UTC + timedelta(seconds=1))
+    rebuilt = FingerprintCase(
+        "rebuilt-reverse-b",
+        "batch.evaluation_at",
+        lambda: EvaluationBatch("bat_one", (_pass(),), evaluation_at=UTC + timedelta(seconds=1)),
+        lambda: EvaluationBatch("bat_one", (_pass(),), evaluation_at=UTC),
+        expected_changed_paths=frozenset({"batch.evaluation_at"}),
+    )
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
+        validate_evidence_catalog((first, rebuilt), required_leaves=frozenset({"batch.evaluation_at"}))
+
+
+def test_catalog_keeps_genuinely_different_mutations_distinct():
+    first = _evaluation_at_case("distinct-a", UTC, UTC + timedelta(seconds=1))
+    second = _evaluation_at_case("distinct-b", UTC, UTC + timedelta(seconds=2))
+    validated = validate_evidence_catalog((first, second), required_leaves=frozenset({"batch.evaluation_at"}))
+    assert len({result[3] for _, result in validated}) == 2
 
 
 def test_catalog_rejects_identity_rename_disguised_as_membership():
@@ -731,8 +993,35 @@ def test_catalog_rejects_identity_rename_disguised_as_membership():
             frozenset({"res_other"}), frozenset({"res_one"}),
         ),
     )
-    with pytest.raises(EvidenceCatalogError, match="diff path"):
+    with pytest.raises(EvidenceCatalogError, match="^MEMBERSHIP_PATH_MISMATCH$"):
         validate_evidence_catalog((case,), required_membership=frozenset({"batch.results"}))
+
+
+def test_catalog_rejects_the_same_membership_mutation_in_reverse():
+    forward = MEMBERSHIP_CASES[0]
+    expected = forward.membership
+    reversed_case = replace(
+        forward,
+        case_id="results-membership-reversed",
+        baseline=forward.mutated,
+        mutated=forward.baseline,
+        membership=replace(
+            expected,
+            baseline_ids=expected.mutated_ids,
+            mutated_ids=expected.baseline_ids,
+            added_ids=expected.removed_ids,
+            removed_ids=expected.added_ids,
+        ),
+    )
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
+        validate_evidence_catalog((forward, reversed_case), required_membership=frozenset({"batch.results"}))
+
+
+def test_catalog_rejects_the_same_identity_closure_in_reverse():
+    forward = IDENTITY_CASES[0]
+    reversed_case = replace(forward, case_id="batch-id-reversed", baseline=forward.mutated, mutated=forward.baseline)
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
+        validate_evidence_catalog((forward, reversed_case), required_identities=frozenset({"batch.batch_id"}))
 
 
 def test_catalog_rejects_structural_metadata_without_an_actual_leaf_mutation():
@@ -743,7 +1032,7 @@ def test_catalog_rejects_structural_metadata_without_an_actual_leaf_mutation():
             "batch.contradictions[0].left.evidence_id",
         }),
     }
-    with pytest.raises(EvidenceCatalogError, match="lacks an actual leaf mutation"):
+    with pytest.raises(EvidenceCatalogError, match="^MISSING_STRUCTURAL_DESCENDANT$"):
         validate_evidence_catalog(
             (case,), required_leaves=frozenset({case.source}), structural_coverage=structural,
         )
@@ -759,23 +1048,27 @@ def _negative_order_case(
     supplied_from_witness=True,
     element_count=None,
 ):
-    source = "result.failure_reasons"
-    builder = lambda raw: batch(results=(_fail(reasons=raw.value(source)),))
+    target = OrderingTarget.FAILURE_REASONS
+    adapter = ORDERING_ADAPTER_BY_TARGET[target]
     witness = OrderingWitness(
-        source,
-        RawOrderingInput(((source, tuple(baseline_values)), *baseline_extra)),
-        RawOrderingInput(((source, tuple(mutated_values)), *mutated_extra)),
-        builder,
+        RawOrderingInput(((adapter.raw_input_path, tuple(baseline_values)), *baseline_extra)),
+        RawOrderingInput(((adapter.raw_input_path, tuple(mutated_values)), *mutated_extra)),
     )
     if supplied_from_witness:
-        baseline_factory = lambda witness=witness: witness.builder(witness.baseline_raw)
-        mutated_factory = lambda witness=witness: witness.builder(witness.mutated_raw)
+        baseline_factory = OrderingBatchFactory(target, witness.baseline_raw)
+        mutated_factory = OrderingBatchFactory(target, witness.mutated_raw)
     else:
         baseline_factory = batch
         mutated_factory = batch
     return FingerprintCase(
-        case_id, source, baseline_factory, mutated_factory,
-        equal=True, category="order", ordering=witness, element_count=element_count,
+        case_id,
+        None,
+        baseline_factory,
+        mutated_factory,
+        category="order",
+        ordering=witness,
+        ordering_target=target,
+        element_count=element_count,
     )
 
 
@@ -784,23 +1077,117 @@ _B = FailureReason.MODULE_DECLARED_FAILURE
 _C = FailureReason.INSUFFICIENT_EVIDENCE
 
 
-@pytest.mark.parametrize(
-    "case",
-    (
-        _negative_order_case("identical-raw", (_A, _B), (_A, _B)),
-        _negative_order_case("one-element", (_A,), (_A,)),
-        _negative_order_case("identical-elements", (_A, _A), (_A, _A)),
-        _negative_order_case("not-reverse", (_A, _B, _C), (_B, _C, _A)),
-        _negative_order_case("membership-changed", (_A, _B), (_B, _C)),
-        _negative_order_case("unrelated-raw-change", (_A, _B), (_B, _A), baseline_extra=(("raw.context", "one"),), mutated_extra=(("raw.context", "two"),)),
-        _negative_order_case("witness-unused", (_A, _B), (_B, _A), supplied_from_witness=False),
-        _negative_order_case("fake-element-count", (_A, _B), (_A, _B), element_count=2),
-    ),
-    ids=lambda case: case.case_id,
-)
-def test_catalog_rejects_invalid_ordering_witnesses(case):
-    with pytest.raises(EvidenceCatalogError):
-        validate_evidence_catalog((case,), required_order=frozenset({case.source}))
+def _validate_single_order_case(case, *, adapters=ORDERING_ADAPTERS, source="result.failure_reasons"):
+    return validate_evidence_catalog((case,), required_order=frozenset({source}), ordering_adapters=adapters)
+
+
+def test_catalog_rejects_an_unknown_ordering_target():
+    case = replace(_negative_order_case("unknown-target", (_A, _B), (_B, _A)), ordering_target="NOT_A_TARGET")
+    with pytest.raises(EvidenceCatalogError, match="^UNKNOWN_ORDERING_TARGET$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_a_semantic_ordering_alias():
+    case = replace(_negative_order_case("semantic-alias", (_A, _B), (_B, _A)), ordering_target="result.failure_reasons")
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_TARGET_ALIAS$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_a_forged_source_for_a_fixed_adapter():
+    case = replace(_negative_order_case("forged-source", (_A, _B), (_B, _A)), declared_source="claim.confidence")
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_ADAPTER_MISMATCH$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_an_ordering_adapter_field_mismatch():
+    case = _negative_order_case("adapter-field-mismatch", (_A, _B), (_B, _A))
+    valid = ORDERING_ADAPTER_BY_TARGET[OrderingTarget.FAILURE_REASONS]
+    mismatched = replace(
+        valid,
+        semantic_path="result.module_status",
+        projection=lambda value: (value.results[0].module_status,),
+    )
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_ADAPTER_MISMATCH$"):
+        _validate_single_order_case(case, adapters=(mismatched,), source="result.module_status")
+
+
+def test_catalog_rejects_identical_raw_sequences_at_the_no_change_guard():
+    case = _negative_order_case("identical-raw", (_A, _B, _A), (_A, _B, _A))
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_NO_CHANGE$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_a_one_element_sequence_at_the_length_guard():
+    case = _negative_order_case("one-element", (_A,), (_A,))
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_TOO_SHORT$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_two_identical_elements_at_the_distinctness_guard():
+    case = _negative_order_case("identical-elements", (_A, _A), (_A, _A))
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_ELEMENTS_NOT_DISTINCT$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_a_non_reversal_permutation_at_the_reversal_guard():
+    case = _negative_order_case("not-reverse", (_A, _B, _C), (_B, _C, _A))
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_NOT_EXACT_REVERSE$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_changed_membership_at_the_multiset_guard():
+    case = _negative_order_case("membership-changed", (_A, _B), (_B, _C))
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_MEMBERSHIP_CHANGED$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_an_unrelated_raw_field_change_at_its_guard():
+    case = _negative_order_case(
+        "unrelated-raw-change",
+        (_A, _B),
+        (_B, _A),
+        baseline_extra=(("raw.context", "one"),),
+        mutated_extra=(("raw.context", "two"),),
+    )
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_UNRELATED_RAW_CHANGE$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_a_witness_not_used_to_build_contracts():
+    case = _negative_order_case("witness-unused", (_A, _B), (_B, _A), supplied_from_witness=False)
+    with pytest.raises(EvidenceCatalogError, match="^ORDERING_WITNESS_NOT_USED$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_legacy_element_count_without_a_noop_fixture():
+    case = _negative_order_case("fake-element-count", (_A, _B), (_B, _A), element_count=2)
+    with pytest.raises(EvidenceCatalogError, match="^LEGACY_ELEMENT_COUNT_FORBIDDEN$"):
+        _validate_single_order_case(case)
+
+
+def test_catalog_rejects_duplicate_semantic_adapter_registration():
+    first = ORDERING_ADAPTER_BY_TARGET[OrderingTarget.FAILURE_REASONS]
+    duplicate = replace(
+        first,
+        target=OrderingTarget.BLOCKING_REASONS,
+        raw_input_path="duplicate.failure_reasons",
+    )
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_ORDERING_SEMANTIC_PATH$"):
+        validate_evidence_catalog((), ordering_adapters=(first, duplicate))
+
+
+def test_catalog_rejects_the_same_ordering_witness_in_reverse():
+    forward = _ordering_case("ordering-forward", OrderingTarget.FAILURE_REASONS)
+    witness = forward.ordering
+    reversed_case = replace(
+        forward,
+        case_id="ordering-reversed",
+        baseline=OrderingBatchFactory(forward.ordering_target, witness.mutated_raw),
+        mutated=OrderingBatchFactory(forward.ordering_target, witness.baseline_raw),
+        ordering=OrderingWitness(witness.mutated_raw, witness.baseline_raw),
+    )
+    with pytest.raises(EvidenceCatalogError, match="^DUPLICATE_MUTATION_SIGNATURE$"):
+        validate_evidence_catalog((forward, reversed_case), required_order=frozenset({"result.failure_reasons"}))
 
 
 def test_all_four_fixed_vectors_remain_unchanged():
