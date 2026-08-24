@@ -1,98 +1,68 @@
 # Orchestrator Quality Gates verification
 
-Status: pre-implementation evidence template. Runtime Quality Gates have not been implemented by this reconciliation.
+Status: runtime foundation implemented and verified on `agent/add-orchestrator-quality-gates` without execution-path integration.
 
-## Reconciliation identity
+## Identity and ownership
 
-- Authoritative base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`
-- Branch: `agent/add-orchestrator-quality-gates`
-- Scope: OpenSpec and directly related architecture/product/governance documentation only
-- Runtime implementation: pending separate apply step
-- Planned runtime owner: `app/marketing_orchestrator/quality_gates/`
-- Task state after contradiction-side reconciliation: 4 reconciliation tasks complete; 104 runtime/runtime-test/verification tasks pending (108 total)
+- Authoritative base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
+- Runtime owner: `app/marketing_orchestrator/quality_gates/`.
+- Public internal entry points: `QualityGateEvaluator.evaluate` and `DecisionEvaluator.evaluate`.
+- Boundary: pure, immutable, deterministic and always `PLANNING_ONLY`.
+- Migrations/dependencies: none.
 
-## Verified prerequisite baseline
+## Focused evidence
 
-- Module Registry `1.0.0`: 15 descriptors, zero execution bindings.
-- Normalized Registry checksum: `25261485245902066cb6c59ef6cc612b18ab4cdabeebff6768e49816ba716918`.
-- Marketing Orchestrator: importable and `PLANNING_ONLY`.
-- Expert Core: version `1.0.0`, canonical resource intact.
-- Registry tests: 27 passed.
-- Marketing Orchestrator tests: 117 passed.
-- Expert Core/compatibility tests: 37 passed.
-- Full baseline: 269 passed with 9 pre-existing deprecation warnings.
-- `python -m compileall app bot`: passed.
-- `openspec validate --all --strict`: 11 passed, 0 failed.
-
-## Reconciliation validation
-
-These checks validate the planning/documentation change only; they are not evidence that runtime Quality Gates exist.
-
-| Check | Result |
+| Evidence | Result |
 | --- | --- |
-| Focused Orchestrator, Registry, Expert Core and Agent Registry suite | 181 passed; 4 pre-existing deprecation warnings |
-| Full pytest after reconciliation | 269 passed; 9 pre-existing deprecation warnings |
-| Python compilation for `app` and `bot` | passed |
-| Strict Quality Gates change validation | passed |
-| Strict all-OpenSpec validation | 11 passed, 0 failed |
-| Working-tree whitespace check | passed; Git emitted only expected Windows LF/CRLF notices |
+| Quality Gates contracts, canonicalization, evaluator, propagation, contradictions, decisions, manifest, hostile boundary and isolation | 60 passed; one pre-existing Pydantic warning |
+| Module Registry | 27 passed |
+| Marketing Orchestrator compatibility | 117 passed; four pre-existing Pydantic warnings |
+| Expert Core, integration, Agent Registry and TaskPipeline compatibility | 43 passed |
+| Baseline before apply | 269 passed; nine pre-existing warnings |
+| Full suite after apply | 329 passed; nine pre-existing warnings |
 
-## Contract-definition reconciliation
+Focused tests prove exact closed enums and field shapes, defensive freezing, prefixed IDs, caller/output ownership, legal/illegal gate states, parent-confidence ceilings, stable identity unions, all contradiction states, decision precedence, exhaustive manifest accounting and closed internal exports.
 
-The follow-up design review resolved the nine pre-implementation findings by defining:
+## Canonical vectors
 
-- every finite enum and the sole confidence order `UNKNOWN < LOW < MEDIUM < HIGH`, with the unreachable catch-all exclusion removed;
-- exact field optionality/default/empty/ordering and caller-versus-derived ownership;
-- batch-owned prefixed IDs, RFC 8785 tagged-scalar fingerprint source tree and duplicate-before-reference validation;
-- separate caller/derived limitations, complete batch aggregate and exact output source sets;
-- explicit contradiction evidence selection, precedence exclusions and collision-checked derived IDs;
-- exact aware-datetime UTC normalization with no ambient time;
-- ordered validation and closed caller-error normalization;
-- exhaustive base gate and contradiction-adjustment rules;
-- explicit lineage/confidence propagation and contradiction precedence;
-- complete gate × decision compatibility and synthesis-manifest fields;
-- concrete private package ownership and dependency direction;
-- 108 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked. The added pending coverage owns `ContradictionSide`, side references, four-key mismatch/reversal behavior, side-sensitive fingerprints and record-side preservation.
+- Empty-contradiction fixture fingerprint: `20c9fb5190f14cfdbf629821ed4a3a48a257a4960c6b9d3cb1ca8d42beb9a33b`.
+- Two-side contradiction fixture fingerprint: `578850d498e6d6e28673e7bd8274138af3266a713bb3d2148d9363189e64ff99`.
+- Limitation vector: `lim_2b42fd3a91882bc24469ecfa3334aed0`.
+- Exclusion vector: `exc_a2e97bf393be35ca457a154117ceb728`.
 
-### Contradiction-side correction evidence
+Tests cover RFC 8785 UTF-16 key ordering and escaping, typed integers/floats, signed zero, UTC offset normalization, every contradiction-side key, and order-significant side reversal. Fingerprints contain caller inputs only and no derived cycle.
 
-- `ContradictionSide` is the sole immutable caller representation of one claim/evidence selection and its complete four-key scope.
-- `ContradictionInput` contains only `contradiction_id`, `left` and `right`; the old shared/flat fields are removed.
-- `ContradictionRecord` preserves the validated left/right sides without duplicate flat IDs.
-- Comparability precedes evidence precedence; any exact key mismatch makes `INCOMPARABLE` reachable and prevents evidence inspection.
-- The canonical source preserves left/right positions and contains every side field, so single-field changes and side reversal change the fingerprint.
-- Runtime and tests remain pending; this correction records specification evidence only.
+## Contradiction and derived-output evidence
 
-This section records design completeness only. It is not runtime test evidence.
+- `ContradictionSide` contains exactly claim/evidence IDs plus complete object, segment, period and metric-definition keys.
+- Selected evidence references and claim membership are validated before comparability.
+- Each key mismatch independently produces `INCOMPARABLE`; precedence freshness is not called afterward.
+- Fully comparable first-party evidence is prioritized only over a not-newer generic benchmark.
+- Unresolved/incomparable claims remain preserved, are excluded, and receive one material derived limitation per affected result.
+- Side reversal changes fingerprint while preserving state and preferred claim.
+- Fixed length-prefixed ID vectors, deterministic ordering and injected collision failure are covered.
+- Decisions cover blocked, failed, terminal-stop, replan, lower-stop and continue outcomes.
+- Manifest tests prove evaluated/accepted/excluded sets are resolved, exhaustive and disjoint.
 
-## Implementation evidence checklist
+## Hostile and error boundary
 
-Complete only in the separate runtime apply step; do not infer completion from the reconciled design.
+Dedicated tests reject hostile list, tuple, set, dict, string, datetime subclass and mapping-proxy inputs before hostile iteration, hashing, formatting or backing access. Wrong nested items are type-checked before hashing. Expected Registry errors are converted to `QualityGateContractError`; `BaseException` and programmer defects are not caught.
 
-| Check | Command/test | Result | Notes |
-| --- | --- | --- | --- |
-| Enum/field and exact scalar/container tests | pending | pending | Include optional/default/empty/ordering rules |
-| ID/uniqueness/reference tests | pending | pending | Duplicate precedence and cross-result lineage |
-| Hostile/proxy and exception-boundary tests | pending | pending | Separate evidence groups |
-| Timestamp and ambient-time isolation tests | pending | pending | UTC normalization/freshness |
-| Registry identity/output/handoff tests | pending | pending | No inferred module schema |
-| Gate matrix/outcome derivation tests | pending | pending | Every legal/illegal combination |
-| Propagation/confidence tests | pending | pending | Provenance, assumptions, limitations, `UNKNOWN` |
-| Contradiction tests | pending | pending | Comparability, precedence, preservation/exclusion |
-| Decision compatibility tests | pending | pending | Gate matrix and stop/replan precedence |
-| Manifest tests | pending | pending | Inclusion, typed exclusions, reference resolution |
-| Isolation/compatibility tests | pending | pending | Zero LLM/QC/persistence/workflow calls; existing boundaries unchanged |
-| Focused foundation suites | pending | pending | Quality Gates, Registry, Orchestrator, Expert Core |
-| Full pytest | pending | pending | Record count and warnings |
-| Compile | pending | pending | `app` and `bot` |
-| Strict OpenSpec | pending | pending | Change and all specs |
-| Diff check | pending | pending | Against authoritative `origin/sale-ready` |
+## Registry and isolation
 
-## Required implementation sign-off
+- Registry version: `1.0.0`.
+- Descriptors: 15.
+- Execution bindings: 0.
+- Normalized checksum: `25261485245902066cb6c59ef6cc612b18ab4cdabeebff6768e49816ba716918`.
+- Spy call counts: OpenAI/LLM 0, `QCService` 0, `TaskPipelineService` 0, persistence 0.
+- Import-boundary tests prohibit LLM, QC, agents, presenters, routers, Telegram, SQLAlchemy, Redis, workflow and execution-service dependencies.
+- Existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `TaskPipelineService`, API and Telegram paths do not import Quality Gates and remain unchanged in the branch diff.
+- Outputs contain no plan, prose, raw module dump, chain-of-thought field or public response DTO.
 
-- No API, Telegram, migration, persistence, Job, Redis, worker or module-execution change.
-- No additional LLM or `QCService` call.
-- No current agent/presenter/`TaskPipelineService` integration.
-- Registry remains `1.0.0`, metadata-only and zero-binding.
-- All plans remain `PLANNING_ONLY`.
-- Remaining limitations and future adapter/integration work are reported.
+## Final checks
+
+Full pytest passed with 329 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot`, strict change validation, strict all-OpenSpec validation (11 items), and both branch/working-tree diff checks passed. There is no configured lint/type tool, Docker/dependency change, or manual runtime integration step because the package is intentionally unused by current execution paths.
+
+## Remaining limitations
+
+Adapters from existing heterogeneous agent dictionaries, workflow integration, persistence and user-facing synthesis remain separate reviewed changes. Evidence independence and semantic authority inference remain intentionally deferred.
