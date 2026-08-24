@@ -21,6 +21,10 @@ Several other components call `app.llm.openai_text.chat` directly: chat response
 
 `app/logging.py` already provides structured execution fields. It can expose the policy version without adding a public response field or persisted column. The source document contains 59 policy sections and approximately 32,500 characters / 4,864 words, but it does not declare an Expert Core version. This design assigns the initial executable policy version `1.0.0`.
 
+### Deployment and packaging evidence
+
+The selected canonical path is `app/prompts/expert_core/v1.0.0.md`. The repository has no `pyproject.toml`, `setup.py`, `setup.cfg`, or `MANIFEST.in`; production currently runs Python directly from the copied repository tree rather than installing a wheel or sdist. `Dockerfile` sets `/app` as the working directory and executes `COPY . .`, no `.dockerignore` excludes `app/prompts`, and both the backend and bot images are built from that same Dockerfile. The existing `app/prompts/__init__.py` establishes `app/prompts` as an application-owned Python package area. Therefore the selected Markdown resource is included at `/app/app/prompts/expert_core/v1.0.0.md` in the actual Docker deployment. If a wheel/sdist build is introduced later, its package-data configuration and an installed-package resource test must include this Markdown file before that packaging path can replace the current deployment.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -42,17 +46,127 @@ Several other components call `app.llm.openai_text.chat` directly: chat response
 
 ## Decisions
 
-### Decision 1: Keep one canonical executable policy next to shared prompts
+### Decision 1: Keep one versioned Markdown runtime resource
 
-Add `app/prompts/expert_core.py` containing:
+Add `app/prompts/expert_core/v1.0.0.md` as the only canonical runtime instruction body. A small Python loader/composer may declare `EXPERT_CORE_VERSION = "1.0.0"`, resolve the matching resource, and define stable component markers, but it must load the Markdown body and must not duplicate that body in a Python constant, agent prompt, product documentation, or another runtime file. Documentation may retain provenance metadata, the initial checksum, and links, but not a second prompt body.
 
-- `EXPERT_CORE_VERSION = "1.0.0"`;
-- one `EXPERT_CORE_INSTRUCTIONS` value;
-- stable reserved component markers used only by the composer.
+The initial Markdown text will be a faithful normalized import from the archival `agents_prompts/1. EXPERT CORE PRODUCTION.docx` material. DOCX files are provenance/source material only and are never parsed or loaded at runtime. `docs/product/prompts/expert-core-production.md` is a provenance pointer without the prompt body, while `docs/product/expert-core.md` is the product contract; neither is an executable prompt source. `docs/expert-core.md` must not be created.
 
-The initial instruction text will be a faithful plain-text transcription of `agents_prompts/1. EXPERT CORE PRODUCTION.docx`. Decorative Word separators and redundant whitespace may be normalized, but the 59 sections' policy meaning must not be summarized away during initial adoption. The DOCX is the normative product reference and provenance for version `1.0.0`; it is not parsed or loaded at runtime. The Python prompt module is the sole executable source and agents import neither the DOCX nor copies of its text.
+Decorative Word separators and redundant whitespace may be normalized, but policy meaning must not be summarized away during initial adoption. This keeps deployment deterministic, makes the deployed policy reviewable as Markdown, and avoids runtime Word parsing or per-agent copies.
 
-This keeps deployment deterministic and avoids a runtime Word parser, filesystem dependency, or per-agent copies.
+Initial-import fidelity is deterministic:
+
+- numbered sections `1` through `59` must each exist exactly once and appear in ascending order;
+- each section number must have the expected title listed in **Initial section-title manifest** below;
+- section 56 must contain both the `NEVER` and `ALWAYS` groups and their expected non-negotiable entries;
+- tests normalize UTF-8 text by removing a UTF-8 BOM if present, converting CRLF/CR to LF, stripping trailing horizontal whitespace from each line, and removing trailing blank lines before hashing;
+- a SHA-256 checksum of that normalized initial import may be recorded in the fidelity test or verification document; if recorded, it is evidence for the `1.0.0` import and changes only with an explicit versioned policy review.
+
+#### Initial section-title manifest
+
+The fidelity test checks this exact ordered mapping:
+
+```text
+1 ПЯТЬ УРОВНЕЙ МАРКЕТИНГОВОГО МЫШЛЕНИЯ
+2 ГЛАВНАЯ ЗАДАЧА
+3 НИКАКИХ ГАРАНТИЙ РЕЗУЛЬТАТА
+4 НЕ ОТВЕЧАЙ МЕХАНИЧЕСКИ
+5 ROOT PROBLEM
+6 EVIDENCE FIRST
+7 НЕ ЗАМЕНЯЙ ДАННЫЕ ФРЕЙМВОРКОМ
+8 КЛАССИФИКАЦИЯ ВЫВОДОВ
+9 CONFIDENCE
+10 НЕ ПРИДУМЫВАЙ ДАННЫЕ
+11 DATA SUFFICIENCY
+12 BUSINESS BEFORE VANITY METRICS
+13 CTR, CPC И CPL НЕ РАВНЫ БИЗНЕС-УСПЕХУ
+14 ЭКОНОМИКА
+15 БИЗНЕС-МОДЕЛЬ ИМЕЕТ ЗНАЧЕНИЕ
+16 ПРИЧИННОСТЬ
+17 ATTRIBUTION ≠ CAUSALITY
+18 НЕ ОПТИМИЗИРУЙ ЛОКАЛЬНО ЦЕНОЙ СИСТЕМЫ
+19 CUSTOMER REALITY
+20 CUSTOMER JOURNEY НЕ ОБЯЗАН БЫТЬ ЛИНЕЙНЫМ
+21 CUSTOMER VALUE BEFORE COMMUNICATION TRICKS
+22 PROOF
+23 DIFFERENTIATION ≠ FABRICATED UNIQUENESS
+24 BRAND + PERFORMANCE
+25 МЕНТАЛЬНАЯ И ФИЗИЧЕСКАЯ ДОСТУПНОСТЬ
+26 BRAND CONSISTENCY
+27 КАНАЛ — НЕ СТРАТЕГИЯ
+28 CURRENTNESS
+29 RUSSIA CONTEXT
+30 LEGAL BOUNDARY
+31 ETHICS
+32 ПСИХОЛОГИЯ БЕЗ МАНИПУЛЯЦИИ
+33 НЕ ИСПОЛЬЗУЙ УСТАРЕВШИЕ МАРКЕТИНГОВЫЕ ДОГМЫ
+34 SYNTHETIC AI DATA
+35 НЕ ОПТИМИЗИРУЙ КОЛИЧЕСТВО МАРКЕТИНГА
+36 ПРИОРИТИЗАЦИЯ
+37 RECOMMENDATION STANDARD
+38 ALTERNATIVES
+39 RISK
+40 TESTABILITY
+41 НЕ СОЗДАВАЙ ПСЕВДОТОЧНОСТЬ
+42 СТИЛЬ РАБОТЫ
+43 КРИТИКА ИДЕИ
+44 ОБЪЯСНИМОСТЬ
+45 RESPONSE ADAPTATION
+46 LEARNING MODE
+47 USER MATERIALS
+48 DATA QUALITY
+49 TEMPORAL CONSISTENCY
+50 FIRST-PARTY DATA PRIORITY
+51 NO CHANNEL OR FRAMEWORK FETISH
+52 STRATEGIC COHERENCE
+53 OPERATIONAL REALITY
+54 REVERSIBILITY
+55 DO NOT OVERANALYZE
+56 NON-NEGOTIABLE RULES
+57 FINAL QUALITY CONTROL
+58 PRIMARY PRINCIPLE
+59 FINAL PRINCIPLE
+```
+
+The section-56 fidelity check also compares the normalized list items under each exact group heading:
+
+```text
+NEVER
+гарантировать маркетинговый результат
+выдумывать данные
+выдумывать исследования
+выдумывать customer quotes
+выдавать AI simulation за evidence
+путать correlation с causation
+путать lead с customer
+путать revenue с profit
+принимать CTR/CPC/CPL за конечный business result
+использовать fake urgency
+использовать fake scarcity
+использовать fake reviews
+создавать dark patterns
+скрывать существенные ограничения
+выдавать предположение за факт
+использовать устаревший dynamic fact без проверки, если он влияет на решение
+рекомендовать масштабирование без учёта economics
+выбирать framework только ради формы
+
+ALWAYS
+связывать маркетинг с бизнесом
+учитывать клиента
+искать наиболее вероятную root cause
+отделять evidence от hypothesis
+обозначать critical assumptions
+калибровать confidence
+учитывать альтернативы
+учитывать economics
+учитывать downstream effect
+учитывать measurement
+учитывать риски
+сохранять practical focus
+```
+
+For this list comparison only, normalization removes the Markdown bullet marker, trims surrounding whitespace, and removes one terminal semicolon or period before exact string comparison; it does not change case or internal whitespace.
 
 ### Decision 2: Introduce a pure, idempotent composition boundary
 
@@ -107,7 +221,7 @@ Expert Core uses a human-reviewed `MAJOR.MINOR.PATCH` version stored beside the 
 - **MINOR:** adds a material policy area or strengthens behavior in a way that can materially change recommendations;
 - **PATCH:** editorial clarification, typo, formatting normalization, or other low-risk text correction.
 
-Every edit to the executable canonical text increments at least PATCH, even when judged non-semantic, so deployed prompt text is never changed under an unchanged identifier. Product/marketing policy ownership approves policy meaning; engineering owns faithful encoding, composition, tests, and diagnostics. Future changes require a reviewed OpenSpec change (or an explicitly approved equivalent policy-review process), an updated version, tests, and an entry in `docs/expert-core.md` describing the change and compatibility impact.
+Every edit to the executable canonical text increments at least PATCH, even when judged non-semantic, so deployed prompt text is never changed under an unchanged identifier. Product/marketing policy ownership approves policy meaning; engineering owns faithful encoding, composition, tests, and diagnostics. Future changes require a reviewed OpenSpec change (or an explicitly approved equivalent policy-review process), an updated version, tests, and an entry in `docs/product/expert-core.md` describing the change and compatibility impact.
 
 The initial `1.0.0` value is an explicit assumption because the supplied Expert Core document has no embedded policy version; the DOCX package revision is document metadata and is not used as a product-policy version.
 
@@ -127,7 +241,7 @@ Covered agents do not fall back to module-only instructions and the core is neve
 
 Expert Core adds a large stable input prefix to every covered generation request, including each of ContentAgent's multiple generation requests and any existing QC-driven agent rerun. It does not consume the configured `max_output_tokens`, so `TOKEN_BUDGETS` and `MAX_OUTPUT_TOKENS_CAP` will not be increased as part of this change.
 
-Implementation verification will record the canonical character/word size and assert a single copy per request. Staging diagnostics should compare input-token usage and latency before and after rollout when OpenAI usage data is available. The rollout will limit injection to registered standalone agent generation calls; routing, clarification, QC, and chat utility calls will not pay the cost. If context pressure, latency, or cost proves unacceptable, policy compression requires a separately reviewed, versioned Expert Core change rather than silent truncation or selective rule removal.
+Implementation verification will record the canonical character/word size, token-estimation method and result, composition order, and exactly-one-copy evidence in `docs/development/expert-core-verification.md`. Staging diagnostics should compare input-token usage and latency before and after rollout when OpenAI usage data is available, and the same document records whether live usage evidence was available. The rollout will limit injection to registered standalone agent generation calls; routing, clarification, QC, and chat utility calls will not pay the cost. If context pressure, latency, or cost proves unacceptable, policy compression requires a separately reviewed, versioned Expert Core change rather than silent truncation or selective rule removal.
 
 ### Decision 9: Preserve response contracts and test only deterministic guarantees
 
@@ -147,11 +261,13 @@ Tests will inspect composed instructions, component metadata, model-call argumen
 
 Expected implementation changes are limited primarily to:
 
-- `app/prompts/expert_core.py` — canonical executable policy and version;
+- `app/prompts/expert_core/v1.0.0.md` — sole canonical executable instruction body for version `1.0.0`;
+- a small app-owned Python loader/composer module — version selection, resource loading, component markers, and composition without a copied prompt body;
 - `app/services/expert_instruction_composer.py` — pure composition boundary and metadata;
 - `app/agents/base.py` — use the boundary for both text and JSON model requests;
 - `app/logging.py` — internal version diagnostic field, if needed by the chosen structured-log assertion;
-- `docs/expert-core.md` — ownership, source provenance, version history/rules, and change process;
+- `docs/product/expert-core.md` — product contract, ownership, source provenance, version history/rules, and change process;
+- `docs/development/expert-core-verification.md` — durable size, token, composition, and initial-import verification evidence;
 - deterministic tests for the prompt source, composer, base request construction, diagnostics, registry coverage, and unchanged agent result formats.
 
 Dependency direction is:
