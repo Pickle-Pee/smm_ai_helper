@@ -127,6 +127,36 @@ EXPECTED_ALWAYS = (
     "сохранять practical focus",
 )
 
+PROTECTED_EXPERT_CORE_MARKERS = (
+    "# 1. ПЯТЬ УРОВНЕЙ МАРКЕТИНГОВОГО МЫШЛЕНИЯ",
+    "# 59. FINAL PRINCIPLE",
+)
+RUNTIME_PYTHON_ROOTS = ("app", "bot")
+
+
+def _runtime_python_paths(
+    repository_root: Path,
+    runtime_roots: tuple[str, ...] = RUNTIME_PYTHON_ROOTS,
+) -> tuple[Path, ...]:
+    paths = (
+        path
+        for runtime_root in runtime_roots
+        for path in (repository_root / runtime_root).rglob("*.py")
+        if path.is_file()
+    )
+    return tuple(
+        sorted(paths, key=lambda path: path.relative_to(repository_root).as_posix())
+    )
+
+
+def _assert_expert_core_not_duplicated(paths: tuple[Path, ...]) -> None:
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        for marker in PROTECTED_EXPERT_CORE_MARKERS:
+            assert marker not in source, (
+                f"{marker!r} duplicated in runtime Python source: {path}"
+            )
+
 
 def normalize_initial_import(value: str) -> str:
     value = value.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
@@ -235,19 +265,39 @@ def test_loader_rejects_invalid_or_unsupported_versions():
 
 
 def test_runtime_python_files_do_not_duplicate_the_prompt_body():
-    python_sources = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (REPOSITORY_ROOT / "app").rglob("*.py")
-    )
-    assert "# 1. ПЯТЬ УРОВНЕЙ МАРКЕТИНГОВОГО МЫШЛЕНИЯ" not in python_sources
-    assert "# 59. FINAL PRINCIPLE" not in python_sources
+    _assert_expert_core_not_duplicated(_runtime_python_paths(REPOSITORY_ROOT))
 
-    product_docs = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (REPOSITORY_ROOT / "docs" / "product").rglob("*.md")
+
+def test_runtime_python_scan_has_explicit_deterministic_boundaries(tmp_path):
+    expected_paths = (
+        tmp_path / "app" / "alpha.py",
+        tmp_path / "app" / "nested" / "zulu.py",
+        tmp_path / "bot" / "handler.py",
     )
-    assert "# 1. ПЯТЬ УРОВНЕЙ МАРКЕТИНГОВОГО МЫШЛЕНИЯ" not in product_docs
-    assert "# 59. FINAL PRINCIPLE" not in product_docs
+    excluded_paths = (
+        tmp_path / "app" / "prompt.md",
+        tmp_path / "bot" / "notes.txt",
+        tmp_path / "docs" / "product" / "expert-core.md",
+        tmp_path / "scripts" / "outside.py",
+        tmp_path / "tests" / "test_outside.py",
+    )
+    for path in (*reversed(expected_paths), *excluded_paths):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(PROTECTED_EXPERT_CORE_MARKERS[0], encoding="utf-8")
+
+    assert _runtime_python_paths(tmp_path) == expected_paths
+
+
+def test_runtime_python_scan_detects_a_copied_expert_core_marker(tmp_path):
+    duplicated_source = tmp_path / "app" / "duplicated_core.py"
+    duplicated_source.parent.mkdir(parents=True)
+    duplicated_source.write_text(PROTECTED_EXPERT_CORE_MARKERS[1], encoding="utf-8")
+
+    scanned_paths = _runtime_python_paths(tmp_path)
+
+    assert scanned_paths == (duplicated_source,)
+    with pytest.raises(AssertionError, match="duplicated in runtime Python source"):
+        _assert_expert_core_not_duplicated(scanned_paths)
 
 
 def test_composer_is_deterministic_and_preserves_component_order():
