@@ -2,15 +2,18 @@
 
 ## Sources and ownership
 
-- Expert Core has one versioned runtime resource for shared non-negotiable reasoning rules.
-- `docs/product/marketing-orchestrator.md` is the Orchestrator product contract.
-- `docs/product/prompts/orchestrator-production.md` is approved product source material, not a deterministic-foundation runtime prompt.
-- `app/module_registry/v1.0.0.json` owns runtime module descriptors, aliases and authority boundaries.
-- Specialized module prompts own task-specific expertise only.
+- `docs/product/prompts/expert-core-production.md` — shared reasoning policy.
+- `docs/product/prompts/orchestrator-production.md` — orchestration policy.
+- `app/module_registry/v1.0.0.json` — canonical runtime module descriptors, version `1.0.0`.
+- `docs/product/prompts/module-registry-production.md` — approved initial-import material, not runtime data.
+- Specialized module prompts — task-specific expertise only.
 
 A rule is written once under its owner. Shared reasoning belongs to Core; planning/workflow rules to Orchestrator; capability metadata to Registry; expert methods to modules.
 
-## Deterministic Orchestrator foundation
+- CORE владеет общими non-negotiable reasoning rules.
+- ORCHESTRATOR владеет goal interpretation, planning, routing, quality-gate flow, replanning, synthesis и stopping.
+- MODULE REGISTRY владеет read-only descriptors, aliases, internal activation/return contracts и authority limits; current task routing and execution remain outside it.
+- Modules владеют domain methods и module-specific outputs.
 
 For `add-marketing-orchestrator-foundation`, executable planning behavior is typed code plus explicit OpenSpec scenarios and invariants. The foundation must not load `orchestrator-production.md`, copy it into Python, create `app/prompts/orchestrator` or call an LLM. Product source and typed code are not described as two canonical runtime prompts.
 
@@ -27,7 +30,9 @@ A model-driven planner requires a separate OpenSpec change, exactly one versione
 7. Measure token/call budget and latency for model-driven behavior.
 8. Update product docs and roadmap.
 
-For deterministic work with no runtime prompt, prompt version/token review is recorded as not applicable rather than fabricated.
+For Module Registry changes, descriptor content is edited once in the versioned JSON. Python constants and Markdown must not duplicate descriptors. Import/version evidence belongs in `docs/development/module-registry-verification.md`, optionally with normalized JSON SHA-256.
+
+## Review checklist
 
 ## Review checklist
 
