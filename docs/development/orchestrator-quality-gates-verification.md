@@ -14,14 +14,14 @@ Status: reconciled runtime foundation implemented and verified on `agent/add-orc
 
 | Evidence | Result |
 | --- | --- |
-| Quality Gates contracts, canonicalization, total iterative lineage, evaluator propagation, contradictions, decisions, manifest, hostile boundary and isolation | 101 passed; one pre-existing Pydantic warning |
+| Quality Gates contracts, canonicalization, total iterative lineage, evaluator propagation, contradictions, decisions, manifest, hostile boundary, fingerprint evidence and isolation | 167 passed; one pre-existing Pydantic warning |
 | Module Registry | 27 passed |
 | Marketing Orchestrator compatibility | 117 passed; four pre-existing Pydantic warnings |
 | Expert Core, integration, Agent Registry and TaskPipeline compatibility | 43 passed |
 | Historical baseline before initial apply | 269 passed; nine pre-existing warnings |
-| Current full suite | 370 passed; nine pre-existing warnings |
+| Current full suite | 436 passed; nine pre-existing warnings |
 
-Current focused tests prove controlled construction for every public caller-owned contract; exact closed-enum membership; one propagated context per claim; iterative one-parent, multi-parent, multi-level and diamond lineage; cycle rejection; confidence ceilings; decision-trigger retention; propagated decision/manifest source sets; hostile rejection; and an independently declared caller fingerprint field matrix.
+Current focused tests prove controlled construction for every public caller-owned contract; exact closed-enum membership; one propagated context per claim; iterative one-parent, multi-parent, multi-level and diamond lineage; cycle rejection; confidence ceilings; decision-trigger retention; propagated decision/manifest source sets; hostile rejection; and an independently declared caller fingerprint field matrix whose every baseline and mutation successfully passes production evaluation before fingerprint comparison.
 
 ## Canonical vectors
 
@@ -32,7 +32,9 @@ Current focused tests prove controlled construction for every public caller-owne
 
 Tests cover RFC 8785 UTF-16 key ordering and escaping, typed integers/floats, signed zero, UTC offset normalization, every contradiction-side key, and order-significant side reversal. Fingerprints contain caller inputs only and no derived cycle.
 
-The independent matrix names every caller-owned batch, result, claim, evidence, assumption, limitation, contradiction and side field. Legal lineage-type and parent-ID mutations are isolated on a valid non-root claim. Two distinct results prove caller result order normalizes; two-element claim, evidence, assumption, limitation, contradiction, semantic-set and ID-tuple reversals prove each declared order rule without no-op transformations. Each legal semantic mutation changes the fingerprint; set-like order normalizes, side position remains significant, and `batch_fingerprint`, `PropagatedClaimContext`, aggregate and every other derived field remain excluded.
+The independent matrix names every caller-owned batch, result, claim, evidence, assumption, limitation, contradiction and side field. It uses separate evaluator-valid `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, `BLOCKED`, lineage, contradiction, multi-result and multi-record fixture families rather than an overloaded batch. Accepted fixtures contain no failure/blocking reasons; reason fields use their legal failed/blocked states; and the only handoff fixtures use Registry-confirmed `VIRTUAL_CMO` handoffs (`POSITIONING` and `EXPERIMENTS`).
+
+Ordinary leaves use isolated one-path legal mutations. `batch_id`, `result_id`, `claim_id`, `evidence_id`, `assumption_id`, `limitation_id` and `contradiction_id` use independently declared minimal reference-closed renames, with exact changed-path assertions. Gate-coherent coupled evidence is declared separately for status/materiality combinations. `contradiction.left` and `.right` are structural nodes covered by their six independently tested descendant fields each and are not double-counted as mutations. Results, claims, evidence, assumptions, limitations and contradictions use genuine add/remove membership cases. Two distinct results/records/reasons/handoffs/IDs prove every normalization rule; caller left/right reversal remains order-significant. Legal lineage-type and parent-ID changes are isolated on the same valid non-root claim. All 67 declared pairs validate both batches through `QualityGateEvaluator`, check `PLANNING_ONLY`, reject semantic no-ops, require at least two distinct elements for normalization cases, and only then compare fingerprints. Derived `batch_fingerprint`, propagated contexts, aggregates and other output-only fields remain excluded.
 
 ## Propagation and decision evidence
 
@@ -73,7 +75,7 @@ Dedicated tests reject hostile subclasses of string, integer, float, list, tuple
 
 ## Current implementation checks
 
-Full pytest passed with 370 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot` passed. Strict change/all validation and final branch diff checks passed. Historical runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388` remains the pre-reconciliation implementation reference only.
+Full pytest passed with 436 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot` passed. Strict change/all validation and final branch diff checks passed. Historical runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388` remains the pre-reconciliation implementation reference only.
 
 ## Remaining limitations
 
