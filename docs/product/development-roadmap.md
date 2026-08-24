@@ -9,7 +9,7 @@
 
 ## Current
 
-- [ ] Reconcile and implement deterministic `add-marketing-orchestrator-foundation` planning contracts.
+- [x] Implement deterministic `add-marketing-orchestrator-foundation` planning contracts on its task branch; pending review and integration.
 
 ## Infrastructure and quality next
 
