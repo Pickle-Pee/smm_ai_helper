@@ -8,7 +8,7 @@
 
 ## 2. Domain contracts
 
-- [x] 2.1 Добавить internal enums для module type, dependency type, module status и supported tool flags.
+- [x] 2.1 Добавить internal enums для canonical module identifiers, module types и tool capabilities.
 - [x] 2.2 Добавить immutable module descriptor.
 - [x] 2.3 Добавить activation и return contracts без изменения публичных DTO.
 
