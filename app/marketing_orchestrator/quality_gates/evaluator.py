@@ -1,7 +1,6 @@
 from __future__ import annotations
 import hashlib
-from app.module_registry import ModuleRegistry, ModuleResultStatus
-from app.module_registry.registry import ModuleRegistryError, ModuleRegistryNotFoundError
+from app.module_registry import ModuleRegistry, ModuleRegistryError, ModuleRegistryNotFoundError, ModuleResultStatus
 from .canonical import derive_id
 from .contracts import *
 from .errors import QualityGateContractError
@@ -36,7 +35,6 @@ class QualityGateEvaluator:
                     if c.declared_output_name not in descriptor.outputs:raise QualityGateContractError(f"declared_output_name is not registered for result {r.result_id}")
                     for pid in c.parent_claim_ids:
                         if pid not in claims:raise QualityGateContractError(f"unresolved parent claim ID: {pid}")
-                    if not confidence_within_parent_ceiling(c.confidence,[claims[x].confidence for x in c.parent_claim_ids]):raise QualityGateContractError(f"claim confidence exceeds parent ceiling: {c.claim_id}")
                     for eid in c.evidence_ids:
                         if eid not in evidence or ev_owner[eid] is not r:raise QualityGateContractError(f"unresolved local evidence ID: {eid}")
                     local_a={x.assumption_id for x in r.assumptions}; local_l={x.limitation_id for x in r.limitations}
@@ -50,6 +48,26 @@ class QualityGateEvaluator:
         except (ModuleRegistryError,ModuleRegistryNotFoundError,KeyError,ValueError,TypeError,OverflowError) as e:
             if isinstance(e,QualityGateContractError):raise
             raise QualityGateContractError("Registry validation failed") from e
+        contexts_by_id={}
+        visiting=set()
+        def propagate(claim_id):
+            if claim_id in contexts_by_id:return contexts_by_id[claim_id]
+            if claim_id in visiting:raise QualityGateContractError(f"lineage cycle detected: {claim_id}")
+            visiting.add(claim_id)
+            claim=claims[claim_id]
+            parents=tuple(propagate(pid) for pid in claim.parent_claim_ids)
+            if not confidence_within_parent_ceiling(claim.confidence,[p.effective_confidence for p in parents]):
+                raise QualityGateContractError(f"claim confidence exceeds parent ceiling: {claim.claim_id}")
+            context=PropagatedClaimContext._make(
+                batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,claim_id=claim.claim_id,
+                effective_confidence=claim.confidence,
+                evidence_ids=tuple(sorted({*claim.evidence_ids,*(x for p in parents for x in p.evidence_ids)})),
+                assumption_ids=tuple(sorted({*claim.assumption_ids,*(x for p in parents for x in p.assumption_ids)})),
+                limitation_ids=tuple(sorted({*claim.limitation_ids,*(x for p in parents for x in p.limitation_ids)})),
+            )
+            visiting.remove(claim_id);contexts_by_id[claim_id]=context;return context
+        for claim_id in sorted(claims):propagate(claim_id)
+        propagated_contexts=tuple(contexts_by_id[x] for x in sorted(contexts_by_id))
         base={r.result_id:self._base(r) for r in batch.results}
         records=[]; dlimits={}; exclusions={}; collision={}
         def add_exclusion(rid,cid,reason,ctr=None,lim=None):
@@ -95,15 +113,20 @@ class QualityGateEvaluator:
             accepted=tuple(sorted(c.claim_id for c in r.claims if c.claim_id not in claim_exc)); excluded=tuple(sorted(c.claim_id for c in r.claims if c.claim_id in claim_exc)); outcome=base[r.result_id]
             fr=set(r.failure_reasons)
             related_dl=tuple(sorted(x.limitation_id for x in dlimits.values() if r.result_id in x.related_result_ids))
+            owned_contexts=tuple(contexts_by_id[c.claim_id] for c in r.claims)
+            propagated_evidence={x for c in owned_contexts for x in c.evidence_ids}
+            propagated_assumptions={x for c in owned_contexts for x in c.assumption_ids}
+            propagated_limitations={x for c in owned_contexts for x in c.limitation_ids}
+            inherited_material=any(limitations[x].materiality is Materiality.MATERIAL for x in propagated_limitations)
             if outcome in (GateOutcome.PASS,GateOutcome.PASS_WITH_LIMITATIONS) and not accepted:outcome=GateOutcome.FAIL;fr.add(FailureReason.NO_USABLE_CLAIMS)
-            elif related_dl:outcome=GateOutcome.PASS_WITH_LIMITATIONS
+            elif related_dl or inherited_material:outcome=GateOutcome.PASS_WITH_LIMITATIONS
             if outcome in (GateOutcome.FAIL,GateOutcome.BLOCKED):add_exclusion(r.result_id,None,ExclusionReason.RESULT_FAILED if outcome is GateOutcome.FAIL else ExclusionReason.RESULT_BLOCKED)
             auth=AuthorityStatus.REQUIRES_REVIEW if any(c.authority_status is AuthorityStatus.REQUIRES_REVIEW for c in r.claims if c.claim_id in accepted) else AuthorityStatus.WITHIN_SCOPE
-            decisions.append(GateDecision._make(batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,result_id=r.result_id,module_id=r.module_id,module_status=r.module_status,structural_validity=StructuralValidity.VALID,gate_outcome=outcome,synthesis_eligibility=SynthesisEligibility.ELIGIBLE if outcome in (GateOutcome.PASS,GateOutcome.PASS_WITH_LIMITATIONS) else SynthesisEligibility.INELIGIBLE,execution_readiness=ExecutionReadiness.PLANNING_ONLY,authority_status=auth,evidence_sufficiency=r.evidence_sufficiency,accepted_claim_ids=accepted,excluded_claim_ids=excluded,evidence_ids=tuple(sorted(x.evidence_id for x in r.evidence)),assumption_ids=tuple(sorted(x.assumption_id for x in r.assumptions)),limitation_ids=tuple(sorted([x.limitation_id for x in r.limitations]+list(related_dl))),contradiction_ids=tuple(sorted(c.contradiction_id for c in batch.contradictions if c.left.claim_id in {x.claim_id for x in r.claims} or c.right.claim_id in {x.claim_id for x in r.claims})),failure_reasons=tuple(sorted(fr,key=lambda x:x.value)),blocking_reasons=tuple(sorted(r.blocking_reasons,key=lambda x:x.value))))
+            decisions.append(GateDecision._make(batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,result_id=r.result_id,module_id=r.module_id,module_status=r.module_status,structural_validity=StructuralValidity.VALID,gate_outcome=outcome,synthesis_eligibility=SynthesisEligibility.ELIGIBLE if outcome in (GateOutcome.PASS,GateOutcome.PASS_WITH_LIMITATIONS) else SynthesisEligibility.INELIGIBLE,execution_readiness=ExecutionReadiness.PLANNING_ONLY,authority_status=auth,evidence_sufficiency=r.evidence_sufficiency,accepted_claim_ids=accepted,excluded_claim_ids=excluded,evidence_ids=tuple(sorted({*(x.evidence_id for x in r.evidence),*propagated_evidence})),assumption_ids=tuple(sorted({*(x.assumption_id for x in r.assumptions),*propagated_assumptions})),limitation_ids=tuple(sorted({*(x.limitation_id for x in r.limitations),*propagated_limitations,*related_dl})),contradiction_ids=tuple(sorted(c.contradiction_id for c in batch.contradictions if c.left.claim_id in {x.claim_id for x in r.claims} or c.right.claim_id in {x.claim_id for x in r.claims})),failure_reasons=tuple(sorted(fr,key=lambda x:x.value)),blocking_reasons=tuple(sorted(r.blocking_reasons,key=lambda x:x.value))))
         accepted_results={d.result_id for d in decisions if d.gate_outcome in (GateOutcome.PASS,GateOutcome.PASS_WITH_LIMITATIONS)}
         all_exc=tuple(sorted(exclusions.values(),key=lambda x:x.exclusion_id)); manifest_exc=tuple(x for x in all_exc if (x.result_id is not None) or owner[x.claim_id].result_id in accepted_results)
         manifest=SynthesisEligibilityManifest._make(batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,evaluated_result_ids=tuple(sorted(results)),accepted_result_ids=tuple(sorted(accepted_results)),accepted_claim_ids=tuple(sorted(x for d in decisions if d.result_id in accepted_results for x in d.accepted_claim_ids)),limitation_ids=tuple(sorted({x for d in decisions if d.result_id in accepted_results for x in d.limitation_ids})),unresolved_contradiction_ids=tuple(sorted(r.contradiction_id for r in records if r.state is not ContradictionState.PRIORITIZED and any(owner[x].result_id in accepted_results for x in r.preserved_claim_ids))),exclusions=manifest_exc,execution_readiness=ExecutionReadiness.PLANNING_ONLY)
-        return BatchEvaluationResult._make(batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,gate_decisions=tuple(decisions),contradiction_records=tuple(records),derived_limitations=tuple(sorted(dlimits.values(),key=lambda x:x.limitation_id)),exclusions=all_exc,synthesis_manifest=manifest,execution_readiness=ExecutionReadiness.PLANNING_ONLY)
+        return BatchEvaluationResult._make(batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,gate_decisions=tuple(decisions),propagated_claim_contexts=propagated_contexts,contradiction_records=tuple(records),derived_limitations=tuple(sorted(dlimits.values(),key=lambda x:x.limitation_id)),exclusions=all_exc,synthesis_manifest=manifest,execution_readiness=ExecutionReadiness.PLANNING_ONLY)
     @staticmethod
     def _base(r):
         material=any(x.materiality is Materiality.MATERIAL for x in r.limitations)

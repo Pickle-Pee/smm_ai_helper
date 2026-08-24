@@ -1,6 +1,6 @@
 # Orchestrator Quality Gates verification
 
-Status: runtime apply paused after independent review. OpenSpec now defines the previously missing propagation output ownership; reviewed runtime and evidence remain incomplete until the unchecked remediation tasks pass.
+Status: reconciled runtime foundation implemented and verified on `agent/add-orchestrator-quality-gates` without execution-path integration.
 
 ## Identity and ownership
 
@@ -14,14 +14,14 @@ Status: runtime apply paused after independent review. OpenSpec now defines the 
 
 | Evidence | Result |
 | --- | --- |
-| Quality Gates contracts, canonicalization, evaluator, propagation, contradictions, decisions, manifest, hostile boundary and isolation | 60 passed; one pre-existing Pydantic warning |
+| Quality Gates contracts, canonicalization, evaluator propagation, contradictions, decisions, manifest, hostile boundary and isolation | 93 passed; one pre-existing Pydantic warning |
 | Module Registry | 27 passed |
 | Marketing Orchestrator compatibility | 117 passed; four pre-existing Pydantic warnings |
 | Expert Core, integration, Agent Registry and TaskPipeline compatibility | 43 passed |
-| Baseline before apply | 269 passed; nine pre-existing warnings |
-| Full suite after apply | 329 passed; nine pre-existing warnings |
+| Historical baseline before initial apply | 269 passed; nine pre-existing warnings |
+| Current full suite | 362 passed; nine pre-existing warnings |
 
-The historical focused run above is retained as executed evidence for commit `af28b9273d881e6e8ff89b62930fe36bbf401388`; it does not prove the reconciled propagation contexts, controlled construction, full trigger retention, exhaustive hostile graph, independent enum membership or complete fingerprint matrix.
+Current focused tests prove controlled construction for every public caller-owned contract; exact closed-enum membership; one propagated context per claim; recursive one-parent, multi-parent, multi-level and diamond lineage; cycle rejection; confidence ceilings; decision-trigger retention; propagated decision/manifest source sets; hostile rejection; and an independently declared caller fingerprint field matrix.
 
 ## Canonical vectors
 
@@ -31,6 +31,17 @@ The historical focused run above is retained as executed evidence for commit `af
 - Exclusion vector: `exc_a2e97bf393be35ca457a154117ceb728`.
 
 Tests cover RFC 8785 UTF-16 key ordering and escaping, typed integers/floats, signed zero, UTC offset normalization, every contradiction-side key, and order-significant side reversal. Fingerprints contain caller inputs only and no derived cycle.
+
+The independent matrix names every caller-owned batch, result, claim, evidence, assumption, limitation, contradiction and side field. Each legal semantic mutation changes the fingerprint; set-like order normalizes, side position remains significant, and `batch_fingerprint`, `PropagatedClaimContext`, aggregate and every other derived field remain excluded.
+
+## Propagation and decision evidence
+
+- `PropagatedClaimContext` is frozen/slotted, output-only, batch-identified, and emitted exactly once per claim in claim-ID order.
+- Evaluator DFS validates resolved parents and rejects self, two-node and longer cycles before output construction.
+- Evidence, assumptions, material and non-material limitations recursively union by stable ID; diamond paths deduplicate and unequal duplicate batch identities fail deterministically.
+- Effective confidence never exceeds the most conservative effective parent; repeated equal evaluation is idempotent and caller records are unchanged.
+- Owning `GateDecision` values merge declared and effective IDs without unrelated records or duplicates. Effective material limitations produce `PASS_WITH_LIMITATIONS` and accepted-result propagated limitations enter the manifest.
+- Decision precedence changes only `decision`; all validated replan and stop reasons remain in their corresponding lexical tuples, including mixed terminal/replan/lower-stop requests.
 
 ## Contradiction and derived-output evidence
 
@@ -46,7 +57,7 @@ Tests cover RFC 8785 UTF-16 key ordering and escaping, typed integers/floats, si
 
 ## Hostile and error boundary
 
-Dedicated tests reject hostile list, tuple, set, dict, string, datetime subclass and mapping-proxy inputs before hostile iteration, hashing, formatting or backing access. Wrong nested items are type-checked before hashing. Expected Registry errors are converted to `QualityGateContractError`; `BaseException` and programmer defects are not caught.
+Dedicated tests reject hostile subclasses of string, integer, float, list, tuple, dict, set and frozenset plus custom `Mapping`, `Sequence`, `Set`, datetime subclass, nested values and mapping proxies before hostile iteration, equality, length, lookup, copying, representation, formatting, hashing, containment, numeric conversion or reduction. Controlled binding converts missing, unknown, conflicting and output-only arguments to `QualityGateContractError`; valid construction and immutability remain intact. Expected public Registry errors are converted to `QualityGateContractError`; `BaseException` and programmer defects are not caught.
 
 ## Registry and isolation
 
@@ -59,10 +70,10 @@ Dedicated tests reject hostile list, tuple, set, dict, string, datetime subclass
 - Existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `TaskPipelineService`, API and Telegram paths do not import Quality Gates and remain unchanged in the branch diff.
 - Outputs contain no plan, prose, raw module dump, chain-of-thought field or public response DTO.
 
-## Historical implementation checks
+## Current implementation checks
 
-At reviewed runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388`, full pytest passed with 329 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot`, strict change validation, strict all-OpenSpec validation (11 items), and both branch/working-tree diff checks passed. These historical results do not close the unchecked reconciliation tasks; the complete validation matrix must be rerun after the separate runtime apply.
+Full pytest passed with 362 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot` passed. Strict change/all validation and final branch diff checks passed. Historical runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388` remains the pre-reconciliation implementation reference only.
 
 ## Remaining limitations
 
-Runtime remediation is required before this change is implementation-complete: controlled construction across every caller-owned contract; evaluator-integrated propagated contexts and source sets; full trigger retention; public Registry error imports; and independent enum, hostile-input and fingerprint evidence. The fixed evidence vectors must remain unchanged and be rerun. Adapters from existing heterogeneous agent dictionaries, workflow integration, persistence and user-facing synthesis remain separate reviewed changes. Evidence independence and semantic authority inference remain intentionally deferred.
+Adapters from existing heterogeneous agent dictionaries, workflow integration, persistence and user-facing synthesis remain separate reviewed changes. Evidence independence and semantic authority inference remain intentionally deferred. These are intentional product boundaries, not blockers for this planning-only foundation.

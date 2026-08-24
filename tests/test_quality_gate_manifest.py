@@ -17,5 +17,7 @@ def test_manifest_accounts_for_accepted_failed_and_blocked_results():
 def test_aggregate_and_outputs_have_no_prose_or_public_dump_fields():
     out=QualityGateEvaluator().evaluate(batch())
     forbidden={"summary","reasoning","chain_of_thought","response","raw_result","module_dump","plan"}
-    for contract in (BatchEvaluationResult,GateDecision,ContradictionRecord,SynthesisEligibilityManifest,DecisionResult):assert forbidden.isdisjoint(x.name for x in fields(contract))
+    for contract in (BatchEvaluationResult,PropagatedClaimContext,GateDecision,ContradictionRecord,SynthesisEligibilityManifest,DecisionResult):assert forbidden.isdisjoint(x.name for x in fields(contract))
     assert all(x.batch_id==out.batch_id and x.batch_fingerprint==out.batch_fingerprint for x in out.gate_decisions)
+    assert len(out.propagated_claim_contexts)==1
+    assert all(x.batch_id==out.batch_id and x.batch_fingerprint==out.batch_fingerprint for x in out.propagated_claim_contexts)

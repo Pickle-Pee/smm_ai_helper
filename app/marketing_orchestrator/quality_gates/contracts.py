@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 import math
@@ -21,7 +21,7 @@ __all__ = (
     "StopReason", "EvidenceRecord", "AssumptionRecord", "LimitationRecord",
     "NormalizedClaim", "NormalizedModuleResult", "ContradictionSide",
     "ContradictionInput", "EvaluationBatch", "GateDecision", "ContradictionRecord",
-    "DerivedLimitationRecord", "ExclusionRecord", "SynthesisEligibilityManifest",
+    "PropagatedClaimContext", "DerivedLimitationRecord", "ExclusionRecord", "SynthesisEligibilityManifest",
     "BatchEvaluationResult", "DecisionRequest", "DecisionResult",
 )
 
@@ -49,6 +49,29 @@ class ExclusionSubjectType(str, Enum): RESULT="RESULT"; CLAIM="CLAIM"
 class ReplanningDecision(str, Enum): CONTINUE_CURRENT_PLAN="CONTINUE_CURRENT_PLAN"; REPLAN_REQUIRED="REPLAN_REQUIRED"; STOP="STOP"; BLOCKED="BLOCKED"
 class ReplanReason(str, Enum): MATERIAL_FINDING="MATERIAL_FINDING"; DEPENDENCY_INVALIDATED="DEPENDENCY_INVALIDATED"; REVERSIBLE_TEST_HIGHER_VALUE="REVERSIBLE_TEST_HIGHER_VALUE"
 class StopReason(str, Enum): SCOPE_COMPLETE="SCOPE_COMPLETE"; SUFFICIENT_EVIDENCE="SUFFICIENT_EVIDENCE"; DIMINISHING_VALUE="DIMINISHING_VALUE"; TOOL_LIMIT_REACHED="TOOL_LIMIT_REACHED"; CAPABILITY_LIMIT_REACHED="CAPABILITY_LIMIT_REACHED"; RESULT_FAILED="RESULT_FAILED"
+
+class _ContractMeta(type):
+    """Validate dataclass argument binding without exposing generated TypeError."""
+    def __call__(cls, *args, **kwargs):
+        contract_fields=tuple(f for f in fields(cls) if f.init)
+        positional=tuple(f for f in contract_fields if not f.kw_only)
+        if len(args)>len(positional):
+            raise QualityGateContractError(f"{cls.__name__} received too many positional arguments")
+        supplied={f.name for f in positional[:len(args)]}
+        unknown=tuple(sorted(k for k in kwargs if k not in {f.name for f in contract_fields}))
+        if unknown:
+            raise QualityGateContractError(f"{cls.__name__} received unknown field: {unknown[0]}")
+        duplicate=tuple(f.name for f in positional[:len(args)] if f.name in kwargs)
+        if duplicate:
+            raise QualityGateContractError(f"{cls.__name__} received conflicting field: {duplicate[0]}")
+        supplied.update(kwargs)
+        missing=tuple(f.name for f in contract_fields if f.name not in supplied and f.default is MISSING and f.default_factory is MISSING)
+        if missing:
+            raise QualityGateContractError(f"{cls.__name__} missing required field: {missing[0]}")
+        return super().__call__(*args, **kwargs)
+
+class _Contract(metaclass=_ContractMeta):
+    pass
 
 _ID=re.compile(r"^(bat|res|clm|evd|asm|lim|ctr|exc)_[a-z0-9][a-z0-9_-]{0,62}$", re.ASCII)
 _KEY=re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,127}$", re.ASCII)
@@ -89,16 +112,16 @@ def _scalar(v,field):
     return v
 
 @dataclass(frozen=True,slots=True)
-class EvidenceRecord:
+class EvidenceRecord(_Contract):
     evidence_id:str; source_class:EvidenceSourceClass; provenance:str; observed_at:datetime|None=None
     def __post_init__(self):
         object.__setattr__(self,"evidence_id",_text(self.evidence_id,"evidence_id",prefix="evd")); _enum(self.source_class,EvidenceSourceClass,"source_class"); _text(self.provenance,"provenance"); object.__setattr__(self,"observed_at",_dt(self.observed_at,"observed_at"))
 @dataclass(frozen=True,slots=True)
-class AssumptionRecord:
+class AssumptionRecord(_Contract):
     assumption_id:str; description:str; materiality:Materiality
     def __post_init__(self): _text(self.assumption_id,"assumption_id",prefix="asm"); _text(self.description,"description"); _enum(self.materiality,Materiality,"materiality")
 @dataclass(frozen=True,slots=True)
-class LimitationRecord:
+class LimitationRecord(_Contract):
     limitation_id:str; reason:LimitationReason; materiality:Materiality; related_result_ids:tuple[str,...]=(); related_claim_ids:tuple[str,...]=(); related_contradiction_ids:tuple[str,...]=(); description:str|None=None
     def __post_init__(self):
         _text(self.limitation_id,"limitation_id",prefix="lim"); _enum(self.reason,LimitationReason,"reason"); _enum(self.materiality,Materiality,"materiality")
@@ -106,14 +129,14 @@ class LimitationRecord:
         if not self.related_result_ids and not self.related_claim_ids: raise QualityGateContractError("caller limitation must reference a result or claim")
         if self.description is not None:_text(self.description,"description")
 @dataclass(frozen=True,slots=True)
-class NormalizedClaim:
+class NormalizedClaim(_Contract):
     claim_id:str; declared_output_name:str; claim_type:ClaimType; confidence:Confidence; authority_status:AuthorityStatus; value:Any; lineage_type:ClaimLineageType; parent_claim_ids:tuple[str,...]=(); evidence_ids:tuple[str,...]=(); assumption_ids:tuple[str,...]=(); limitation_ids:tuple[str,...]=()
     def __post_init__(self):
         _text(self.claim_id,"claim_id",prefix="clm"); _text(self.declared_output_name,"declared_output_name"); _enum(self.claim_type,ClaimType,"claim_type"); _enum(self.confidence,Confidence,"confidence"); _enum(self.authority_status,AuthorityStatus,"authority_status"); _scalar(self.value,"value"); _enum(self.lineage_type,ClaimLineageType,"lineage_type")
         for n,p in (("parent_claim_ids","clm"),("evidence_ids","evd"),("assumption_ids","asm"),("limitation_ids","lim")): object.__setattr__(self,n,tuple(sorted(_ids(getattr(self,n),n,p))))
         if (self.lineage_type is ClaimLineageType.ORIGINAL) != (not self.parent_claim_ids): raise QualityGateContractError("lineage_type and parent_claim_ids are incoherent")
 @dataclass(frozen=True,slots=True,kw_only=True)
-class NormalizedModuleResult:
+class NormalizedModuleResult(_Contract):
     result_id:str; module_id:ModuleId; module_status:ModuleResultStatus; claims:tuple[NormalizedClaim,...]=(); evidence:tuple[EvidenceRecord,...]=(); assumptions:tuple[AssumptionRecord,...]=(); limitations:tuple[LimitationRecord,...]=(); failure_reasons:frozenset[FailureReason]=frozenset(); blocking_reasons:frozenset[BlockingReason]=frozenset(); evidence_sufficiency:EvidenceSufficiency; handoff_module_ids:frozenset[ModuleId]=frozenset()
     def __post_init__(self):
         _text(self.result_id,"result_id",prefix="res"); _enum(self.module_id,ModuleId,"module_id"); _enum(self.module_status,ModuleResultStatus,"module_status"); _enum(self.evidence_sufficiency,EvidenceSufficiency,"evidence_sufficiency")
@@ -124,21 +147,21 @@ class NormalizedModuleResult:
             vals=_seq(getattr(self,n),n,setlike=True,item_type=c)
             object.__setattr__(self,n,frozenset(vals))
 @dataclass(frozen=True,slots=True,kw_only=True)
-class ContradictionSide:
+class ContradictionSide(_Contract):
     claim_id:str; evidence_id:str|None=None; object_key:str; segment_key:str; period_key:str; metric_definition_key:str
     def __post_init__(self):
         _text(self.claim_id,"claim_id",prefix="clm")
         for n in ("object_key","segment_key","period_key","metric_definition_key"):_text(getattr(self,n),n,key=True)
         if self.evidence_id is not None:_text(self.evidence_id,"evidence_id",prefix="evd")
 @dataclass(frozen=True,slots=True)
-class ContradictionInput:
+class ContradictionInput(_Contract):
     contradiction_id:str; left:ContradictionSide; right:ContradictionSide
     def __post_init__(self):
         _text(self.contradiction_id,"contradiction_id",prefix="ctr")
         if type(self.left) is not ContradictionSide or type(self.right) is not ContradictionSide:raise QualityGateContractError("left and right must be exact ContradictionSide values")
         if self.left.claim_id==self.right.claim_id:raise QualityGateContractError("contradiction side claim IDs must differ")
 @dataclass(frozen=True,slots=True)
-class EvaluationBatch:
+class EvaluationBatch(_Contract):
     batch_id:str; results:tuple[NormalizedModuleResult,...]; contradictions:tuple[ContradictionInput,...]=(); evaluation_at:datetime|None=None; batch_fingerprint:str=field(init=False)
     def __post_init__(self):
         _text(self.batch_id,"batch_id",prefix="bat")
@@ -151,7 +174,7 @@ class EvaluationBatch:
         object.__setattr__(self,"batch_fingerprint",fingerprint_batch(self))
 
 _DERIVED_CONSTRUCTION:ContextVar[bool]=ContextVar("quality_gates_derived_construction",default=False)
-class _Derived:
+class _Derived(_Contract):
     def __post_init__(self):
         if not _DERIVED_CONSTRUCTION.get(): raise QualityGateContractError("derived contracts are output-only")
     @classmethod
@@ -162,6 +185,9 @@ class _Derived:
 @dataclass(frozen=True,slots=True)
 class GateDecision(_Derived):
     batch_id:str; batch_fingerprint:str; result_id:str; module_id:ModuleId; module_status:ModuleResultStatus; structural_validity:StructuralValidity; gate_outcome:GateOutcome; evidence_sufficiency:EvidenceSufficiency; accepted_claim_ids:tuple[str,...]; excluded_claim_ids:tuple[str,...]; assumption_ids:tuple[str,...]; evidence_ids:tuple[str,...]; limitation_ids:tuple[str,...]; contradiction_ids:tuple[str,...]; failure_reasons:tuple[FailureReason,...]; blocking_reasons:tuple[BlockingReason,...]; authority_status:AuthorityStatus; synthesis_eligibility:SynthesisEligibility; execution_readiness:ExecutionReadiness
+@dataclass(frozen=True,slots=True)
+class PropagatedClaimContext(_Derived):
+    batch_id:str; batch_fingerprint:str; claim_id:str; effective_confidence:Confidence; evidence_ids:tuple[str,...]=(); assumption_ids:tuple[str,...]=(); limitation_ids:tuple[str,...]=()
 @dataclass(frozen=True,slots=True)
 class ContradictionRecord(_Derived):
     batch_id:str; batch_fingerprint:str; contradiction_id:str; left:ContradictionSide; right:ContradictionSide; state:ContradictionState; preferred_claim_id:str|None; precedence_reason:ContradictionPrecedenceReason|None; preserved_claim_ids:tuple[str,...]; excluded_claim_ids:tuple[str,...]; derived_limitation_ids:tuple[str,...]
@@ -176,9 +202,9 @@ class SynthesisEligibilityManifest(_Derived):
     batch_id:str; batch_fingerprint:str; evaluated_result_ids:tuple[str,...]; accepted_result_ids:tuple[str,...]; accepted_claim_ids:tuple[str,...]; limitation_ids:tuple[str,...]; unresolved_contradiction_ids:tuple[str,...]; exclusions:tuple[ExclusionRecord,...]; execution_readiness:ExecutionReadiness
 @dataclass(frozen=True,slots=True)
 class BatchEvaluationResult(_Derived):
-    batch_id:str; batch_fingerprint:str; gate_decisions:tuple[GateDecision,...]; contradiction_records:tuple[ContradictionRecord,...]; derived_limitations:tuple[DerivedLimitationRecord,...]; exclusions:tuple[ExclusionRecord,...]; synthesis_manifest:SynthesisEligibilityManifest; execution_readiness:ExecutionReadiness
+    batch_id:str; batch_fingerprint:str; gate_decisions:tuple[GateDecision,...]; propagated_claim_contexts:tuple[PropagatedClaimContext,...]; contradiction_records:tuple[ContradictionRecord,...]; derived_limitations:tuple[DerivedLimitationRecord,...]; exclusions:tuple[ExclusionRecord,...]; synthesis_manifest:SynthesisEligibilityManifest; execution_readiness:ExecutionReadiness
 @dataclass(frozen=True,slots=True)
-class DecisionRequest:
+class DecisionRequest(_Contract):
     batch_id:str; batch_fingerprint:str; gate_decision:GateDecision; replan_reasons:frozenset[ReplanReason]=frozenset(); stop_reasons:frozenset[StopReason]=frozenset(); blocking_reasons:frozenset[BlockingReason]=frozenset()
     def __post_init__(self):
         _text(self.batch_id,"batch_id",prefix="bat")

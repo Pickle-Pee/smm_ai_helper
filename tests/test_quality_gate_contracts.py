@@ -19,7 +19,7 @@ def test_required_evidence_sufficiency_and_side_field_shape():
     assert tuple(x.name for x in fields(ContradictionSide))==("claim_id","evidence_id","object_key","segment_key","period_key","metric_definition_key")
     assert tuple(x.name for x in fields(ContradictionInput))==("contradiction_id","left","right")
     assert tuple(x.name for x in fields(ContradictionRecord))[3:5]==("left","right")
-    with pytest.raises(TypeError):NormalizedModuleResult(result_id="res_x",module_id=ModuleId.VIRTUAL_CMO,module_status=ModuleResultStatus.PASS)
+    with pytest.raises(QualityGateContractError):NormalizedModuleResult(result_id="res_x",module_id=ModuleId.VIRTUAL_CMO,module_status=ModuleResultStatus.PASS)
 def test_contracts_freeze_sources_and_derived_are_output_only():
     src=[claim()]; r=result(claims=src); src.clear(); assert len(r.claims)==1
     with pytest.raises(FrozenInstanceError):r.result_id="res_other"

@@ -17,8 +17,9 @@ class DecisionEvaluator:
             if StopReason.RESULT_FAILED in sr:raise QualityGateContractError("accepted decision forbids RESULT_FAILED")
             terminal=tuple(x for x in sr if x in (StopReason.SCOPE_COMPLETE,StopReason.SUFFICIENT_EVIDENCE))
             lower=tuple(x for x in sr if x not in terminal)
-            if terminal:d=ReplanningDecision.STOP;selected=((),terminal,())
-            elif rr:d=ReplanningDecision.REPLAN_REQUIRED;selected=(rr,(),())
-            elif lower:d=ReplanningDecision.STOP;selected=((),lower,())
-            else:d=ReplanningDecision.CONTINUE_CURRENT_PLAN;selected=((),(),())
+            if terminal:d=ReplanningDecision.STOP
+            elif rr:d=ReplanningDecision.REPLAN_REQUIRED
+            elif lower:d=ReplanningDecision.STOP
+            else:d=ReplanningDecision.CONTINUE_CURRENT_PLAN
+            selected=(rr,sr,())
         return DecisionResult._make(batch_id=req.batch_id,batch_fingerprint=req.batch_fingerprint,result_id=g.result_id,gate_outcome=g.gate_outcome,decision=d,replan_reasons=selected[0],stop_reasons=selected[1],blocking_reasons=selected[2],execution_readiness=ExecutionReadiness.PLANNING_ONLY)
