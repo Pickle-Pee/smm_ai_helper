@@ -11,6 +11,8 @@ from app.prompts.expert_core import (
     EXPERT_CORE_VERSION,
     ExpertCoreResourceError,
     load_expert_core,
+    normalized_expert_core_sha256,
+    validate_expert_core,
 )
 from app.services.expert_instruction_composer import (
     EXPERT_CORE_END,
@@ -150,6 +152,48 @@ def test_expert_core_version_and_packaged_resource_are_available():
     resource = resources.files("app.prompts.expert_core").joinpath("v1.0.0.md")
     assert resource.is_file()
     assert load_expert_core() == resource.read_text(encoding="utf-8").strip()
+    assert normalized_expert_core_sha256(load_expert_core()) == EXPECTED_NORMALIZED_SHA256
+
+
+@pytest.mark.parametrize(
+    "invalid_content",
+    [
+        "CORRUPTED BUT NONEMPTY",
+        load_expert_core()[:1000],
+        load_expert_core().replace("# 59. FINAL PRINCIPLE", "# 59. MODIFIED", 1),
+    ],
+    ids=("corrupted", "truncated", "modified"),
+)
+def test_runtime_integrity_rejects_corrupted_truncated_or_modified_core(invalid_content):
+    with pytest.raises(ExpertCoreResourceError, match="checksum mismatch"):
+        validate_expert_core(invalid_content)
+
+
+def test_invalid_content_is_not_cached_as_valid(monkeypatch):
+    canonical_content = resources.files("app.prompts.expert_core").joinpath(
+        "v1.0.0.md"
+    ).read_text(encoding="utf-8")
+
+    class FakeResource:
+        content = "CORRUPTED BUT NONEMPTY"
+
+        def joinpath(self, _filename):
+            return self
+
+        def read_text(self, encoding):
+            assert encoding == "utf-8"
+            return self.content
+
+    fake_resource = FakeResource()
+    monkeypatch.setattr("app.prompts.expert_core.files", lambda _package: fake_resource)
+    load_expert_core.cache_clear()
+    try:
+        with pytest.raises(ExpertCoreResourceError, match="checksum mismatch"):
+            load_expert_core()
+        fake_resource.content = canonical_content
+        assert normalized_expert_core_sha256(load_expert_core()) == EXPECTED_NORMALIZED_SHA256
+    finally:
+        load_expert_core.cache_clear()
 
 
 def test_expert_core_resource_is_in_current_docker_build_context():
@@ -270,6 +314,14 @@ def test_composer_fails_closed_for_invalid_or_empty_core():
         composer = ExpertInstructionComposer(core_loader=loader)
         with pytest.raises(ExpertInstructionCompositionError):
             composer.compose("module")
+
+
+def test_composer_rejects_corrupted_injected_loader_result():
+    composer = ExpertInstructionComposer(
+        core_loader=lambda _version: "CORRUPTED BUT NONEMPTY"
+    )
+    with pytest.raises(ExpertInstructionCompositionError, match="Invalid Expert Core"):
+        composer.compose("module")
 
 
 def test_composer_rejects_invalid_active_version_before_loading():

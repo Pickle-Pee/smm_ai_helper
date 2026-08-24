@@ -24,6 +24,14 @@ Measured result:
 - section 56: exact expected `NEVER` and `ALWAYS` groups matched;
 - normalized SHA-256: `5dad2b61b14c6a137668bd7ed0a5ee3b5cff45235d7c79726337b1e3529d72f9`.
 
+The same normalization and version-specific checksum are runtime invariants in
+`app.prompts.expert_core`. The default resource loader validates before returning
+and caching content, and the composer validates injected-loader results again.
+Regression tests prove that non-empty corruption, truncation, and modification
+fail with the dedicated resource/composition error before a model client is
+called; the model fake call count remains exactly zero. A failed load is not
+cached as valid content.
+
 ## Size and token estimate
 
 Measurements use the normalized canonical text:
@@ -50,6 +58,18 @@ Deterministic tests verify:
 - a multi-request `ContentAgent` run adds one core to each request without adding a request;
 - diagnostics contain only version and agent identity, not prompt or user content.
 
+Actual `run()` contract tests execute `strategy`, `content`, `analytics`, `promo`,
+and `trends` with distinct schema-valid fake responses. They assert each module's
+schema hint, explicit raw-result keys and types, presenter output, and normalized
+public output shape. They also assert that no Expert Core version, marker,
+component identity, or universal response wrapper leaks into public results.
+
+A task-path `ContentAgent` regression fixes the established counts at three
+generation requests (one plan plus two posts) and one QC request when QC is
+enabled and returns no issues. Each generation request contains exactly one Core;
+composition adds neither a generation request nor a QC request, and QC result
+handling remains unchanged.
+
 ## Packaging and deployment evidence
 
 - `app/prompts/expert_core/v1.0.0.md` is loadable through `importlib.resources` from the application package tree.
@@ -68,8 +88,8 @@ If wheel/sdist packaging is introduced, its package-data configuration and insta
 - `pytest -q ...` — did not start because `pytest` was not in PowerShell `PATH`.
 - `python -m pytest ...` — did not start because system Python 3.14 did not have pytest.
 - Created ignored local `.venv` with bundled Python 3.12 and installed `requirements.txt`.
-- `.venv\Scripts\python.exe -m pytest -q tests/test_expert_core.py tests/test_expert_core_integration.py tests/test_agent_registry.py tests/test_agent_input_builder.py tests/test_agent_output_builder.py tests/test_task_pipeline_service.py` — `36 passed, 1 warning`.
-- `.venv\Scripts\python.exe -m pytest -q` — `111 passed, 9 warnings`.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_expert_core.py tests/test_expert_core_integration.py tests/test_task_pipeline_service.py tests/test_agent_output_builder.py` — `39 passed, 1 warning`.
+- `.venv\Scripts\python.exe -m pytest -q` — `123 passed, 9 warnings`.
 - `.venv\Scripts\python.exe -m compileall app bot` — passed.
 - Direct loader/composer import smoke check — passed; version `1.0.0`, resource length `33,241`, component order `expert_core → specialized_module → response_mode`.
 - `openspec validate add-expert-core-foundation --strict` — valid.

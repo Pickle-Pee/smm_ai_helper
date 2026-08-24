@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import re
 from typing import Callable
 
-from app.prompts.expert_core import EXPERT_CORE_VERSION, load_expert_core
+from app.prompts.expert_core import (
+    EXPERT_CORE_VERSION,
+    load_expert_core,
+    validate_expert_core,
+)
 
 
 EXPERT_CORE_START_PREFIX = "<!-- EXPERT_CORE:"
@@ -89,6 +93,12 @@ class ExpertInstructionComposer:
                 f"Unable to load Expert Core version {self._version}"
             ) from exc
 
+        try:
+            core = validate_expert_core(core, self._version)
+        except Exception as exc:
+            raise ExpertInstructionCompositionError(
+                f"Invalid Expert Core version {self._version}"
+            ) from exc
         core = self._validate_raw_component(core, component_name="Expert Core")
         expert_core_start = f"{EXPERT_CORE_START_PREFIX}{self._version} -->"
         parts = [
