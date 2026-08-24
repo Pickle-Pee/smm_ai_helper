@@ -25,6 +25,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 2.12 Implement `DecisionResult`; prove matrix-specific fields and reason emptiness.
 - [ ] 2.13 Implement `SynthesisEligibilityManifest`; prove exact source sets and deep freeze.
 - [ ] 2.14 Reuse Registry `ModuleId` and `ModuleResultStatus`; add no competing module/status vocabulary.
+- [ ] 2.15 Implement immutable caller `ContradictionSide` with complete claim, optional evidence and four typed comparison-key fields; prove no duplicate key vocabulary.
 
 ## 3. Exact input and error boundary
 
@@ -38,6 +39,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 3.8 Normalize caller-caused supported Python/Registry errors to `QualityGateContractError` without catching programmer defects or `BaseException`.
 - [ ] 3.9 Add separate hostile-container tests proving validation performs no iteration, lookup, hashing, comparison, formatting, copying, `str()` or `repr()` before type acceptance.
 - [ ] 3.10 Add separate exception-boundary tests for `TypeError`, `ValueError`, `KeyError`, `OverflowError`, datetime errors and expected Registry lookup errors.
+- [ ] 3.11 Validate left/right side claim resolution, distinct claims, paired evidence presence and evidence membership before comparison.
 
 ## 4. Time and Registry validation
 
@@ -74,6 +76,8 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 6.9 Preserve both contradictory claims and prohibit averaging/deletion.
 - [ ] 6.10 Exclude unresolved/incomparable claims from accepted IDs while retaining records and typed exclusions.
 - [ ] 6.11 Derive `FAIL/NO_USABLE_CLAIMS` when none remain, otherwise limited acceptance with a material contradiction limitation.
+- [ ] 6.12 Test each of object, segment, period and metric-definition mismatch independently plus multiple mismatches as `INCOMPARABLE`.
+- [ ] 6.13 Prove exact four-key comparison occurs before evidence precedence and no selected evidence is inspected for incomparable sides.
 
 ## 7. Decisions and synthesis manifest
 
@@ -132,3 +136,6 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 10.23 Prove agents and presenters remain unchanged, with compatibility hashes/tests.
 - [ ] 10.24 Prove API and Telegram contracts remain unchanged, with router/schema compatibility tests.
 - [ ] 10.25 Prove `TaskPipelineService` remains unchanged, with focused compatibility tests.
+- [ ] 10.26 Prove fingerprint sensitivity to every left/right side field and caller-position-preserving side reversal.
+- [ ] 10.27 Prove side reversal preserves semantic contradiction state/preferred claim while changing batch identity.
+- [ ] 10.28 Prove `ContradictionRecord` preserves exact validated side values without duplicate flat claim/evidence fields.

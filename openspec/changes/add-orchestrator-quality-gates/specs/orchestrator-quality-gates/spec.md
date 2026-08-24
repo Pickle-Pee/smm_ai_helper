@@ -90,11 +90,22 @@ The system SHALL propagate only through resolved explicit lineage IDs, union pro
 
 ### Requirement: Exact contradiction evaluation
 
-The system SHALL compare contradictions only through exact object, segment, period and metric-definition keys and caller-selected evidence belonging to each claim, preserve both claims, never choose or aggregate evidence, never average/delete values and never present precedence as truth.
+The system SHALL accept exact immutable caller-supplied `left` and `right` contradiction sides. Each side SHALL contain a claim ID, optional selected evidence ID, and structurally present complete object, segment, period-key and metric-definition-key values. The system SHALL resolve each side, compare the four key pairs exactly before considering evidence, preserve both claims, never infer keys from prose, never choose or aggregate evidence, never average/delete values and never present precedence as truth.
 
 #### Scenario: Incomparable claims
 - **WHEN** any comparison key differs
 - **THEN** state is `INCOMPARABLE` and both claims remain
+- **AND** evidence precedence is not evaluated
+- **AND** both claims receive typed unresolved-contradiction synthesis exclusions and each affected result receives one derived material limitation
+
+#### Scenario: Incomplete side scope
+- **WHEN** either side omits or supplies an invalid comparison key
+- **THEN** the caller contract is rejected rather than treated as comparable
+
+#### Scenario: Side reversal
+- **WHEN** caller left and right positions are reversed
+- **THEN** semantic state and preferred claim are preserved
+- **AND** the caller batch fingerprint changes because side position is order-significant
 
 #### Scenario: First-party precedence
 - **WHEN** comparison keys match, source classes are first-party versus generic benchmark, both timestamps exist and first-party is equal or newer

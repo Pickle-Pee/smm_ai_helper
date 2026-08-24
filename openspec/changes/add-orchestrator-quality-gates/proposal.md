@@ -7,7 +7,7 @@ The planning-only Marketing Orchestrator needs an exact deterministic boundary f
 - Add a private `app/marketing_orchestrator/quality_gates/` package for immutable normalized-result contracts and pure evaluation.
 - Define every finite vocabulary, dataclass field, batch identity/fingerprint, ID namespace, timestamp rule and error phase.
 - Separate caller limitations from batch-associated derived limitations, expose a complete batch evaluation aggregate, and require byte-exact RFC 8785 fingerprints.
-- Require caller-selected contradiction evidence and deterministic derived limitation/exclusion identities, including precedence exclusions without catch-all states.
+- Require immutable caller-supplied left/right contradiction sides with complete typed scope keys and caller-selected evidence; derive comparability before evidence precedence, with deterministic limitation/exclusion identities and no catch-all states.
 - Derive gate outcomes, execution readiness, decisions and synthesis eligibility rather than trusting caller-supplied values.
 - Preserve provenance, assumptions, limitations and explicit lineage with conservative confidence propagation.
 - Add exact contradiction, stop/replan and synthesis-manifest rules.

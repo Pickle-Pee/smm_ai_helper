@@ -9,7 +9,7 @@ Status: pre-implementation evidence template. Runtime Quality Gates have not bee
 - Scope: OpenSpec and directly related architecture/product/governance documentation only
 - Runtime implementation: pending separate apply step
 - Planned runtime owner: `app/marketing_orchestrator/quality_gates/`
-- Task state after contract completion: 4 reconciliation tasks complete; 97 runtime/runtime-test/verification tasks pending
+- Task state after contradiction-side reconciliation: 4 reconciliation tasks complete; 104 runtime/runtime-test/verification tasks pending (108 total)
 
 ## Verified prerequisite baseline
 
@@ -52,7 +52,16 @@ The follow-up design review resolved the nine pre-implementation findings by def
 - explicit lineage/confidence propagation and contradiction precedence;
 - complete gate × decision compatibility and synthesis-manifest fields;
 - concrete private package ownership and dependency direction;
-- 101 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked.
+- 108 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked. The added pending coverage owns `ContradictionSide`, side references, four-key mismatch/reversal behavior, side-sensitive fingerprints and record-side preservation.
+
+### Contradiction-side correction evidence
+
+- `ContradictionSide` is the sole immutable caller representation of one claim/evidence selection and its complete four-key scope.
+- `ContradictionInput` contains only `contradiction_id`, `left` and `right`; the old shared/flat fields are removed.
+- `ContradictionRecord` preserves the validated left/right sides without duplicate flat IDs.
+- Comparability precedes evidence precedence; any exact key mismatch makes `INCOMPARABLE` reachable and prevents evidence inspection.
+- The canonical source preserves left/right positions and contains every side field, so single-field changes and side reversal change the fingerprint.
+- Runtime and tests remain pending; this correction records specification evidence only.
 
 This section records design completeness only. It is not runtime test evidence.
 

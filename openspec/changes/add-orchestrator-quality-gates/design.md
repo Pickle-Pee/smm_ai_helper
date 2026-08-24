@@ -64,7 +64,7 @@ Entity IDs are exact ASCII built-in strings, are not trimmed/case-folded/normali
 
 Field prefixes are mandatory: batch `bat_`, result `res_`, claim `clm_`, evidence `evd_`, assumption `asm_`, limitation `lim_`, contradiction `ctr_`, and exclusion `exc_`. These are distinct typed-string contracts. There is no decision or manifest ID. Wrong prefixes and duplicate IDs are errors even when records are equal. `BatchFingerprint` is an exact built-in string matching `^[0-9a-f]{64}$` and is always derived.
 
-Comparison keys (`object_key`, `segment_key`, `period_key`, `metric_definition_key`) are exact non-empty ASCII strings matching `^[a-z0-9][a-z0-9_.:-]{0,127}$`; they are never derived from prose.
+Comparison keys (`object_key`, `segment_key`, `period_key`, `metric_definition_key`) are exact non-empty ASCII strings matching `^[a-z0-9][a-z0-9_.:-]{0,127}$`; they are complete caller-supplied typed scope metadata and are never derived from claim, evidence, module-output or Registry prose. The existing normative `period_key` and `metric_definition_key` names are retained without synonyms.
 
 ## Planned dataclasses
 
@@ -107,15 +107,15 @@ All are frozen/slotted. “Empty forbidden” means empty string/container is a 
 | `.blocking_reasons` | frozenset of `BlockingReason` | default empty | frozen; output enum-value order | caller |
 | `.evidence_sufficiency` | `EvidenceSufficiency` | required | n/a | caller |
 | `.handoff_module_ids` | semantic set of `ModuleId` | default empty | ModuleId value order | caller |
+| `ContradictionSide.claim_id` | `ClaimId` | required | batch-resolved | caller |
+| `.evidence_id` | `EvidenceId | None` | default `None` | when selected, belongs to this side's claim | caller |
+| `.object_key` | comparison-key `str` | required | complete exact value | caller |
+| `.segment_key` | comparison-key `str` | required | complete exact value | caller |
+| `.period_key` | comparison-key `str` | required | complete exact value | caller |
+| `.metric_definition_key` | comparison-key `str` | required | complete exact value | caller |
 | `ContradictionInput.contradiction_id` | prefixed `str` | required | unique batch-wide | caller |
-| `.left_claim_id` | `ClaimId` | required | batch-resolved | caller |
-| `.right_claim_id` | `ClaimId` | required | batch-resolved and distinct | caller |
-| `.left_evidence_id` | `EvidenceId | None` | default `None` | paired presence; belongs to left claim | caller |
-| `.right_evidence_id` | `EvidenceId | None` | default `None` | paired presence; belongs to right claim | caller |
-| `.object_key` | comparison-key `str` | required | exact comparison | caller |
-| `.segment_key` | comparison-key `str` | required | exact comparison | caller |
-| `.period_key` | comparison-key `str` | required | exact comparison | caller |
-| `.metric_definition_key` | comparison-key `str` | required | exact comparison | caller |
+| `.left` | exact `ContradictionSide` | required | copied/frozen; caller position preserved | caller |
+| `.right` | exact `ContradictionSide` | required | copied/frozen; distinct claim ID; caller position preserved | caller |
 | `EvaluationBatch.batch_id` | batch ID | required | stable batch association | caller |
 | `EvaluationBatch.results` | tuple of `NormalizedModuleResult` | required | non-empty, result-ID order, copied/frozen | caller |
 | `.contradictions` | tuple of `ContradictionInput` | default `()` | contradiction-ID order, copied/frozen | caller |
@@ -131,7 +131,7 @@ Every tuple below is deeply immutable, duplicate-free, and lexically ordered by 
 | Contract | Exact fields |
 | --- | --- |
 | `GateDecision` | `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `result_id: ResultId`; `module_id: ModuleId`; `module_status: ModuleResultStatus`; `structural_validity: StructuralValidity`; `gate_outcome: GateOutcome`; `evidence_sufficiency: EvidenceSufficiency`; `accepted_claim_ids: tuple[ClaimId,...]=()`; `excluded_claim_ids: tuple[ClaimId,...]=()`; `assumption_ids: tuple[AssumptionId,...]=()`; `evidence_ids: tuple[EvidenceId,...]=()`; `limitation_ids: tuple[LimitationId,...]=()`; `contradiction_ids: tuple[ContradictionId,...]=()`; `failure_reasons: tuple[FailureReason,...]=()`; `blocking_reasons: tuple[BlockingReason,...]=()`; `authority_status: AuthorityStatus`; `synthesis_eligibility: SynthesisEligibility`; `execution_readiness: ExecutionReadiness` |
-| `ContradictionRecord` | `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `contradiction_id: ContradictionId`; `left_claim_id: ClaimId`; `right_claim_id: ClaimId`; `left_evidence_id: EvidenceId|None=None`; `right_evidence_id: EvidenceId|None=None`; `state: ContradictionState`; `preferred_claim_id: ClaimId|None=None`; `precedence_reason: ContradictionPrecedenceReason|None=None`; `preserved_claim_ids: tuple[ClaimId,ClaimId]`; `excluded_claim_ids: tuple[ClaimId,...]=()`; `derived_limitation_ids: tuple[LimitationId,...]=()` |
+| `ContradictionRecord` | `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `contradiction_id: ContradictionId`; `left: ContradictionSide`; `right: ContradictionSide`; `state: ContradictionState`; `preferred_claim_id: ClaimId|None=None`; `precedence_reason: ContradictionPrecedenceReason|None=None`; `preserved_claim_ids: tuple[ClaimId,ClaimId]`; `excluded_claim_ids: tuple[ClaimId,...]=()`; `derived_limitation_ids: tuple[LimitationId,...]=()` |
 | `ExclusionRecord` | `exclusion_id: ExclusionId`; `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `subject_type: ExclusionSubjectType`; `result_id: ResultId|None=None`; `claim_id: ClaimId|None=None`; `reason: ExclusionReason`; `contradiction_id: ContradictionId|None=None`; `related_limitation_ids: tuple[LimitationId,...]=()` |
 | `DecisionRequest` | `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `gate_decision: GateDecision`; `replan_reasons: frozenset[ReplanReason]=frozenset()`; `stop_reasons: frozenset[StopReason]=frozenset()`; `blocking_reasons: frozenset[BlockingReason]=frozenset()` |
 | `DecisionResult` | `batch_id: BatchId`; `batch_fingerprint: BatchFingerprint`; `result_id: ResultId`; `gate_outcome: GateOutcome`; `decision: ReplanningDecision`; `replan_reasons: tuple[ReplanReason,...]=()`; `stop_reasons: tuple[StopReason,...]=()`; `blocking_reasons: tuple[BlockingReason,...]=()`; `execution_readiness: ExecutionReadiness` |
@@ -139,7 +139,7 @@ Every tuple below is deeply immutable, duplicate-free, and lexically ordered by 
 
 All are frozen/slotted. `GateDecision` fields are copied or derived exactly as named: emitted validity is `VALID`; readiness is `PLANNING_ONLY`; accepted/excluded claims are disjoint; preserved evidence/assumption/limitation IDs are batch-resolved; `FAIL` has non-empty failure reasons and no accepted claims; `BLOCKED` has non-empty blockers and no accepted claims. Its authority is `WITHIN_SCOPE` if every accepted claim is within scope, otherwise `REQUIRES_REVIEW`; empty-claim failed/blocked results use `WITHIN_SCOPE`. `(batch_id, batch_fingerprint, result_id)` is the decision identity and no separate ID exists.
 
-Every contradiction record copies batch association. `preserved_claim_ids` is exactly both IDs, unique lexical. `INCOMPARABLE`/`UNRESOLVED` have no preferred claim/reason, exclude both claims, and contain one derived limitation per affected result, unique lexical. `PRIORITIZED` has exactly one preferred claim and `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`, excludes the one non-preferred claim, has no derived limitation, preserves both, and permits only the preferred claim into unqualified accepted IDs.
+Every contradiction record copies batch association and the exact validated immutable `left` and `right` side values without duplicate flat fields. `preserved_claim_ids` is exactly both IDs, unique lexical. `INCOMPARABLE`/`UNRESOLVED` have no preferred claim/reason, exclude both claims, and contain one derived limitation per affected result, unique lexical. `PRIORITIZED` has exactly one preferred claim and `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`, excludes the one non-preferred claim, has no derived limitation, preserves both, and permits only the preferred claim into unqualified accepted IDs.
 
 An exclusion has exactly one of result/claim ID. Failed result produces `RESULT_FAILED`; blocked result produces `RESULT_BLOCKED`; unresolved/incomparable claim produces `UNRESOLVED_CONTRADICTION` with contradiction and related limitation; prioritized non-preferred claim produces `CONTRADICTION_PRECEDENCE` with contradiction and no limitation. A claim may have multiple records for distinct contradiction preimages and is excluded if any exists; being preferred elsewhere does not override exclusion. These paths are exhaustive at ID-set level.
 
@@ -201,7 +201,7 @@ Generic scalar nodes are exactly `{"t":"null"}`, `{"t":"bool","v":true}`, `{"t":
 | evidence node | evidence ID, source enum, provenance string and datetime-or-null node |
 | assumption node | assumption ID, description string and materiality enum |
 | caller limitation node | all caller fields; related ID tuples lexical; description string-or-null node |
-| root `contradictions` | every `ContradictionInput`, contradiction-ID lexical; every listed ID/key field included, selected evidence as string-or-null node |
+| root `contradictions` | every `ContradictionInput`, contradiction-ID lexical; `left` and `right` positions preserved and encoded as the exact side records below |
 
 The recursive record nodes have these exact keys; no additional key exists:
 
@@ -212,9 +212,10 @@ The recursive record nodes have these exact keys; no additional key exists:
 | evidence | `evidence_id` -> ID string; `source_class` -> enum node; `provenance` -> string node; `observed_at` -> datetime node or null node |
 | assumption | `assumption_id` -> ID string; `description` -> string node; `materiality` -> enum node |
 | caller limitation | `limitation_id` -> ID string; `reason`, `materiality` -> enum nodes; `related_result_ids`, `related_claim_ids`, `related_contradiction_ids` -> ID-string array nodes in lexical order; `description` -> string node or null node |
-| contradiction input | `contradiction_id`, `left_claim_id`, `right_claim_id` -> ID strings; `left_evidence_id`, `right_evidence_id` -> ID string or null node; `object_key`, `segment_key`, `period_key`, `metric_definition_key` -> string nodes |
+| contradiction input | exactly `contradiction_id` -> ID string; `left`, `right` -> side record nodes in caller position; no old shared or duplicate flat fields |
+| contradiction side | exactly `claim_id` -> ID string; `evidence_id` -> ID string or null node; `object_key`, `segment_key`, `period_key`, `metric_definition_key` -> string nodes |
 
-Fields declared order-significant preserve their frozen tuple order; all other order is exactly stated above. The source contains every caller-supplied contract field and excludes `batch_fingerprint`, all gate/contradiction output records, derived limitations, exclusions, decision requests/results, manifest and readiness. No cycle exists. The resulting lowercase 64-hex fingerprint is derived only. Equal normalized input is byte-identical; changing a caller contract value changes the preimage. Every output copies batch ID/fingerprint and both must match across stages.
+Fields declared order-significant preserve their frozen tuple order; all other order is exactly stated above. Contradiction `left` and `right` are order-significant and are never sorted: changing any side field or swapping sides changes the fingerprint. The source contains every caller-supplied contract field and excludes `batch_fingerprint`, all gate/contradiction output records, derived limitations, exclusions, decision requests/results, manifest and readiness. No cycle exists. The resulting lowercase 64-hex fingerprint is derived only. Equal normalized input is byte-identical; changing a caller contract value changes the preimage. Every output copies batch ID/fingerprint and both must match across stages.
 
 Encode derived-ID preimage components as `<UTF-8-byte-length>:<UTF-8-bytes>` and concatenate. A contradiction limitation uses `quality-gates-v1`, `limitation`, fingerprint, result ID, contradiction ID, `UNRESOLVED_CONTRADICTION`; ID is `lim_` plus the first 32 lowercase SHA-256 hex characters. It is material, relates to that result, unique lexical affected claims and contradiction, and has no description. An exclusion uses `quality-gates-v1`, `exclusion`, fingerprint, subject type, result-or-empty, claim-or-empty, reason, contradiction-or-empty; empty encodes `0:` and ID is `exc_` plus the first 32 hex characters. Identical preimages deduplicate; different preimages producing one ID raise. Derived records sort by ID.
 
@@ -271,7 +272,7 @@ Propagation unions provenance, assumptions and limitations by stable ID, rejects
 
 ## Contradiction algorithm
 
-Resolve claims and compare all four keys; any difference is `INCOMPARABLE`. Both selected evidence IDs absent is `UNRESOLVED`; one absent is a contract error. Resolve the explicitly selected evidence and verify claim membership. The same selected ID on both sides is `UNRESOLVED`. Exactly one side is prioritized only when its selected source is `FIRST_PARTY`, the other is `GENERIC_BENCHMARK`, both timestamps exist, and first-party is `SAME` or `NEWER`; reason is `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`. Every other case is `UNRESOLVED`.
+Validate and resolve both exact `ContradictionSide` values first. Their claim IDs must differ; each selected evidence ID must resolve and belong to that side's claim; both evidence IDs must be present or both `None`. Compare `object_key`, `segment_key`, `period_key` and `metric_definition_key` pairwise by exact validated-string equality in that order. If any pair differs, state is `INCOMPARABLE`; evidence precedence is not evaluated and preferred claim/reason are absent. Only when all four pairs match is evidence considered: both selected IDs absent or the same selected ID yields `UNRESOLVED`; exactly one side is prioritized only when its selected source is `FIRST_PARTY`, the other is `GENERIC_BENCHMARK`, both timestamps exist, and first-party is `SAME` or `NEWER`; reason is `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`. Every other comparable case is `UNRESOLVED`. Reversing sides preserves semantic state and preferred claim but, because caller positions are preserved, produces a distinct batch fingerprint.
 
 The evaluator never chooses or aggregates evidence. Unselected evidence cannot affect precedence. Source ranking, majority, minimum/maximum, newest search and averaging are prohibited. Both claims and all evidence remain preserved.
 

@@ -22,6 +22,8 @@ All remaining authority, materiality, limitation, failure, blocking, exclusion, 
 
 Every entity uses an exact lowercase ASCII prefixed ID (`bat_`, `res_`, `clm_`, `evd_`, `asm_`, `lim_`, `ctr_`, `exc_`) with no trimming or normalization. There is no manifest/decision ID. A schema-tagged RFC 8785 tree with typed scalar nodes produces the SHA-256 fingerprint; every derived output, including separate derived limitations and the batch aggregate, carries both batch values.
 
+Each contradiction has immutable caller-supplied `left` and `right` sides. A side contains its claim ID, optional explicitly selected evidence ID, and complete typed `object_key`, `segment_key`, `period_key` and `metric_definition_key` scope metadata. Quality Gates never infer these keys from claim/evidence text, module output or Registry prose. All four pairs are compared exactly before evidence: any mismatch deterministically yields `INCOMPARABLE`, preserves and excludes both claims from unqualified synthesis, and creates a material limitation per affected result. Side order is preserved in the fingerprint, so reversal changes batch identity while preserving semantic state/preferred claim.
+
 Evidence time accepts only exact aware `datetime`, normalizes explicit offsets to UTC, preserves microseconds and serializes with `Z`. Evaluation uses no ambient clock or timezone. Missing timestamps remain incomparable.
 
 ## Gate policy
