@@ -59,10 +59,29 @@ Deterministic tests verify:
 - diagnostics contain only version and agent identity, not prompt or user content.
 
 Actual `run()` contract tests execute `strategy`, `content`, `analytics`, `promo`,
-and `trends` with distinct schema-valid fake responses. They assert each module's
-schema hint, explicit raw-result keys and types, presenter output, and normalized
-public output shape. They also assert that no Expert Core version, marker,
-component identity, or universal response wrapper leaks into public results.
+and `trends` with complete representative fake responses satisfying each agent's
+own requested schema. The tests assert exact agent-specific top-level keys and
+value types, including exact `bool` and `int` checks where Python's type hierarchy
+could mask a mismatch. Meaningful nested contracts are checked independently for:
+
+- Strategy positioning, segments/message maps, all funnel stages, offers,
+  channels, rubrics, creative angles, and the seven-day plan;
+- Content plan items, generated-post fields, string lists, and the nested
+  `plan_item`/`post` relationship;
+- Analytics metric plans, metric definitions, diagnoses, benchmarks, action
+  steps, and report-template fields;
+- Promo tracking, campaign layers, creative hypotheses, minimum-data thresholds,
+  and non-empty stop/scale testing rules;
+- Trends format measurements, content risks/mitigations, engagement mechanics,
+  experiment steps, duration, and measurement criteria.
+
+For every agent, the real presenter is exercised and the expected normalized
+public shape is asserted directly as `content`, `format`, `assumptions`,
+`confidence`, and `warnings`, with explicit value types. The expected shape is
+not derived from runtime output or computed through the presenter. Assertions
+also prove that no Expert Core version, marker, component identity, raw result,
+agent-specific structured payload, or universal response wrapper leaks into the
+public result.
 
 A task-path `ContentAgent` regression fixes the established counts at three
 generation requests (one plan plus two posts) and one QC request when QC is
