@@ -38,4 +38,3 @@ Registry metadata supports identity, declared-output membership and registered-h
 ## Source ownership
 
 This document and the active OpenSpec change define the product/engineering contract. `docs/product/prompts/orchestrator-production.md` is product source material only; it is not loaded by this deterministic foundation and is not duplicated into Python.
-
