@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | Shared reasoning policy | `prompts/expert-core-production.md` | `Общий системный промпт для ИИ(1).docx` | EXPERT CORE production — единственный runtime source |
 | Multi-module orchestration | `prompts/orchestrator-production.md` | `Оркестратор.docx`, `Агентский диспетчер задач (1).docx` | Dispatcher не создаётся отдельным runtime layer |
-| Module metadata and routing | `prompts/module-registry-production.md` | `Реестр модулей.docx` | Production registry — единственный canonical registry |
+| Module metadata | `app/module_registry/v1.0.0.json` (runtime `1.0.0`) | `prompts/module-registry-production.md` (initial-import material), archival DOCX (history) | JSON is the only runtime descriptor source; routing belongs to future Orchestrator work |
 
 ## Reconciliation decisions
 
@@ -29,7 +29,7 @@
 
 ### Early registry vs Production registry
 
-Ранний реестр использован как каталог capabilities и aliases. Production registry определяет окончательные module IDs, activation/return contracts, statuses, authority boundaries, routing precedence и handoffs.
+Ранний реестр использован как каталог capabilities и aliases. Production Markdown is approved initial-import material; the versioned JSON defines runtime descriptors. This foundation does not activate routing guidance or change current task routing.
 
 ## Normative editing rule
 
@@ -41,5 +41,5 @@
 4. Tests/evals for the changed rule.
 5. Review влияния на token budget и conflicts.
 
-DOCX-файлы после принятия этого пакета считаются исходными материалами, а Markdown-файлы в репозитории — version-controlled source of truth.
+DOCX-файлы считаются source history. For module metadata, `app/module_registry/v1.0.0.json` is the sole runtime source; Markdown holds rationale, governance, and import material without duplicating runtime descriptors.
 
