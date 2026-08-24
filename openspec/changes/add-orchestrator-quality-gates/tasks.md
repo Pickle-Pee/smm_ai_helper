@@ -77,7 +77,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 6.10 Exclude unresolved/incomparable claims from accepted IDs while retaining records and typed exclusions.
 - [ ] 6.11 Derive `FAIL/NO_USABLE_CLAIMS` when none remain, otherwise limited acceptance with a material contradiction limitation.
 - [ ] 6.12 Test each of object, segment, period and metric-definition mismatch independently plus multiple mismatches as `INCOMPARABLE`.
-- [ ] 6.13 Prove exact four-key comparison occurs before evidence precedence and no selected evidence is inspected for incomparable sides.
+- [ ] 6.13 Add a regression proving selected evidence references resolve and claim membership is validated before comparability, while source class, `observed_at` and precedence rules are not inspected after any comparison-key mismatch produces `INCOMPARABLE`.
 
 ## 7. Decisions and synthesis manifest
 
