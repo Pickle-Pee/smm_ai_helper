@@ -2,44 +2,24 @@
 
 ## Purpose
 
-Документ фиксирует, какие предоставленные материалы являются нормативными, а какие используются только как design history. Это предотвращает одновременное появление нескольких компонентов с одинаковой ответственностью.
+This document separates product source material, runtime sources and design history so duplicate routing components and conflicting canonical sources are not created.
 
 ## Source precedence
 
-| Domain | Normative source | Supporting/legacy sources | Decision |
+| Domain | Normative contract/runtime source | Supporting source/history | Decision |
 | --- | --- | --- | --- |
-| Shared reasoning policy | `prompts/expert-core-production.md` | `Общий системный промпт для ИИ(1).docx` | EXPERT CORE production — единственный runtime source |
-| Multi-module orchestration | `prompts/orchestrator-production.md` | `Оркестратор.docx`, `Агентский диспетчер задач (1).docx` | Dispatcher не создаётся отдельным runtime layer |
-| Module metadata and routing | `prompts/module-registry-production.md` | `Реестр модулей.docx` | Production registry — единственный canonical registry |
+| Shared reasoning policy | versioned Expert Core runtime resource | `docs/product/prompts/expert-core-production.md`, early general prompt | one Expert Core runtime source |
+| Marketing Orchestrator foundation | `docs/product/marketing-orchestrator.md` product contract plus active OpenSpec/typed rules | `docs/product/prompts/orchestrator-production.md`, early Orchestrator/dispatcher documents | deterministic foundation loads no prompt; no separate dispatcher |
+| Module metadata/routing | `app/module_registry/v1.0.0.json` | `docs/product/prompts/module-registry-production.md`, early registry | runtime Registry resource is canonical metadata |
 
 ## Reconciliation decisions
 
-### General system prompt vs Expert Core
+Early general prompt concerns are split among Expert Core, Orchestrator, Module Registry and specialized modules. Early dispatcher responsibilities overlap Orchestrator planning; a separate dispatcher would duplicate routing and is not created.
 
-Ранний общий промпт смешивает роль CMO, методы, routing, formulas и quality rules. В production-архитектуре ответственность разделена:
+`docs/product/prompts/orchestrator-production.md` is approved version-controlled product source for a broader future lifecycle, not a canonical runtime prompt for `add-marketing-orchestrator-foundation`. The foundation makes no LLM call and creates no `app/prompts/orchestrator`; typed code and deterministic OpenSpec rules own runtime planning behavior.
 
-- общие reasoning rules → Expert Core;
-- routing и workflow → Orchestrator;
-- доступные эксперты и контракты → Module Registry;
-- task-specific methods → module prompts.
+A future model-driven planner must define one versioned runtime prompt in a separate OpenSpec change with evals, call-budget/token and latency review. Until then, no Orchestrator file is called a canonical runtime prompt.
 
-### Dispatcher vs Orchestrator
+## Editing rule
 
-Агентский диспетчер и ранний оркестратор решают похожие задачи: intent classification, data sufficiency, depth, module selection и response format. Создание обоих компонентов привело бы к двойной маршрутизации. Поэтому dispatcher requirements включаются в Orchestrator, но отдельный Dispatcher service не создаётся.
-
-### Early registry vs Production registry
-
-Ранний реестр использован как каталог capabilities и aliases. Production registry определяет окончательные module IDs, activation/return contracts, statuses, authority boundaries, routing precedence и handoffs.
-
-## Normative editing rule
-
-Изменение production prompt должно сопровождаться:
-
-1. Product rationale.
-2. OpenSpec behavior change, если меняется наблюдаемое поведение.
-3. Version increment.
-4. Tests/evals for the changed rule.
-5. Review влияния на token budget и conflicts.
-
-DOCX-файлы после принятия этого пакета считаются исходными материалами, а Markdown-файлы в репозитории — version-controlled source of truth.
-
+Moving an approved product rule into runtime requires product rationale, an OpenSpec behavior change, one versioned runtime source, tests/evals, conflict review and call-budget review when a model is involved. Legacy DOCX material remains design history rather than runtime source.
