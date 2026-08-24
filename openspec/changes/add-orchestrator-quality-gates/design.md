@@ -1,102 +1,207 @@
-# Design: Deterministic orchestrator quality gates
+# Design: Exact deterministic orchestrator quality gates
 
-## Context and boundary
+## Context
 
-This change adds a side-effect-free internal foundation after planning and before future workflow synthesis. It accepts an already-constructed `NormalizedModuleResult`, Registry `1.0.0`, and optional typed contradiction/decision inputs; it returns immutable decisions. It never executes modules, fetches context, persists state, creates a plan, generates prose or calls a model/QC service.
+The existing `app/marketing_orchestrator/` package is a pure `PLANNING_ONLY` planner. Registry `1.0.0` supplies read-only metadata but no execution bindings or invocation-specific output schemas. Existing agents return heterogeneous dictionaries. This foundation therefore begins only at an explicitly normalized caller boundary.
 
-The current `ModuleResult` is lightweight Registry metadata and existing agents return unrelated dictionaries. Neither is silently reinterpreted. Future adapters must explicitly map a source contract into this boundary.
+## Goals / Non-Goals
 
-## Exact construction and immutability
+**Goals:** exact immutable contracts, total validation/error behavior, derived gate/decision/eligibility states, conservative lineage propagation, typed contradictions, and independently testable isolation.
 
-All public contracts are frozen, slotted dataclasses. Constructors accept only exact built-in types, never subclasses or structural substitutes:
+**Non-Goals:** adapters, execution, semantic truth/causality/strategy checks, LLM/QC, persistence, workflows, revised plans, APIs/Telegram, or prose synthesis.
 
-- scalar: `None`, `bool`, `int`, finite `float`, or `str`; booleans are never accepted as integers;
-- ordered container: exact `tuple` or `list`, copied to tuple;
-- semantic set: exact `set`, `frozenset`, `tuple`, or `list`, copied to a deterministically ordered tuple/frozenset as declared;
-- mappings are not accepted in normalized result fields;
-- stable IDs are non-empty lowercase identifiers matching `^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$`, maximum 128 characters;
-- prose fields are exact non-empty strings and never serve as machine identifiers;
-- numeric confidence is an exact finite float in `[0.0, 1.0]`.
+## Runtime ownership and dependencies
 
-Every nested element is exact-type checked before use and defensively copied. Unsupported values, duplicate IDs, dangling references and illegal state combinations raise `QualityGateContractError`; malformed input never becomes a gate `FAIL` or `BLOCKED` result. Re-evaluating equal values returns an equal decision and has no side effects.
+The only planned runtime package is `app/marketing_orchestrator/quality_gates/`:
 
-## Normalized result model
+- `contracts.py`: all enums and frozen/slotted contracts;
+- `errors.py`: `QualityGateContractError`;
+- `evaluator.py`: ordered validation and final gate derivation;
+- `propagation.py`: lineage, provenance, confidence and limitation propagation;
+- `contradictions.py`: comparison and precedence;
+- `decisions.py`: gate-compatible replan/stop decisions;
+- `__init__.py`: only supported internal contract, evaluator and decision exports.
 
-The immutable boundary contains:
+It may import public `ModuleId`, `ModuleResultStatus`, `ModuleRegistry`, Registry lookup errors and immutable descriptor types. It must not import agents, presenters, routers, `QCService`, OpenAI clients, persistence/context services, Jobs, Redis, workers or workflow execution. Existing planner/validator modules do not import this package and remain unchanged. This direction prevents circular imports. Nothing is exported through a public API.
 
-- `result_id`, canonical `module_id`, and `module_status` (`ModuleResultStatus`);
-- `claims: tuple[NormalizedClaim, ...]` with stable `claim_id`, `ClaimType`, exact scalar `value`, optional unit/display statement, stable `evidence_ids`, stable `assumption_ids`, confidence and declared Registry output name;
-- `evidence: tuple[EvidenceRecord, ...]` with stable `evidence_id`, typed `SourceClass`, non-empty provenance reference, optional exact UTC timestamp/freshness class and optional source claim ID;
-- `assumptions: tuple[AssumptionRecord, ...]` with stable ID, statement and explicit materiality;
-- `limitations: tuple[LimitationRecord, ...]` with stable ID, typed reason, statement, materiality and affected claim IDs;
-- `failure_reasons` or `blocking_reasons`, each typed and required only for its legal status;
-- optional typed `handoff_module_ids`;
-- `evidence_sufficiency`, explicit authority declarations and `execution_readiness` fixed to `PLANNING_ONLY`.
+## Canonical finite vocabulary
 
-Claim, evidence, assumption and limitation IDs are unique and all references resolve. Evidence provenance is never optional. Claim prose/value does not become an identifier. Registry output strings may validate a claim's declared output membership, but Registry metadata does not say which outputs are required for every invocation; module-specific completeness is deferred.
+Every value is an exact enum instance; raw strings and duplicate synonyms are rejected.
 
-Authority checking is structural only: canonical producer identity, declared output membership where supplied, and registered handoff membership. Registry prose authority limitations are not interpreted as executable policy.
+- `ClaimType`: `FACT`, `OBSERVATION`, `INFERENCE`, `HYPOTHESIS`, `ASSUMPTION`, `FORECAST`, `RECOMMENDATION`.
+- `Confidence`: `UNKNOWN`, `LOW`, `MEDIUM`, `HIGH`; total conservative order `UNKNOWN < LOW < MEDIUM < HIGH`.
+- existing `ModuleResultStatus`: `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, `BLOCKED`.
+- separate derived `GateOutcome`: `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, `BLOCKED`.
+- `StructuralValidity`: `VALID` (invalid contracts raise and produce no value).
+- `ExecutionReadiness`: `PLANNING_ONLY` (derived only).
+- `SynthesisEligibility`: `ELIGIBLE`, `INELIGIBLE` (derived only).
+- `EvidenceSufficiency`: `SUFFICIENT`, `LIMITED`, `INSUFFICIENT`, `NOT_ASSESSED`.
+- `EvidenceSourceClass`: `FIRST_PARTY`, `EXTERNAL_PRIMARY`, `EXTERNAL_SECONDARY`, `GENERIC_BENCHMARK`, `SYNTHETIC`, `UNKNOWN`.
+- `ClaimLineageType`: `ORIGINAL`, `REPEATS`, `REFORMULATES`, `DERIVES`.
+- `Materiality`: `MATERIAL`, `NON_MATERIAL`.
+- `AuthorityStatus`: `WITHIN_SCOPE`, `REQUIRES_REVIEW`, `OUT_OF_SCOPE`.
+- `LimitationReason`: `MISSING_PREFERRED_INPUT`, `INCOMPLETE_COVERAGE`, `INSUFFICIENT_EVIDENCE`, `STALE_EVIDENCE`, `TOOL_LIMIT`, `CAPABILITY_LIMIT`, `ASSUMPTION_DEPENDENCY`, `UNRESOLVED_CONTRADICTION`, `OUT_OF_SCOPE`.
+- `FailureReason`: `MODULE_DECLARED_FAILURE`, `NO_USABLE_CLAIMS`, `INSUFFICIENT_EVIDENCE`, `DECLARED_OUTPUT_MISSING`, `AUTHORITY_VIOLATION`.
+- `BlockingReason`: `MISSING_BLOCKING_INPUT`, `MISSING_CAPABILITY`, `TOOL_UNAVAILABLE`, `DEPENDENCY_BLOCKED`, `AUTHORIZATION_REQUIRED`.
+- `ContradictionState`: `UNRESOLVED`, `PRIORITIZED`, `INCOMPARABLE`.
+- `ContradictionPrecedenceReason`: `FIRST_PARTY_NOT_OLDER_THAN_GENERIC_BENCHMARK`.
+- `FreshnessComparison`: `NEWER`, `OLDER`, `SAME`, `UNKNOWN`.
+- `ExclusionReason`: `RESULT_FAILED`, `RESULT_BLOCKED`, `UNRESOLVED_CONTRADICTION`, `NOT_SYNTHESIS_ELIGIBLE`.
+- `ReplanningDecision`: `CONTINUE_CURRENT_PLAN`, `REPLAN_REQUIRED`, `STOP`, `BLOCKED`.
+- `ReplanReason`: `MATERIAL_FINDING`, `DEPENDENCY_INVALIDATED`, `REVERSIBLE_TEST_HIGHER_VALUE`.
+- `StopReason`: `SCOPE_COMPLETE`, `SUFFICIENT_EVIDENCE`, `DIMINISHING_VALUE`, `TOOL_LIMIT_REACHED`, `CAPABILITY_LIMIT_REACHED`, `RESULT_FAILED`.
 
-## Distinct state dimensions
+## Exact scalar, container and ID domain
 
-These types are never overloaded: `ModuleResultStatus`, `StructuralValidity`, `GateOutcome`, `EvidenceSufficiency`, numeric claim confidence, material limitations, `ContradictionState`, `NextStepDecision`, `StopDecision`, `ExecutionReadiness`, and synthesis eligibility/exclusion reason.
+Caller scalars are exact built-in `None`, `bool`, `int`, finite `float`, or `str`; bool is never accepted where int is required. Prose is exact non-empty `str`. Ordered fields accept exact `list` or `tuple`, are validated item-first and copied to tuple. Semantic sets accept exact `list`, `tuple`, `set` or `frozenset`, reject duplicates before freezing, and emit enum/ID lexical order. Exact dictionaries are allowed only for fields explicitly declared as mappings, require exact string keys, and become copied internal mapping proxies. No contract below currently exposes a caller mapping field. Mapping proxies are output-only and rejected if resubmitted.
 
-Structurally invalid input raises `QualityGateContractError`; therefore every returned decision has `StructuralValidity.VALID`.
+Entity IDs are exact ASCII built-in strings, are not trimmed/case-folded/normalized, have maximum length 67, and match:
 
-## Legal-state matrix
+```regex
+^(res|clm|evd|asm|lim|ctr|exc|man)_[a-z0-9][a-z0-9_-]{0,62}$
+```
 
-| Module status | Required legal content | Forbidden combination | Gate outcome | Future synthesis |
+Field prefixes are mandatory: result `res_`, claim `clm_`, evidence `evd_`, assumption `asm_`, limitation `lim_`, contradiction `ctr_`, exclusion `exc_`, manifest `man_`. The `man_` extension is required because the manifest itself has identity. Wrong prefixes and duplicate IDs are errors even when bodies/records are equal.
+
+Comparison keys (`object_key`, `segment_key`, `period_key`, `metric_definition_key`) are exact non-empty ASCII strings matching `^[a-z0-9][a-z0-9_.:-]{0,127}$`; they are never derived from prose.
+
+## Planned dataclasses
+
+All are frozen/slotted. “Empty forbidden” means empty string/container is a contract error.
+
+| Contract.field | Exact type | Required/default | Empty/order | Supply |
 | --- | --- | --- | --- | --- |
-| `PASS` | at least one claim; `SUFFICIENT`; no material limitation; no failure/block reason | missing provenance, material limitation, insufficient evidence | `PASS` | eligible claims unless unresolved contradiction excludes them |
-| `PASS_WITH_LIMITATIONS` | at least one usable claim; at least one material limitation; `PARTIAL` or `INSUFFICIENT` | no material limitation, failure/block reason | `PASS_WITH_LIMITATIONS` | eligible with every material limitation preserved |
-| `FAIL` | at least one typed failure reason; no accepted claims or handoff | missing failure reason, blocking reason, synthesis eligibility | `FAIL` | excluded as `FAILED_RESULT` |
-| `BLOCKED` | at least one typed blocking reason identifying missing input or capability; no accepted claims or handoff | absent blocker, failure reason, success eligibility | `BLOCKED` | excluded as `BLOCKED_RESULT` |
+| `EvidenceRecord.evidence_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.source_class` | `EvidenceSourceClass` | required | n/a | caller |
+| `.provenance` | exact non-empty `str` | required | no normalization | caller |
+| `.observed_at` | exact aware `datetime | None` | default `None` | normalized UTC | caller |
+| `AssumptionRecord.assumption_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.description` | exact non-empty `str` | required | prose only | caller |
+| `.materiality` | `Materiality` | required | n/a | caller |
+| `LimitationRecord.limitation_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.reason/.description/.materiality` | enum, `str`, enum | required | description non-empty | caller |
+| `.affected_claim_ids` | tuple of claim IDs | required | non-empty, lexical | caller |
+| `NormalizedClaim.claim_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.declared_output_name` | exact non-empty `str` | required | exact Registry membership | caller |
+| `.claim_type/.confidence/.authority_status` | respective enums | required | n/a | caller |
+| `.value` | exact scalar | required | string may be empty only as a scalar value | caller |
+| `.lineage_type` | `ClaimLineageType` | required | n/a | caller |
+| `.parent_claim_ids` | tuple of claim IDs | default `()` | lexical; rules below | caller |
+| `.evidence_ids/.assumption_ids/.limitation_ids` | respective ID tuples | default `()` | lexical, unique | caller |
+| `NormalizedModuleResult.result_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.module_id/.module_status` | `ModuleId`, `ModuleResultStatus` | required | n/a | caller |
+| `.claims/.evidence/.assumptions/.limitations` | exact typed sequences | default `()` | ID lexical | caller |
+| `.failure_reasons/.blocking_reasons` | enum semantic sets | default empty | enum declaration order | caller |
+| `.evidence_sufficiency` | `EvidenceSufficiency` | required | n/a | caller |
+| `.handoff_module_ids` | semantic set of `ModuleId` | default empty | ModuleId value order | caller |
+| `ContradictionInput.contradiction_id` | prefixed `str` | required | unique batch-wide | caller |
+| `.left_claim_id/.right_claim_id` | claim IDs | required | distinct, resolved | caller |
+| `.object_key/.segment_key/.period_key/.metric_definition_key` | comparison keys | required | exact comparison | caller |
+| `EvaluationBatch.results` | tuple of results | required | non-empty, result-ID order | caller |
+| `.contradictions` | tuple of inputs | default `()` | contradiction-ID order | caller |
+| `.evaluation_at` | exact aware `datetime | None` | default `None` | normalized UTC; metadata only | caller |
+| `ExclusionRecord.exclusion_id` | prefixed `str` | required | unique batch-wide | derived |
+| `.result_id/.claim_id` | result ID, claim ID or `None` | exactly one required | resolved | derived |
+| `.reason` | `ExclusionReason` | required | n/a | derived |
+| `GateDecision` state fields | validity, outcome, readiness, eligibility | required | immutable | derived |
+| `ContradictionRecord` input fields plus state/reason/winner | typed values | required; reason/winner optional together | both claims preserved | derived |
+| `DecisionRequest.gate_decision` | `GateDecision` | required | same batch | caller from prior output |
+| `.replan_reasons/.stop_reasons` | semantic enum sets | default empty | enum order, deduplicated | caller |
+| `.blocking_reasons` | semantic set | default empty | enum order | caller |
+| `DecisionResult` decision/replan reason/stop reason | typed values | required/optional by matrix | no contradictory reasons | derived |
+| `SynthesisEligibilityManifest.manifest_id` | prefixed `str` | required | unique batch-wide | caller identity, content derived |
+| remaining manifest fields | resolved ID tuples, limitations, exclusions | required | lexical ID order | derived |
 
-An explicit, complete `FAIL` is a valid unusable result. A complete `BLOCKED` is a valid non-execution result caused by a typed blocker. Missing required normalized fields, contradictory combinations, unknown modules, illegal handoffs or dangling identities are contract errors, not outcomes. A complete structure is evidence only of contract validity, never claim truth.
+No caller supplies structural validity, `GateOutcome`, execution readiness, synthesis eligibility, contradiction state/precedence, exclusion records or manifest content.
 
-## Evidence, confidence and limitation propagation
+## Namespace and reference rules
 
-- IDs and provenance are preserved exactly; propagation unions by stable ID, rejects unequal records sharing an ID, and emits deterministic ID order.
-- Assumptions remain assumptions and are never converted to claims/facts.
-- Every material limitation affecting an accepted result or claim is copied to downstream packets/manifests.
-- Repetition or reformulation retains the source claim ID and may keep or lower confidence, never raise it.
-- New evidence may be attached, but this foundation cannot verify independence or truth; therefore confidence never increases here. A future reviewed contract may add a structural independence assertion and a separate policy.
-- Combining claims creates a new stable claim ID with explicit source claim IDs; its confidence cannot exceed the minimum confidence of required source claims.
-- Set-like propagation is order-independent; semantically meaningful source ordering remains explicit.
+One immutable `EvaluationBatch` owns all namespaces. Result IDs are unique; claim/evidence/assumption/limitation IDs are each unique across every included result; contradiction IDs are unique across the batch; exclusion/manifest IDs are unique in derived outputs. Duplicate validation completes for all namespaces before any reference is resolved, so duplicate identity always wins over unresolved-reference errors.
 
-## Contradictions and precedence
+Result-local references resolve within their result unless explicitly documented as lineage. Parent claim lineage and contradiction claim references may cross results only when the target is present in the same batch. All evidence, assumption, limitation, lineage, contradiction and manifest references resolve; unknown/external IDs fail. Unequal records can never share an ID.
 
-Contradictions are caller-supplied `ContradictionRecord` values; gates never search prose. Each record contains stable ID, compared claim IDs, typed object/segment/period/metric-definition keys, source classes, freshness/timestamps, `ContradictionState`, and optional typed precedence reason/winning claim ID.
+## Timestamp and freshness rules
 
-Both claims remain present and values are never averaged. Different object, segment, period or metric-definition keys make claims incomparable and the record remains `UNRESOLVED`. Current first-party evidence may receive `CURRENT_FIRST_PARTY` precedence over an explicitly generic benchmark only when comparison keys match and freshness is explicitly comparable. Equal class/freshness, missing freshness, multiple eligible winners or any tie remains unresolved. Precedence never deletes or proves either claim.
+Only exact built-in timezone-aware `datetime` is accepted; subclasses, naive values and strings are rejected. Any explicit UTC offset is accepted and normalized internally to UTC with microseconds preserved. Canonical serialization is ISO-8601 UTC ending in `Z`. No parsing from text occurs.
 
-## Replanning and stop decisions
+Evaluation never reads `datetime.now()`, `utcnow()`, system/local timezone, filesystem or environment time. `evaluation_at`, when supplied, is normalized identically but does not make absent evidence timestamps comparable. Comparing `observed_at` values yields `NEWER`, `OLDER`, `SAME`, or `UNKNOWN`: compare normalized instants when both exist; either absent yields `UNKNOWN`; equal instants yield `SAME`.
 
-Pure evaluation accepts explicit `DecisionTrigger` enums only. Precedence is:
+## Ordered validation and error containment
 
-1. missing blocking input or unavailable capability -> `BLOCKED`;
-2. failed module result -> `STOP` with `FAILED_MODULE_RESULT`;
-3. invalidated dependency or accepted material finding -> `REPLAN_REQUIRED`;
-4. sufficient decision evidence, diminishing additional value or preference for a reversible test -> `STOP` with the corresponding reason;
-5. otherwise -> `CONTINUE_CURRENT_PLAN`.
+Validation order and first-error precedence are fixed:
 
-Stopping records a decision only; it does not imply execution. `REPLAN_REQUIRED` requests a future plan and neither mutates the existing plan/findings nor creates or executes a revision. Invalid contracts raise before decision evaluation. No additional module is invoked by this foundation.
+1. exact outer contract type;
+2. exact scalar/container type before iteration/lookup;
+3. reject subclasses, custom Mapping/Sequence/Set, proxies and unsupported objects;
+4. validate/copy/freeze accepted built-ins;
+5. enum, ID, scalar and datetime value rules;
+6. all namespace uniqueness, in field order then lexical ID order;
+7. reference resolution, in result/field/ID order;
+8. safe injected Registry lookup: producer, declared output, handoff;
+9. module-status coherence;
+10. derive base gate outcome;
+11. propagate, evaluate contradictions, apply contradiction adjustment, derive final decision and manifest eligibility.
 
-## Synthesis eligibility
+No untrusted object is iterated, sorted, hashed, compared, formatted, copied, represented or used in lookup before exact-type acceptance. Caller-created proxies are rejected without backing access. Internal frozen values resubmitted as caller inputs are not trusted.
 
-The optional `SynthesisEligibilityManifest` is data, not synthesis. It deterministically lists accepted result IDs, accepted claim IDs, all material limitations, unresolved contradiction IDs, and excluded result IDs with typed reasons. `FAIL`/`BLOCKED` results are excluded; limited accepted claims retain limitations; unresolved contradictory claims are preserved but marked unresolved. The manifest contains no generated prose, raw module dump, presentation schema or chain-of-thought.
+Caller-caused `TypeError`, `ValueError`, `KeyError`, `OverflowError`, datetime errors and expected Registry lookup errors are converted to `QualityGateContractError` with safe field/accepted-ID/enum messages and exception chaining. `BaseException`, system exits and unexpected programmer defects are not caught. Raw hostile values never enter messages. Malformed input therefore leaks no incidental Python exception.
 
-## Architectural isolation
+## Registry validation
 
-- `QCService` remains model-based editorial QC and is not reused.
-- `AgentRegistry`, agents, result dictionaries, `AgentOutputBuilder`, presenters and public DTOs remain unchanged.
-- `TaskPipelineService`, routers and Telegram remain unchanged.
-- No database session or `MarketingWorkflowPersistenceService` is relevant; no transaction ownership is introduced.
-- Registry `1.0.0` remains the canonical metadata resource with zero bindings.
-- Marketing Orchestrator plans remain `PLANNING_ONLY`.
-- Product prompt documents remain source material and are not loaded or copied into Python.
+The injected Registry must be version `1.0.0` with zero bindings. Producer uses exact `ModuleId`; no alias/string normalization occurs in normalized contracts. Each `declared_output_name` must exactly equal one output in the producer descriptor. Handoffs must be registered and exactly present in that descriptor's handoffs. Registry prose is never parsed into authority policy and no required-output schema is inferred.
 
-## Verification strategy
+## Complete gate derivation
 
-Deterministic unit tests cover every legal matrix row, exact/subclass rejection, deep immutability, duplicate/dangling IDs, hostile containers, non-finite confidence, unknown modules, illegal handoffs, propagation collisions/order, conservative confidence, limitations, contradictions/ties, decision precedence, manifests, idempotency and forbidden-call isolation. Verification also proves existing agents/presenters/public DTOs and planner/Registry contracts are unchanged and no LLM/QC/persistence/Redis/worker call occurs.
+Callers supply only module status and normalized content. Structural validity, readiness, eligibility and outcomes are derived. `OUT_OF_SCOPE` authority is never accepted. Non-material limitations are legal with `PASS`.
 
+| Supplied status | Claims | Sufficiency | Material limitation | Failure reasons | Blocking reasons | Authority | Base outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `PASS` | >=1 | `SUFFICIENT` | none | none | none | every claim `WITHIN_SCOPE` or `REQUIRES_REVIEW` | `PASS` |
+| `PASS_WITH_LIMITATIONS` | >=1 | `SUFFICIENT` or `LIMITED` | >=1 | none | none | no claim `OUT_OF_SCOPE` | `PASS_WITH_LIMITATIONS` |
+| `FAIL` | empty claim tuple; failure reasons are the only diagnostics | `INSUFFICIENT` or `NOT_ASSESSED` | any | >=1 | none | n/a | `FAIL` |
+| `BLOCKED` | none | `NOT_ASSESSED` | any | none | >=1 | any | `BLOCKED` |
+
+All other combinations raise. Explicit first-error order after earlier phases is: both failure+blocking reasons; executable/readiness injection; `OUT_OF_SCOPE` accepted status; missing required reason; forbidden reason; claim-presence rule; evidence-sufficiency rule; material-limitation rule; then remaining coherence. Explicitly invalid: `PASS` with material limitation; limited status without one; accepted status with `INSUFFICIENT`/`NOT_ASSESSED`; `FAIL`/`BLOCKED` synthesis injection; `FAIL` without failure; `BLOCKED` without blocker; and any caller-supplied/`EXECUTABLE` readiness.
+
+Contradiction adjustment is deterministic: preserve every claim. Unresolved/incomparable claims are excluded from accepted claim IDs with one derived exclusion each. If none remain, final outcome is `FAIL`, eligibility is `INELIGIBLE`, and derived reason includes `NO_USABLE_CLAIMS`. If some remain, an otherwise accepted result becomes/remains `PASS_WITH_LIMITATIONS` with a derived material `UNRESOLVED_CONTRADICTION` limitation. This adjustment resolves the distinction between preservation and eligibility.
+
+## Confidence and propagation
+
+`ORIGINAL` requires no parents. `REPEATS`, `REFORMULATES` and `DERIVES` require one or more resolved parent claims. No text similarity exists. Repeated/reformulated confidence cannot exceed every parent; multi-parent derived confidence cannot exceed the minimum parent under the canonical order. If any parent is `UNKNOWN`, the ceiling is `UNKNOWN`. Original claims retain caller confidence, which gates do not certify. New evidence is retained but never permits an increase. Evidence independence remains deferred.
+
+Propagation unions provenance, assumptions and limitations by stable ID, rejects unequal collisions, removes duplicate references and emits lexical ID order. It is order-independent and idempotent.
+
+## Contradiction algorithm
+
+Claims are comparable only when object, segment, period and metric-definition keys match exactly; otherwise state is `INCOMPARABLE`. Comparable claims preserve both and are never averaged.
+
+The only prioritization rule is: one side has explicit `FIRST_PARTY`, the other explicit `GENERIC_BENCHMARK`, both `observed_at` exist, and first-party is `SAME` or `NEWER`. State becomes `PRIORITIZED`, winner is the first-party claim and reason is `FIRST_PARTY_NOT_OLDER_THAN_GENERIC_BENCHMARK`. Missing timestamps, older first-party, equal source classes, ties and every uncovered case are `UNRESOLVED`. Recency within the same source class never creates precedence. Prioritization is decision precedence, not truth, and never deletes the other claim.
+
+## Gate × decision compatibility
+
+Trigger validation occurs after final gate derivation. Duplicate triggers deduplicate by enum identity and do not change output.
+
+| Final gate | Legal decision |
+| --- | --- |
+| `BLOCKED` | exactly `BLOCKED` with matching non-empty blocking reasons; stop/replan triggers illegal |
+| `FAIL` | exactly `STOP` + `RESULT_FAILED`; blocking/replan triggers illegal |
+| `PASS`/`PASS_WITH_LIMITATIONS` | blocking reasons illegal; use precedence below |
+
+Accepted-gate precedence: (1) `SCOPE_COMPLETE` or `SUFFICIENT_EVIDENCE` -> `STOP`; (2) `MATERIAL_FINDING`, `DEPENDENCY_INVALIDATED` or `REVERSIBLE_TEST_HIGHER_VALUE` -> `REPLAN_REQUIRED`; (3) `DIMINISHING_VALUE`, `TOOL_LIMIT_REACHED` or `CAPABILITY_LIMIT_REACHED` -> `STOP`; (4) no trigger -> `CONTINUE_CURRENT_PLAN`. Multiple reasons within the winning tier are retained in enum order; lower-tier reasons are retained as evaluated triggers but cannot alter the decision. Any incompatible combination raises.
+
+No decision generates a plan, invokes a module, persists or mutates anything.
+
+## Synthesis eligibility manifest
+
+The immutable manifest contains `manifest_id`, all evaluated result IDs, accepted result IDs, accepted claim IDs, unresolved contradiction IDs, all applicable limitations and typed exclusion records. Every reference resolves inside the batch. Eligible `PASS` and `PASS_WITH_LIMITATIONS` results may contribute; `FAIL`/`BLOCKED` receive `RESULT_FAILED`/`RESULT_BLOCKED`; unresolved/incomparable claims receive `UNRESOLVED_CONTRADICTION`. Exclusion is not deletion. The manifest generates no prose, raw dump, hidden reasoning or public DTO.
+
+## Risks / Trade-offs
+
+- Strict contracts require future adapters -> intentionally defer adapters rather than silently accepting legacy dictionaries.
+- Conservative confidence may understate strong new evidence -> future reviewed independence policy can extend it.
+- Registry output membership is not completeness -> defer module schemas instead of inventing them.
+- Large contract surface -> split tasks and durable verification evidence by invariant.
+
+## Migration and rollback
+
+No migration or rollout integration exists. Runtime apply adds only an unused internal package and tests. Rollback removes that package and documentation; current behavior is unchanged.

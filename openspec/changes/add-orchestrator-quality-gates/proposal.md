@@ -1,42 +1,32 @@
-# Change: Add deterministic orchestrator quality gates
-
 ## Why
 
-The planning-only Marketing Orchestrator can create validated plans, but no typed boundary yet determines whether caller-supplied module results are structurally safe for downstream decision support. A deterministic foundation is needed to preserve provenance, assumptions, confidence, limitations and contradictions without pretending to verify marketing truth.
+The planning-only Marketing Orchestrator needs an exact deterministic boundary for deciding whether caller-supplied typed module results can safely participate in later decision support. Without this contract, runtime implementation would have to invent identity, confidence, state, contradiction and propagation semantics.
 
-## What changes
+## What Changes
 
-- Add one deeply immutable normalized-result contract for already-typed, caller-supplied results.
-- Add exact-type construction validation and a dedicated contract-error boundary.
-- Keep module-declared status, structural validity, gate outcome, evidence sufficiency, confidence, limitations, contradiction state, next-step decision, stop decision, execution readiness and synthesis eligibility separate.
-- Add a deterministic legal-state matrix for `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL` and `BLOCKED` gate outcomes.
-- Preserve claim/evidence identity, provenance, assumptions and material limitations through pure propagation helpers.
-- Represent contradictions, replanning triggers, stop triggers and synthesis eligibility as typed data.
-- Validate registered module and handoff identities against Module Registry `1.0.0` metadata.
-- Document isolation and add deterministic, adversarial tests.
+- Add a private `app/marketing_orchestrator/quality_gates/` package for immutable normalized-result contracts and pure evaluation.
+- Define every finite vocabulary, dataclass field, ID namespace, timestamp rule and error phase.
+- Derive gate outcomes, execution readiness, decisions and synthesis eligibility rather than trusting caller-supplied values.
+- Preserve provenance, assumptions, limitations and explicit lineage with conservative confidence propagation.
+- Add exact contradiction, stop/replan and synthesis-manifest rules.
+- Add independently verifiable negative, adversarial, isolation and compatibility tasks.
 
-## Runtime compatibility
+## Capabilities
 
-- `QCService` remains unchanged because it is an existing model-based editorial check; Quality Gates make no LLM or QC call and add no second QC pass.
-- Existing agents, their heterogeneous result dictionaries, `AgentOutputBuilder`, presenters and public response DTOs remain unchanged. Future adapters may normalize compatible results explicitly.
-- `TaskPipelineService` remains the single-task pipeline and is not connected to this foundation.
-- Module Registry `1.0.0` remains metadata-only with 15 descriptors and zero execution bindings. Its metadata can validate identities, declared output names and registered handoffs, but cannot prove module-specific output completeness or semantic authority.
-- Every Marketing Orchestrator plan remains `PLANNING_ONLY`.
-- Quality Gates own no transaction because evaluation is pure and non-persistent.
+### New Capabilities
 
-## Dependencies
+- `orchestrator-quality-gates`: Pure structural evaluation and downstream-eligibility decisions for immutable normalized module results.
 
-- Expert Core foundation.
-- Module Registry `1.0.0` foundation.
-- Marketing Orchestrator planning foundation.
-- Authoritative reconciliation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
+### Modified Capabilities
 
-## Out of scope
+None.
 
-- Module or agent execution and executable Registry bindings.
-- LLM calls, `QCService` calls, semantic truth/causality/strategy evaluation, prose contradiction discovery, or evidence-independence inference.
-- Natural-language request parsing, context/persistence queries, writes, transactions, migrations, Jobs, Redis, queues or workers.
-- Workflow execution, revised-plan generation/execution, public APIs or Telegram integration.
-- User-facing synthesis, raw module dumps, hidden chain-of-thought, a universal response wrapper, or presenter replacement.
-- Adapters from current agent-specific dictionaries and module-specific normalized schemas.
+## Impact
+
+- Planned code ownership is limited to `app/marketing_orchestrator/quality_gates/` and focused tests.
+- Quality Gates may use public Module Registry types and read-only lookup; Registry `1.0.0` remains 15 metadata-only descriptors with zero execution bindings.
+- Existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `QCService` and `TaskPipelineService` remain unchanged and do not depend on Quality Gates.
+- No API, Telegram, persistence, transaction, migration, Job, Redis, queue, worker, workflow execution, prompt, LLM/QC call or user-facing synthesis is introduced.
+- Existing agent dictionaries require future explicit adapters and are not accepted directly.
+- Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 

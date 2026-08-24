@@ -1,122 +1,165 @@
+## Purpose
+
+Defines a deterministic internal boundary that validates immutable normalized module results and derives safe downstream decisions without executing work or judging semantic truth.
+
 ## ADDED Requirements
 
-### Requirement: Immutable normalized-result boundary
+### Requirement: Exact normalized contracts
 
-The system SHALL accept only already-typed caller-supplied normalized module results with stable result/claim/evidence/assumption/limitation IDs, canonical registered module identity, explicit claim types, provenance, assumptions, limitations, finite confidence, optional registered handoffs and `PLANNING_ONLY` execution readiness. Contracts SHALL defensively copy and deeply freeze exact supported built-in scalar and container types and SHALL expose no unrestricted mutable `Any` field.
+The system SHALL accept only the exact enums, fields, optionality, defaults, scalar/container types and prefixed ASCII IDs defined by the design, SHALL reuse Registry `ModuleId` and `ModuleResultStatus`, and SHALL deeply freeze accepted caller data.
 
-#### Scenario: Caller mutates source data
+#### Scenario: Exact immutable construction
+- **WHEN** an exact normalized evaluation batch is constructed and caller containers later mutate
+- **THEN** the batch remains unchanged and all output ordering is deterministic
 
-- **WHEN** caller-owned containers are changed after normalized contract construction
-- **THEN** the constructed value remains unchanged
+#### Scenario: Unsupported input
+- **WHEN** input contains a subclass, custom collection, caller mapping proxy, wrong-prefix/duplicate ID, unsupported object or unresolved reference
+- **THEN** it raises `QualityGateContractError` before evaluation
 
-#### Scenario: Malformed contract
+### Requirement: Closed contract error boundary
 
-- **WHEN** a value has an unsupported/subclass type, invalid ID, duplicate identity, dangling reference, unknown module, illegal handoff or contradictory state
-- **THEN** construction/evaluation raises `QualityGateContractError`
-- **AND** does not convert the error into `FAIL` or `BLOCKED`
+The system SHALL validate untrusted types before access and SHALL normalize caller-caused supported Python and Registry lookup errors to `QualityGateContractError` without catching system exits or unrelated programmer defects.
 
-### Requirement: Separate legal gate states
+#### Scenario: Hostile collection
+- **WHEN** a hostile custom collection is supplied
+- **THEN** it is rejected without iteration, lookup, hashing, comparison, formatting, copying, `str()` or `repr()`
 
-The system SHALL keep module status, structural validity, gate outcome, evidence sufficiency, confidence, material limitations, contradiction state, next-step decision, stop decision, execution readiness and synthesis eligibility distinct and SHALL enforce the design legal-state matrix.
+#### Scenario: Expected lookup failure
+- **WHEN** a caller supplies an unknown module or handoff
+- **THEN** the expected Registry error is exposed only as `QualityGateContractError`
 
-#### Scenario: Complete success
+### Requirement: Deterministic time semantics
 
-- **WHEN** a valid `PASS` result has accepted claims, sufficient evidence and no material limitation
-- **THEN** the gate outcome is `PASS`
+The system SHALL accept only exact aware `datetime` values, normalize them to UTC preserving microseconds, serialize with `Z`, and SHALL use no ambient clock, timezone, filesystem or environment time.
 
-#### Scenario: Useful limited result
+#### Scenario: Freshness comparison
+- **WHEN** both evidence timestamps are present
+- **THEN** normalized instants derive `NEWER`, `OLDER` or `SAME`
+- **AND** either absent timestamp derives `UNKNOWN`
 
-- **WHEN** a valid `PASS_WITH_LIMITATIONS` result has usable claims and at least one material limitation
-- **THEN** the gate outcome is `PASS_WITH_LIMITATIONS`
-- **AND** every material limitation remains attached downstream
+#### Scenario: Invalid timestamp
+- **WHEN** a timestamp is naive, a subclass or a string
+- **THEN** construction raises `QualityGateContractError`
 
-#### Scenario: Explicit unusable result
+### Requirement: Registry-supported validation only
 
-- **WHEN** a structurally complete `FAIL` result has typed failure reasons and no accepted claims
-- **THEN** the gate outcome is `FAIL`
-- **AND** it is excluded from future synthesis
+The system SHALL use injected Registry `1.0.0` only for canonical module identity, exact declared-output membership and registered descriptor handoffs, and SHALL require zero execution bindings.
 
-#### Scenario: Legitimate blocked result
+#### Scenario: Unsupported module schema inference
+- **WHEN** a result names a registered output
+- **THEN** membership may be validated
+- **AND** the gate does not infer invocation-specific required outputs or semantic authority from Registry prose
 
-- **WHEN** a structurally complete `BLOCKED` result declares a typed missing blocking input or unavailable capability
-- **THEN** the gate outcome is `BLOCKED`
-- **AND** missing normalized fields would instead be a contract error
+### Requirement: Derived legal gate state
 
-### Requirement: Structural checks do not prove truth
+Callers SHALL supply module status but SHALL NOT supply structural validity, gate outcome, execution readiness or synthesis eligibility. The system SHALL derive them using the exhaustive design matrix and SHALL return only `PLANNING_ONLY` readiness.
 
-Gate evaluation SHALL be deterministic, idempotent and side-effect-free and SHALL NOT claim factual truth, evidence independence, causality, ethics or strategic quality from contract completeness or arbitrary prose.
+#### Scenario: Pass
+- **WHEN** a `PASS` result has at least one usable claim, `SUFFICIENT` evidence, no material limitation/reasons and permitted authority
+- **THEN** the derived outcome is `PASS`
 
-#### Scenario: Complete unsupported claim
+#### Scenario: Pass with limitations
+- **WHEN** a `PASS_WITH_LIMITATIONS` result has a usable claim, `SUFFICIENT` or `LIMITED` evidence and a material limitation without failure/blocking reasons
+- **THEN** the derived outcome is `PASS_WITH_LIMITATIONS`
 
-- **WHEN** a claim is structurally complete but its truth cannot be established structurally
-- **THEN** the gate preserves its type, provenance, confidence and limitations
-- **AND** does not mark it true
+#### Scenario: Fail
+- **WHEN** a structurally valid `FAIL` result has no accepted claim, typed failure reasons, no blocker and `INSUFFICIENT` or `NOT_ASSESSED` evidence
+- **THEN** the derived outcome is `FAIL` and synthesis eligibility is `INELIGIBLE`
 
-### Requirement: Conservative evidence propagation
+#### Scenario: Blocked
+- **WHEN** a `BLOCKED` result has no claim, typed blocking reasons, no failure and `NOT_ASSESSED` evidence
+- **THEN** the derived outcome is `BLOCKED` and synthesis eligibility is `INELIGIBLE`
 
-The system SHALL preserve stable claim/evidence identities and provenance, assumptions and material limitations. Repetition or reformulation SHALL NOT increase confidence. Because this contract cannot verify evidence independence, attaching new evidence SHALL preserve it but SHALL NOT increase confidence in this foundation.
+#### Scenario: Illegal combination
+- **WHEN** any status/evidence/claim/materiality/reason/authority combination is outside the design matrix
+- **THEN** deterministic first-error precedence raises `QualityGateContractError`
 
-#### Scenario: Repeated claim
+### Requirement: Identity-based conservative propagation
 
-- **WHEN** a downstream packet repeats or reformulates a claim without a new reviewed confidence policy
-- **THEN** the stable source identity is retained
-- **AND** confidence stays equal or decreases
+The system SHALL propagate only through resolved explicit lineage IDs, union provenance/assumptions/limitations by ID, reject conflicting identities, and emit stable lexical ordering without text similarity.
 
-#### Scenario: Identity collision
+#### Scenario: Confidence ceiling
+- **WHEN** a repeated, reformulated or derived claim references parents
+- **THEN** its canonical enum confidence does not exceed the most conservative parent under `UNKNOWN < LOW < MEDIUM < HIGH`
+- **AND** any `UNKNOWN` parent makes the ceiling `UNKNOWN`
 
-- **WHEN** unequal records reuse one stable identity
-- **THEN** propagation raises `QualityGateContractError`
+#### Scenario: New evidence
+- **WHEN** new evidence is attached
+- **THEN** it is preserved with provenance
+- **AND** confidence does not increase in this foundation
 
-### Requirement: Typed contradiction handling
+### Requirement: Exact contradiction evaluation
 
-The system SHALL accept contradictions only as typed records or from explicitly comparable typed fields and SHALL preserve object, segment, period, metric definition, provenance, freshness, compared claim IDs, resolution state and any deterministic precedence reason.
+The system SHALL compare contradictions only through exact object, segment, period and metric-definition keys, preserve both claims, never average/delete values and never present precedence as truth.
 
-#### Scenario: Current first-party versus benchmark
+#### Scenario: Incomparable claims
+- **WHEN** any comparison key differs
+- **THEN** state is `INCOMPARABLE` and both claims remain
 
-- **WHEN** comparable claims have matching comparison keys, explicitly current first-party evidence and explicitly generic benchmark evidence
-- **THEN** deterministic precedence MAY select the first-party claim
-- **AND** both claims remain present
-- **AND** precedence does not assert semantic truth
+#### Scenario: First-party precedence
+- **WHEN** comparison keys match, source classes are first-party versus generic benchmark, both timestamps exist and first-party is equal or newer
+- **THEN** state is `PRIORITIZED` with `FIRST_PARTY_NOT_OLDER_THAN_GENERIC_BENCHMARK`
+- **AND** both claims remain
 
-#### Scenario: Incomparable or tied claims
+#### Scenario: Uncovered precedence
+- **WHEN** timestamps are missing, first-party is older, classes tie or no exact rule applies
+- **THEN** state is `UNRESOLVED`
 
-- **WHEN** comparison keys differ, freshness is missing, or precedence inputs tie
-- **THEN** the contradiction remains unresolved
-- **AND** values are not averaged or deleted
+### Requirement: Unresolved contradiction eligibility
 
-### Requirement: Pure replanning and stop decisions
+Unresolved/incomparable claims SHALL remain in evaluated results but SHALL be excluded from unqualified accepted claim IDs with typed exclusions.
 
-The system SHALL derive only `CONTINUE_CURRENT_PLAN`, `REPLAN_REQUIRED`, `STOP` or `BLOCKED` from explicit typed triggers using the documented precedence. It SHALL NOT infer materiality from prose, mutate plans/findings, generate/execute a revised plan or invoke modules.
+#### Scenario: Some usable claims remain
+- **WHEN** at least one claim remains eligible after contradiction handling
+- **THEN** the final accepted outcome is `PASS_WITH_LIMITATIONS`
+- **AND** a material `UNRESOLVED_CONTRADICTION` limitation is preserved
 
-#### Scenario: Material finding invalidates dependency
+#### Scenario: No usable claim remains
+- **WHEN** every claim is excluded by unresolved/incomparable contradictions
+- **THEN** final outcome is `FAIL` with `NO_USABLE_CLAIMS`
 
-- **WHEN** an accepted material finding or invalidated dependency is explicitly supplied
-- **THEN** the decision is `REPLAN_REQUIRED`
-- **AND** existing plans and findings remain unchanged
+### Requirement: Gate-compatible decisions
 
-#### Scenario: Sufficient decision evidence
+The system SHALL validate triggers after final gate derivation and SHALL enforce the complete gate × decision matrix and accepted-gate precedence defined by the design.
 
-- **WHEN** sufficient decision evidence, diminishing value or reversible-test preference is explicitly supplied and no higher-precedence blocker/failure exists
-- **THEN** the decision is `STOP` with its typed reason
-- **AND** stopping does not mean execution occurred
+#### Scenario: Blocked gate
+- **WHEN** final gate is `BLOCKED`
+- **THEN** decision is `BLOCKED` with matching blockers
+- **AND** stop/replan triggers are illegal
 
-### Requirement: Synthesis eligibility is not synthesis
+#### Scenario: Failed gate
+- **WHEN** final gate is `FAIL`
+- **THEN** decision is `STOP` with `RESULT_FAILED`
+- **AND** blocking/replan triggers are illegal
 
-The system MAY return an immutable deterministic manifest listing accepted result/claim IDs, material limitations, unresolved contradictions and excluded results with typed reasons. It SHALL NOT generate user-facing prose, raw module dumps, hidden chain-of-thought or a mandatory public response wrapper.
+#### Scenario: Stop and replan triggers coexist
+- **WHEN** an accepted gate has both top-tier completion/sufficient-evidence and replan triggers
+- **THEN** `STOP` wins
+- **AND** duplicate triggers do not change the result
 
-#### Scenario: Limited accepted and failed results
+#### Scenario: Replan beats lower stop
+- **WHEN** an accepted gate has replan triggers and only diminishing/tool/capability stop triggers
+- **THEN** decision is `REPLAN_REQUIRED`
 
-- **WHEN** a limited accepted result and a failed result are evaluated together
-- **THEN** the manifest includes eligible accepted identities and their material limitations
-- **AND** excludes the failed result with a typed reason
+### Requirement: Immutable synthesis eligibility manifest
 
-### Requirement: Architectural isolation
+The system SHALL derive a manifest with resolved evaluated/accepted result and claim IDs, limitations, unresolved contradiction IDs and typed exclusion records.
 
-The foundation SHALL make zero LLM or `QCService` calls, SHALL NOT execute agents/modules, query or write persistence/context, create Jobs, use Redis/queues/workers, modify `TaskPipelineService`, APIs, Telegram, agents or presenters, and SHALL preserve Registry `1.0.0` with zero bindings and all plans as `PLANNING_ONLY`.
+#### Scenario: Mixed outcomes
+- **WHEN** accepted, failed, blocked and unresolved results are evaluated together
+- **THEN** only eligible accepted identities appear in accepted lists
+- **AND** every excluded identity has a typed resolved exclusion
 
-#### Scenario: Gate evaluation
+#### Scenario: No synthesis behavior
+- **WHEN** a manifest is created
+- **THEN** it contains no generated prose, raw module dump, hidden reasoning or public response wrapper
 
-- **WHEN** any legal normalized result is evaluated
-- **THEN** no external or mutable runtime boundary is called
-- **AND** existing runtime contracts remain unchanged
+### Requirement: Pure internal architecture
+
+The foundation SHALL live only under `app/marketing_orchestrator/quality_gates/`, remain deterministic/idempotent/side-effect-free and make zero agent, presenter, router, QC, OpenAI, persistence, context, Job, Redis, queue, worker or workflow calls.
+
+#### Scenario: Existing runtime compatibility
+- **WHEN** the foundation is implemented
+- **THEN** existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `QCService` and `TaskPipelineService` remain unchanged
+- **AND** no public API, Telegram behavior, migration or transaction ownership is added
 

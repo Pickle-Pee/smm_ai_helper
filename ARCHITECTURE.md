@@ -103,6 +103,8 @@ caller-supplied immutable normalized module result
 
 It is not current runtime behavior. The future foundation remains pure and non-persistent: it will not call a module, agent, LLM or the existing model-based `QCService`; query context or persistence; create Jobs; use Redis/workers; generate a revised plan; or synthesize user-facing prose. Existing heterogeneous agent results and presenters require later explicit adapters and remain unchanged. Registry `1.0.0` can validate identities, declared output membership and registered handoffs but does not define invocation-specific required result schemas.
 
+Runtime ownership is reserved to `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It may depend only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
+
 ### URL analysis
 
 `UrlAnalyzer` extracts/normalizes a bounded set of URLs/social targets, fetches lightweight page signals, and stores reusable summaries in `UrlCache` when database access is available.

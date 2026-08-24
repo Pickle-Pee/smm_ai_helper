@@ -8,6 +8,8 @@ Status: pre-implementation evidence template. Runtime Quality Gates have not bee
 - Branch: `agent/add-orchestrator-quality-gates`
 - Scope: OpenSpec and directly related architecture/product/governance documentation only
 - Runtime implementation: pending separate apply step
+- Planned runtime owner: `app/marketing_orchestrator/quality_gates/`
+- Task state after contract completion: 4 reconciliation tasks complete; 62 runtime/runtime-test/verification tasks pending
 
 ## Verified prerequisite baseline
 
@@ -35,18 +37,40 @@ These checks validate the planning/documentation change only; they are not evide
 | Strict all-OpenSpec validation | 11 passed, 0 failed |
 | Working-tree whitespace check | passed; Git emitted only expected Windows LF/CRLF notices |
 
+## Contract-definition reconciliation
+
+The follow-up design review resolved the nine pre-implementation findings by defining:
+
+- every finite enum and the sole confidence order `UNKNOWN < LOW < MEDIUM < HIGH`;
+- exact field optionality/default/empty/ordering and caller-versus-derived ownership;
+- batch-owned prefixed ID namespaces and duplicate-before-reference validation;
+- exact aware-datetime UTC normalization with no ambient time;
+- ordered validation and closed caller-error normalization;
+- exhaustive base gate and contradiction-adjustment rules;
+- explicit lineage/confidence propagation and contradiction precedence;
+- complete gate × decision compatibility and synthesis-manifest fields;
+- concrete private package ownership and dependency direction;
+- 66 independently trackable tasks, of which only 4 evidence-backed reconciliation tasks are checked.
+
+This section records design completeness only. It is not runtime test evidence.
+
 ## Implementation evidence checklist
 
 Complete only in the separate runtime apply step; do not infer completion from the reconciled design.
 
 | Check | Command/test | Result | Notes |
 | --- | --- | --- | --- |
-| Normalized contract and exact-type tests | pending | pending | Include hostile/subclass inputs and deep immutability |
-| Gate matrix tests | pending | pending | Legal and contradictory combinations |
-| Propagation tests | pending | pending | Provenance, confidence, assumptions, limitations |
-| Contradiction tests | pending | pending | Comparability, precedence, ties, unresolved behavior |
-| Decision/manifest tests | pending | pending | Trigger precedence, stop reasons, eligibility |
-| Isolation/compatibility tests | pending | pending | Zero LLM/QC/external calls; existing boundaries unchanged |
+| Enum/field and exact scalar/container tests | pending | pending | Include optional/default/empty/ordering rules |
+| ID/uniqueness/reference tests | pending | pending | Duplicate precedence and cross-result lineage |
+| Hostile/proxy and exception-boundary tests | pending | pending | Separate evidence groups |
+| Timestamp and ambient-time isolation tests | pending | pending | UTC normalization/freshness |
+| Registry identity/output/handoff tests | pending | pending | No inferred module schema |
+| Gate matrix/outcome derivation tests | pending | pending | Every legal/illegal combination |
+| Propagation/confidence tests | pending | pending | Provenance, assumptions, limitations, `UNKNOWN` |
+| Contradiction tests | pending | pending | Comparability, precedence, preservation/exclusion |
+| Decision compatibility tests | pending | pending | Gate matrix and stop/replan precedence |
+| Manifest tests | pending | pending | Inclusion, typed exclusions, reference resolution |
+| Isolation/compatibility tests | pending | pending | Zero LLM/QC/persistence/workflow calls; existing boundaries unchanged |
 | Focused foundation suites | pending | pending | Quality Gates, Registry, Orchestrator, Expert Core |
 | Full pytest | pending | pending | Record count and warnings |
 | Compile | pending | pending | `app` and `bot` |

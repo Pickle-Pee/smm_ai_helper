@@ -46,7 +46,7 @@ Orchestrator не является универсальным CMO и не под
 
 Текущий runtime foundation реализует только deterministic planning и всегда возвращает `PLANNING_ONLY`. Quality Gates, replanning, synthesis и execution из полного product concept не следует считать уже подключённым поведением.
 
-Планируемый Quality Gates foundation принимает только caller-supplied typed normalized results и возвращает deterministic structural decisions. Он не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Пользовательский synthesis остаётся отдельной будущей интеграцией; foundation может сформировать только manifest eligibility.
+Планируемый Quality Gates foundation в `app/marketing_orchestrator/quality_gates/` принимает только caller-supplied typed normalized results и возвращает deterministic structural decisions. Confidence использует только `UNKNOWN < LOW < MEDIUM < HIGH`; identities и lineage явные, timestamps caller-supplied и UTC-normalized. Foundation не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Пользовательский synthesis остаётся отдельной будущей интеграцией; foundation может сформировать только immutable eligibility manifest.
 
 ### 3. Module Registry
 

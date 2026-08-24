@@ -17,7 +17,7 @@ A rule is written once under its owner. Shared reasoning belongs to Core; planni
 
 For `add-marketing-orchestrator-foundation`, executable planning behavior is typed code plus explicit OpenSpec scenarios and invariants. The foundation must not load `orchestrator-production.md`, copy it into Python, create `app/prompts/orchestrator` or call an LLM. Product source and typed code are not described as two canonical runtime prompts.
 
-For `add-orchestrator-quality-gates`, typed contracts and deterministic OpenSpec rules own only normalized-result structural validation, propagation, contradiction records, explicit next-step/stop decisions and synthesis eligibility. The foundation does not make the broader product-source replanning or synthesis prose executable, and it does not add a prompt or model/QC call.
+For `add-orchestrator-quality-gates`, `app/marketing_orchestrator/quality_gates/` typed contracts and deterministic OpenSpec rules own only normalized-result structural validation, propagation, contradiction records, explicit next-step/stop decisions and synthesis eligibility. The foundation does not make the broader product-source replanning or synthesis prose executable, and it does not add a prompt or model/QC call.
 
 A model-driven planner requires a separate OpenSpec change, exactly one versioned runtime prompt, deterministic contract tests, model evals, and token/call-budget and latency review.
 

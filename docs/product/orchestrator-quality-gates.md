@@ -1,40 +1,54 @@
 # Orchestrator Quality Gates product contract
 
-## Responsibility
+## Planned responsibility
 
-Quality Gates are a deterministic, planning-only decision boundary for already-typed normalized module results. They answer whether a supplied result is structurally legal and eligible for later downstream use. They do not execute work or judge whether arbitrary marketing prose is true or strategically good.
+Quality Gates are a planned pure, deterministic, immutable and `PLANNING_ONLY` internal boundary over caller-supplied typed normalized results. Runtime ownership will be `app/marketing_orchestrator/quality_gates/`. The boundary derives structural validity, gate outcome, readiness, decisions and synthesis eligibility; callers cannot assert those states.
 
-## Inputs and outputs
+It does not execute modules, call an LLM or model-based `QCService`, query/persist context, create Jobs, use Redis/workers, orchestrate workflows, generate/revise plans, expose APIs/Telegram behavior, interpret arbitrary prose or synthesize user-facing text.
 
-The boundary accepts immutable normalized results with stable result, claim, evidence, assumption and limitation IDs; canonical Registry module IDs; explicit claim types and provenance; finite confidence; materiality; typed failure/blocking reasons; and optional registered handoffs.
+## Canonical vocabulary
 
-It returns immutable gate, contradiction, next-step, stop and synthesis-eligibility decisions. Module status, structural validity, gate outcome, evidence sufficiency, confidence, limitations, contradiction state, execution readiness and synthesis eligibility remain separate.
+- Claim: `FACT`, `OBSERVATION`, `INFERENCE`, `HYPOTHESIS`, `ASSUMPTION`, `FORECAST`, `RECOMMENDATION`.
+- Confidence: `UNKNOWN < LOW < MEDIUM < HIGH`; no normalized-result float confidence.
+- Evidence sufficiency: `SUFFICIENT`, `LIMITED`, `INSUFFICIENT`, `NOT_ASSESSED`.
+- Module status and separate derived gate outcome: `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, `BLOCKED`.
+- Lineage: `ORIGINAL`, `REPEATS`, `REFORMULATES`, `DERIVES`.
+- Contradiction: `UNRESOLVED`, `PRIORITIZED`, `INCOMPARABLE`.
+- Decision: `CONTINUE_CURRENT_PLAN`, `REPLAN_REQUIRED`, `STOP`, `BLOCKED`.
 
-Malformed contracts raise a dedicated error. A valid `FAIL` means the caller explicitly supplied a structurally complete but unusable result. A valid `BLOCKED` means a typed missing input/capability prevents use. Neither substitutes for missing required fields.
+All remaining authority, materiality, limitation, failure, blocking, exclusion, replan, stop, source-class, freshness and precedence vocabularies are closed enums defined in the OpenSpec design; strings are not converted into enum values.
 
-## Deterministic policy
+## Identity and time
 
-- `PASS`: accepted claims, sufficient evidence metadata and no material limitation.
-- `PASS_WITH_LIMITATIONS`: usable claims plus at least one preserved material limitation.
-- `FAIL`: typed failure reason and no accepted downstream claims.
-- `BLOCKED`: typed missing blocking input/capability and no accepted downstream claims.
-- Contract completeness never proves claim truth, causality, ethics, evidence independence or strategic quality.
-- Repetition never raises confidence. New evidence is preserved, but confidence does not increase in this foundation because independence cannot be verified.
-- Assumptions never become facts and material limitations are never dropped.
-- Contradictions are typed inputs, never discovered by reading prose. Both claims remain present and are never averaged.
-- Explicitly current first-party evidence may outrank an explicitly generic benchmark only for matching typed comparison dimensions; missing freshness, incomparable fields and ties remain unresolved.
-- Replanning/stopping decisions use only explicit triggers and never mutate or execute plans.
+Every entity uses an exact lowercase ASCII prefixed ID (`res_`, `clm_`, `evd_`, `asm_`, `lim_`, `ctr_`, `exc_`, `man_`) with no trimming or normalization. The immutable evaluation batch owns uniqueness and reference resolution across included results.
 
-## Synthesis boundary
+Evidence time accepts only exact aware `datetime`, normalizes explicit offsets to UTC, preserves microseconds and serializes with `Z`. Evaluation uses no ambient clock or timezone. Missing timestamps remain incomparable.
 
-This foundation may produce a manifest containing accepted result/claim IDs, limitations, unresolved contradictions and typed exclusions. It does not produce user-facing prose, raw module dumps, hidden reasoning or a public response wrapper. Actual synthesis and delivery require a later workflow integration change.
+## Gate policy
 
-## Runtime compatibility
+- `PASS`: usable claim, sufficient evidence, no material limitation/reasons, permitted authority.
+- `PASS_WITH_LIMITATIONS`: usable claim, sufficient/limited evidence and at least one material limitation.
+- `FAIL`: structurally valid unusable result with typed failure reason and no synthesis eligibility.
+- `BLOCKED`: typed blocker, `NOT_ASSESSED`, no claim and no synthesis eligibility.
+- Every other combination raises `QualityGateContractError` in deterministic phase/field order.
+- Registry `1.0.0` keeps zero bindings, so readiness is always derived `PLANNING_ONLY`.
 
-`QCService` remains the existing model-based editorial check and is not called. Existing agents and presenters retain their heterogeneous dictionaries; future explicit adapters are required. `TaskPipelineService`, APIs, Telegram, persistence, Jobs, Redis and workers are unchanged. Module Registry `1.0.0` remains metadata-only with zero execution bindings and every Marketing Orchestrator plan remains `PLANNING_ONLY`.
+## Propagation and contradictions
 
-Registry metadata supports identity, declared-output membership and registered-handoff checks. It does not specify invocation-specific required result schemas, so module-specific completeness and semantic authority checks are deferred.
+Only explicit resolved lineage IDs propagate. Provenance, assumptions and limitations are identity-unioned in stable order. Repetition/reformulation/derivation never exceeds the most conservative parent confidence; `UNKNOWN` remains `UNKNOWN`. New evidence is preserved but cannot increase confidence; evidence independence remains deferred.
 
-## Source ownership
+Contradictions compare exact object, segment, period and metric-definition keys. Both claims remain and are never averaged/deleted. First-party may be prioritized over a generic benchmark only with matching keys and an equal/newer explicit timestamp. Every other uncovered/tied/missing-time case remains unresolved; precedence is not truth.
 
-This document and the active OpenSpec change define the product/engineering contract. `docs/product/prompts/orchestrator-production.md` is product source material only; it is not loaded by this deterministic foundation and is not duplicated into Python.
+Unresolved/incomparable claims stay in evaluated results but are excluded from accepted claim IDs with typed records. No remaining usable claim produces `FAIL/NO_USABLE_CLAIMS`; otherwise the accepted result is limited and carries a material contradiction limitation.
+
+## Decisions and synthesis eligibility
+
+`BLOCKED` gates produce only matching `BLOCKED`; `FAIL` produces only `STOP/RESULT_FAILED`. For accepted gates, completion/sufficient evidence stops first, material finding/dependency invalidation/reversible-test value replans second, diminishing/tool/capability limits stop third, and no trigger continues. Decisions never execute work.
+
+The immutable manifest lists evaluated/accepted IDs, limitations, unresolved contradictions and typed exclusions. It generates no prose, raw dumps, hidden reasoning or public DTO.
+
+## Compatibility
+
+Registry validates only canonical identity, exact declared-output membership and registered handoffs; it supplies no module-specific required schema or executable adapter. Existing heterogeneous agents, presenters, public DTOs, planner/validator, `AgentRegistry`, `QCService` and `TaskPipelineService` remain unchanged. Future adapters and workflow/synthesis integration require separate changes.
+
+`docs/product/prompts/orchestrator-production.md` remains product source material only and is not loaded or copied into runtime code.
