@@ -90,9 +90,9 @@ It supports only `explicit_single_module_v1` and `new_positioning_v1`. The latte
 
 This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
 
-### Planned deterministic Quality Gates foundation
+### Internal deterministic Quality Gates foundation
 
-OpenSpec change `add-orchestrator-quality-gates` defines the next internal planning-only boundary:
+OpenSpec change `add-orchestrator-quality-gates` implements an internal planning-only boundary:
 
 ```text
 caller-supplied immutable normalized module result
@@ -101,9 +101,9 @@ caller-supplied immutable normalized module result
  -> synthesis-eligibility manifest (data only)
 ```
 
-It is not current runtime behavior. The future foundation remains pure and non-persistent: it will not call a module, agent, LLM or the existing model-based `QCService`; query context or persistence; create Jobs; use Redis/workers; generate a revised plan; or synthesize user-facing prose. Existing heterogeneous agent results and presenters require later explicit adapters and remain unchanged. Registry `1.0.0` can validate identities, declared output membership and registered handoffs but does not define invocation-specific required result schemas.
+It is current internal code but is not connected to a workflow execution or user-facing path. The foundation remains pure and non-persistent: it does not call a module, agent, LLM or the existing model-based `QCService`; query context or persistence; create Jobs; use Redis/workers; generate a revised plan; or synthesize user-facing prose. Existing heterogeneous agent results and presenters require later explicit adapters and remain unchanged. Registry `1.0.0` can validate identities, declared output membership and registered handoffs but does not define invocation-specific required result schemas.
 
-Runtime ownership is reserved to `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It may depend only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
+Runtime ownership is `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It depends only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
 
 ### URL analysis
 
@@ -131,8 +131,21 @@ PostgreSQL is the current durable source of truth for:
 - conversations and messages;
 - brand profiles;
 - URL cache.
+- marketing workflow runs;
+- named marketing workflow artifacts.
 
-Future durable workflow/job state also belongs in PostgreSQL.
+Future durable Job state also belongs in PostgreSQL.
+
+### Approved durable Job persistence contract (not implemented)
+
+OpenSpec change `add-durable-job-persistence` defines an additive `jobs` table and an unused internal persistence service. A Job is one durable future execution request; it does not replace `MarketingRun` workflow progress or `MarketingArtifact` output.
+
+- Ownership is exclusive and optional: MarketingRun-owned, runless user-owned, or system/anonymous. A workflow step is valid only for a run-owned Job.
+- The closed lifecycle is `pending -> running -> succeeded|failed`; retry, cancellation, timeout, delivery, and dead-letter states are not part of this foundation.
+- Job mutations may add/flush and participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
+- PostgreSQL commit establishes durability. A persisted Job is inert: this contract introduces no publication, claim, polling, execution, Redis, worker, LLM/QC, API, or Telegram behavior.
+
+See `docs/product/durable-job-persistence.md`. Runtime behavior requires a later apply task after the OpenSpec artifacts are accepted.
 
 ## Planned MVP workflow architecture
 
@@ -146,7 +159,7 @@ MarketingWorkflowService
         |
         +--> MarketingRun / MarketingArtifact (PostgreSQL)
         |
-        +--> JobService (PostgreSQL durable status)
+        +--> JobPersistenceService (approved PostgreSQL contract; not implemented)
                 |
                 v
              Redis queue

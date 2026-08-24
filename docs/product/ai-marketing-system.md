@@ -98,6 +98,18 @@ Telegram / API
 
 PostgreSQL — durable source of truth. Redis — transport и coordination, но не business storage.
 
+### Durable Job persistence boundary
+
+`add-durable-job-persistence` утверждает pre-implementation contract, но ещё не добавляет runtime-модель или миграцию. `Job` — это одна durable execution request будущей асинхронной работы, а не копия workflow state или output:
+
+- `MarketingRun` хранит состояние и прогресс multi-step workflow;
+- `MarketingArtifact` хранит именованный reusable output шага;
+- `Job` хранит immutable request input и lifecycle `pending -> running -> succeeded|failed`.
+
+Job может принадлежать `MarketingRun`, runless user или быть system/anonymous; одновременно ссылаться на run и user нельзя. Commit/rollback принадлежит вызывающему transaction owner, поэтому будущие Job и MarketingRun/Artifact изменения могут быть атомарны в PostgreSQL.
+
+Persisted Job остаётся inert до отдельных reviewed changes: foundation не публикует в Redis, не claim/execute work, не делает retry/idempotency/cancellation/timeout/delivery, не вызывает modules, LLM или QC и не меняет API/Telegram behavior.
+
 ## Runtime boundaries
 
 - `TaskPipelineService` остаётся single-task pipeline.

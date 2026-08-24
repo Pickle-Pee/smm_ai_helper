@@ -7,17 +7,17 @@
 - [x] Expert Core foundation.
 - [x] Module Registry `1.0.0` with zero execution bindings.
 - [x] Marketing Orchestrator deterministic planning foundation (`PLANNING_ONLY`).
+- [x] Deterministic Orchestrator Quality Gates foundation (`PLANNING_ONLY`, no execution integration).
 
 ## Current
 
 - [x] Apply `add-expert-core-foundation` (merged by PR #40).
 - [x] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
-- [ ] Reconcile and review `add-orchestrator-quality-gates` before runtime implementation.
+- [ ] Review the reconciled pre-implementation `add-durable-job-persistence` contract.
 
 ## Infrastructure and quality next
 
-- [ ] Implement the deterministic `add-orchestrator-quality-gates` foundation after the reconciled specification is accepted.
-- [ ] `add-durable-job-persistence`.
+- [ ] Apply `add-durable-job-persistence` after its specification is accepted.
 - [ ] `add-redis-worker-foundation`.
 
 ## Product vertical
@@ -45,4 +45,5 @@
 - Execution waits for durable Job/workers and is owned by `MarketingWorkflowService`.
 - Model-driven planning, an executable Orchestrator prompt, runtime QC/replanning and synthesis require later OpenSpec changes.
 - Quality Gates are a pure normalized-result foundation; agent adapters, revised-plan generation, workflow execution and user-facing synthesis remain later changes.
+- Durable Job persistence is PostgreSQL-only and uses `pending -> running -> succeeded|failed`; publication, claiming, retries, idempotency, cancellation and delivery remain later changes.
 - `master` receives changes only after integration through `sale-ready`.
