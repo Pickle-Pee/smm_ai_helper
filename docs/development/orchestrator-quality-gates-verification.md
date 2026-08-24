@@ -14,14 +14,14 @@ Status: reconciled runtime foundation implemented and verified on `agent/add-orc
 
 | Evidence | Result |
 | --- | --- |
-| Quality Gates contracts, canonicalization, evaluator propagation, contradictions, decisions, manifest, hostile boundary and isolation | 93 passed; one pre-existing Pydantic warning |
+| Quality Gates contracts, canonicalization, total iterative lineage, evaluator propagation, contradictions, decisions, manifest, hostile boundary and isolation | 101 passed; one pre-existing Pydantic warning |
 | Module Registry | 27 passed |
 | Marketing Orchestrator compatibility | 117 passed; four pre-existing Pydantic warnings |
 | Expert Core, integration, Agent Registry and TaskPipeline compatibility | 43 passed |
 | Historical baseline before initial apply | 269 passed; nine pre-existing warnings |
-| Current full suite | 362 passed; nine pre-existing warnings |
+| Current full suite | 370 passed; nine pre-existing warnings |
 
-Current focused tests prove controlled construction for every public caller-owned contract; exact closed-enum membership; one propagated context per claim; recursive one-parent, multi-parent, multi-level and diamond lineage; cycle rejection; confidence ceilings; decision-trigger retention; propagated decision/manifest source sets; hostile rejection; and an independently declared caller fingerprint field matrix.
+Current focused tests prove controlled construction for every public caller-owned contract; exact closed-enum membership; one propagated context per claim; iterative one-parent, multi-parent, multi-level and diamond lineage; cycle rejection; confidence ceilings; decision-trigger retention; propagated decision/manifest source sets; hostile rejection; and an independently declared caller fingerprint field matrix.
 
 ## Canonical vectors
 
@@ -32,12 +32,13 @@ Current focused tests prove controlled construction for every public caller-owne
 
 Tests cover RFC 8785 UTF-16 key ordering and escaping, typed integers/floats, signed zero, UTC offset normalization, every contradiction-side key, and order-significant side reversal. Fingerprints contain caller inputs only and no derived cycle.
 
-The independent matrix names every caller-owned batch, result, claim, evidence, assumption, limitation, contradiction and side field. Each legal semantic mutation changes the fingerprint; set-like order normalizes, side position remains significant, and `batch_fingerprint`, `PropagatedClaimContext`, aggregate and every other derived field remain excluded.
+The independent matrix names every caller-owned batch, result, claim, evidence, assumption, limitation, contradiction and side field. Legal lineage-type and parent-ID mutations are isolated on a valid non-root claim. Two distinct results prove caller result order normalizes; two-element claim, evidence, assumption, limitation, contradiction, semantic-set and ID-tuple reversals prove each declared order rule without no-op transformations. Each legal semantic mutation changes the fingerprint; set-like order normalizes, side position remains significant, and `batch_fingerprint`, `PropagatedClaimContext`, aggregate and every other derived field remain excluded.
 
 ## Propagation and decision evidence
 
 - `PropagatedClaimContext` is frozen/slotted, output-only, batch-identified, and emitted exactly once per claim in claim-ID order.
-- Evaluator DFS validates resolved parents and rejects self, two-node and longer cycles before output construction.
+- Evaluator propagation uses a lexical ready-heap Kahn traversal over parent-to-child edges. It calculates each context after every parent, rejects any unprocessed cyclic remainder, and contains no recursion or depth limit.
+- Direct 1,100-claim regressions cover forward/reverse ID chains, reordered cross-result input, multiple roots, forward/reverse long cycles, and a long chain ending in a short cycle. Valid chains preserve lexical outputs, records, conservative confidence, immutability and repeated-evaluation equality; cycles raise only `QualityGateContractError`.
 - Evidence, assumptions, material and non-material limitations recursively union by stable ID; diamond paths deduplicate and unequal duplicate batch identities fail deterministically.
 - Effective confidence never exceeds the most conservative effective parent; repeated equal evaluation is idempotent and caller records are unchanged.
 - Owning `GateDecision` values merge declared and effective IDs without unrelated records or duplicates. Effective material limitations produce `PASS_WITH_LIMITATIONS` and accepted-result propagated limitations enter the manifest.
@@ -72,7 +73,7 @@ Dedicated tests reject hostile subclasses of string, integer, float, list, tuple
 
 ## Current implementation checks
 
-Full pytest passed with 362 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot` passed. Strict change/all validation and final branch diff checks passed. Historical runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388` remains the pre-reconciliation implementation reference only.
+Full pytest passed with 370 tests and the same nine pre-existing warnings. Python compilation for `app` and `bot` passed. Strict change/all validation and final branch diff checks passed. Historical runtime commit `af28b9273d881e6e8ff89b62930fe36bbf401388` remains the pre-reconciliation implementation reference only.
 
 ## Remaining limitations
 

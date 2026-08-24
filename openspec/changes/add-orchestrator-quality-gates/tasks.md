@@ -145,10 +145,10 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [x] 11.1 Implement controlled construction for every public caller-owned contract; convert missing, unknown, conflicting and derived/output-only arguments to `QualityGateContractError` while preserving valid positional/keyword construction and immutability.
 - [x] 11.2 Preserve every validated stop/replan reason in `DecisionResult` while precedence selects only `decision`; cover all legal tiers, mixed tiers, multiple reasons, duplicates and reordered inputs.
 - [x] 11.3 Implement output-only `PropagatedClaimContext` and the exact one-per-claim `BatchEvaluationResult.propagated_claim_contexts` field with batch identity and deep immutability.
-- [x] 11.4 Validate an acyclic lineage graph and integrate recursive propagation into `QualityGateEvaluator` before contradiction and final output derivation.
+- [x] 11.4 Validate an acyclic lineage graph and integrate total iterative transitive propagation into `QualityGateEvaluator` before contradiction and final output derivation.
 - [x] 11.5 Propagate evidence, assumptions, material limitations and non-material limitations into context, owning `GateDecision` source sets and accepted-result manifest limitations.
 - [x] 11.6 Prove multiple-parent/reordered-parent determinism, identical-ID deduplication, unequal-content collision rejection, idempotence, parent failure and conservative effective confidence.
 - [x] 11.7 Add independently declared exact-membership tests for every closed Quality Gates enum.
 - [x] 11.8 Add adversarial exact-type and nested hostile-value coverage across the complete caller-contract graph, with promised hostile counters remaining zero.
-- [x] 11.9 Add an independently declared fingerprint participation matrix for every caller-owned source field, order rule, derived-field exclusion and all four fixed vectors.
+- [x] 11.9 Add an independently declared fingerprint participation matrix with isolated legal mutations for every caller-owned source field, non-vacuous two-element order rules, derived-field exclusion and all four fixed vectors.
 - [x] 11.10 Import Registry lookup errors only from the public `app.module_registry` boundary; rerun all focused/full/isolation/compatibility checks and update this task file and verification evidence truthfully.

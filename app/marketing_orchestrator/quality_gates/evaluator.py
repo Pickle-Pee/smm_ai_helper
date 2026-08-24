@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib
+import heapq
 from app.module_registry import ModuleRegistry, ModuleRegistryError, ModuleRegistryNotFoundError, ModuleResultStatus
 from .canonical import derive_id
 from .contracts import *
@@ -49,24 +49,30 @@ class QualityGateEvaluator:
             if isinstance(e,QualityGateContractError):raise
             raise QualityGateContractError("Registry validation failed") from e
         contexts_by_id={}
-        visiting=set()
-        def propagate(claim_id):
-            if claim_id in contexts_by_id:return contexts_by_id[claim_id]
-            if claim_id in visiting:raise QualityGateContractError(f"lineage cycle detected: {claim_id}")
-            visiting.add(claim_id)
+        children={claim_id:[] for claim_id in claims}
+        indegree={claim_id:len(claim.parent_claim_ids) for claim_id,claim in claims.items()}
+        for claim_id,claim in claims.items():
+            for parent_id in claim.parent_claim_ids:children[parent_id].append(claim_id)
+        for child_ids in children.values():child_ids.sort()
+        ready=[claim_id for claim_id,count in indegree.items() if count==0]
+        heapq.heapify(ready)
+        while ready:
+            claim_id=heapq.heappop(ready)
             claim=claims[claim_id]
-            parents=tuple(propagate(pid) for pid in claim.parent_claim_ids)
+            parents=tuple(contexts_by_id[parent_id] for parent_id in claim.parent_claim_ids)
             if not confidence_within_parent_ceiling(claim.confidence,[p.effective_confidence for p in parents]):
                 raise QualityGateContractError(f"claim confidence exceeds parent ceiling: {claim.claim_id}")
-            context=PropagatedClaimContext._make(
+            contexts_by_id[claim_id]=PropagatedClaimContext._make(
                 batch_id=batch.batch_id,batch_fingerprint=batch.batch_fingerprint,claim_id=claim.claim_id,
                 effective_confidence=claim.confidence,
                 evidence_ids=tuple(sorted({*claim.evidence_ids,*(x for p in parents for x in p.evidence_ids)})),
                 assumption_ids=tuple(sorted({*claim.assumption_ids,*(x for p in parents for x in p.assumption_ids)})),
                 limitation_ids=tuple(sorted({*claim.limitation_ids,*(x for p in parents for x in p.limitation_ids)})),
             )
-            visiting.remove(claim_id);contexts_by_id[claim_id]=context;return context
-        for claim_id in sorted(claims):propagate(claim_id)
+            for child_id in children[claim_id]:
+                indegree[child_id]-=1
+                if indegree[child_id]==0:heapq.heappush(ready,child_id)
+        if len(contexts_by_id)!=len(claims):raise QualityGateContractError("lineage cycle detected")
         propagated_contexts=tuple(contexts_by_id[x] for x in sorted(contexts_by_id))
         base={r.result_id:self._base(r) for r in batch.results}
         records=[]; dlimits={}; exclusions={}; collision={}

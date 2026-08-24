@@ -267,9 +267,10 @@ def _fingerprint_fixture():
     ev=EvidenceRecord("evd_one",EvidenceSourceClass.FIRST_PARTY,"source",UTC)
     asm=AssumptionRecord("asm_one","assumption",Materiality.MATERIAL)
     lim=LimitationRecord("lim_one",LimitationReason.TOOL_LIMIT,Materiality.MATERIAL,("res_one",),("clm_left",),("ctr_one",),"limit")
-    left_claim=claim("clm_left",evidence_ids=("evd_one",),assumption_ids=("asm_one",),limitation_ids=("lim_one",))
+    left_claim=claim("clm_left",confidence=Confidence.LOW,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_right",),evidence_ids=("evd_one",),assumption_ids=("asm_one",),limitation_ids=("lim_one",))
     right_claim=claim("clm_right")
-    r=result("res_one",claims=(left_claim,right_claim),evidence=(ev,),assumptions=(asm,),limitations=(lim,),failure_reasons={FailureReason.MODULE_DECLARED_FAILURE},blocking_reasons={BlockingReason.MISSING_CAPABILITY},handoff_module_ids={ModuleId.MENTOR})
+    alternate_parent=claim("clm_alternate")
+    r=result("res_one",claims=(left_claim,right_claim,alternate_parent),evidence=(ev,),assumptions=(asm,),limitations=(lim,),failure_reasons={FailureReason.MODULE_DECLARED_FAILURE},blocking_reasons={BlockingReason.MISSING_CAPABILITY},handoff_module_ids={ModuleId.MENTOR})
     left=ContradictionSide(claim_id="clm_left",evidence_id="evd_one",object_key="object",segment_key="segment",period_key="period",metric_definition_key="metric")
     right=ContradictionSide(claim_id="clm_right",evidence_id="evd_one",object_key="object",segment_key="segment",period_key="period",metric_definition_key="metric")
     return EvaluationBatch("bat_matrix",(r,),(ContradictionInput("ctr_one",left,right),),UTC)
@@ -278,12 +279,12 @@ def _fingerprint_fixture():
 def test_independent_fingerprint_participation_matrix_and_derived_exclusions():
     base=_fingerprint_fixture();r=base.results[0];c=base.contradictions[0];left=c.left;right=c.right;clm=r.claims[0];ev=r.evidence[0];asm=r.assumptions[0];lim=r.limitations[0]
     def with_result(new):return replace(base,results=(new,))
-    def with_claim(new):return with_result(replace(r,claims=(new,r.claims[1])))
+    def with_claim(new):return with_result(replace(r,claims=(new,*r.claims[1:])))
     def with_side(new_left=left,new_right=right):return replace(base,contradictions=(replace(c,left=new_left,right=new_right),))
     mutations={
         "batch.batch_id":replace(base,batch_id="bat_other"),"batch.evaluation_at":replace(base,evaluation_at=UTC+timedelta(seconds=1)),"batch.results":replace(base,results=(replace(r,result_id="res_other"),)),"batch.contradictions":replace(base,contradictions=()),
         "result.result_id":with_result(replace(r,result_id="res_other")),"result.module_id":with_result(replace(r,module_id=ModuleId.MENTOR)),"result.module_status":with_result(replace(r,module_status=ModuleResultStatus.FAIL)),"result.claims":with_result(replace(r,claims=(r.claims[0],))),"result.evidence":with_result(replace(r,evidence=())),"result.assumptions":with_result(replace(r,assumptions=())),"result.limitations":with_result(replace(r,limitations=())),"result.failure_reasons":with_result(replace(r,failure_reasons=frozenset())),"result.blocking_reasons":with_result(replace(r,blocking_reasons=frozenset())),"result.evidence_sufficiency":with_result(replace(r,evidence_sufficiency=EvidenceSufficiency.LIMITED)),"result.handoff_module_ids":with_result(replace(r,handoff_module_ids=frozenset())),
-        "claim.claim_id":with_claim(replace(clm,claim_id="clm_other")),"claim.declared_output_name":with_claim(replace(clm,declared_output_name="other")),"claim.claim_type":with_claim(replace(clm,claim_type=ClaimType.INFERENCE)),"claim.confidence":with_claim(replace(clm,confidence=Confidence.LOW)),"claim.authority_status":with_claim(replace(clm,authority_status=AuthorityStatus.REQUIRES_REVIEW)),"claim.value":with_claim(replace(clm,value="other")),"claim.lineage_type":with_claim(replace(clm,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_right",))),"claim.parent_claim_ids":with_claim(replace(clm,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_right",))),"claim.evidence_ids":with_claim(replace(clm,evidence_ids=())),"claim.assumption_ids":with_claim(replace(clm,assumption_ids=())),"claim.limitation_ids":with_claim(replace(clm,limitation_ids=())),
+        "claim.claim_id":with_claim(replace(clm,claim_id="clm_other")),"claim.declared_output_name":with_claim(replace(clm,declared_output_name="other")),"claim.claim_type":with_claim(replace(clm,claim_type=ClaimType.INFERENCE)),"claim.confidence":with_claim(replace(clm,confidence=Confidence.UNKNOWN)),"claim.authority_status":with_claim(replace(clm,authority_status=AuthorityStatus.REQUIRES_REVIEW)),"claim.value":with_claim(replace(clm,value="other")),"claim.lineage_type":with_claim(replace(clm,lineage_type=ClaimLineageType.REFORMULATES)),"claim.parent_claim_ids":with_claim(replace(clm,parent_claim_ids=("clm_alternate",))),"claim.evidence_ids":with_claim(replace(clm,evidence_ids=())),"claim.assumption_ids":with_claim(replace(clm,assumption_ids=())),"claim.limitation_ids":with_claim(replace(clm,limitation_ids=())),
         "evidence.evidence_id":with_result(replace(r,evidence=(replace(ev,evidence_id="evd_other"),))),"evidence.source_class":with_result(replace(r,evidence=(replace(ev,source_class=EvidenceSourceClass.UNKNOWN),))),"evidence.provenance":with_result(replace(r,evidence=(replace(ev,provenance="other"),))),"evidence.observed_at":with_result(replace(r,evidence=(replace(ev,observed_at=UTC+timedelta(seconds=1)),))),
         "assumption.assumption_id":with_result(replace(r,assumptions=(replace(asm,assumption_id="asm_other"),))),"assumption.description":with_result(replace(r,assumptions=(replace(asm,description="other"),))),"assumption.materiality":with_result(replace(r,assumptions=(replace(asm,materiality=Materiality.NON_MATERIAL),))),
         "limitation.limitation_id":with_result(replace(r,limitations=(replace(lim,limitation_id="lim_other"),))),"limitation.reason":with_result(replace(r,limitations=(replace(lim,reason=LimitationReason.CAPABILITY_LIMIT),))),"limitation.materiality":with_result(replace(r,limitations=(replace(lim,materiality=Materiality.NON_MATERIAL),))),"limitation.related_result_ids":with_result(replace(r,limitations=(replace(lim,related_result_ids=("res_other",)),))),"limitation.related_claim_ids":with_result(replace(r,limitations=(replace(lim,related_claim_ids=("clm_right",)),))),"limitation.related_contradiction_ids":with_result(replace(r,limitations=(replace(lim,related_contradiction_ids=()),))),"limitation.description":with_result(replace(r,limitations=(replace(lim,description="other"),))),
@@ -292,9 +293,48 @@ def test_independent_fingerprint_participation_matrix_and_derived_exclusions():
     }
     assert tuple(mutations)==FINGERPRINT_SOURCE_FIELDS
     assert all(item.batch_fingerprint!=base.batch_fingerprint for item in mutations.values())
-    assert replace(base,results=tuple(reversed(base.results))).batch_fingerprint==base.batch_fingerprint
     assert replace(base,contradictions=(replace(c,left=right,right=left),)).batch_fingerprint!=base.batch_fingerprint
     out=QualityGateEvaluator().evaluate(batch())
     assert out.batch_fingerprint==out.gate_decisions[0].batch_fingerprint
     assert "propagated_claim_contexts" not in FINGERPRINT_SOURCE_FIELDS
     assert "batch_fingerprint" not in FINGERPRINT_SOURCE_FIELDS
+
+
+def test_lineage_fingerprint_fields_are_isolated_with_valid_non_root_claims():
+    parent_a=claim("clm_parent_a",confidence=Confidence.MEDIUM)
+    parent_b=claim("clm_parent_b",confidence=Confidence.MEDIUM)
+    child=claim("clm_child",confidence=Confidence.LOW,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_parent_a",))
+    def fingerprint(current):
+        return EvaluationBatch("bat_lineage_fp",(result(claims=(parent_a,parent_b,current)),)).batch_fingerprint
+    baseline=fingerprint(child)
+    lineage_only=replace(child,lineage_type=ClaimLineageType.REFORMULATES)
+    parent_only=replace(child,parent_claim_ids=("clm_parent_b",))
+    assert lineage_only.parent_claim_ids==child.parent_claim_ids
+    assert parent_only.lineage_type is child.lineage_type
+    assert fingerprint(lineage_only)!=baseline
+    assert fingerprint(parent_only)!=baseline
+
+
+def test_fingerprint_order_rules_use_two_distinct_elements():
+    result_a=result("res_a",claims=(claim("clm_a"),))
+    result_b=result("res_b",claims=(claim("clm_b"),))
+    forward=EvaluationBatch("bat_order",(result_a,result_b))
+    reverse=EvaluationBatch("bat_order",(result_b,result_a))
+    assert forward.batch_fingerprint==reverse.batch_fingerprint
+
+    evidence=(EvidenceRecord("evd_a",EvidenceSourceClass.FIRST_PARTY,"a",UTC),EvidenceRecord("evd_b",EvidenceSourceClass.UNKNOWN,"b",UTC))
+    assumptions=(AssumptionRecord("asm_a","a",Materiality.MATERIAL),AssumptionRecord("asm_b","b",Materiality.NON_MATERIAL))
+    limitations=(LimitationRecord("lim_a",LimitationReason.TOOL_LIMIT,Materiality.NON_MATERIAL,("res_order",)),LimitationRecord("lim_b",LimitationReason.CAPABILITY_LIMIT,Materiality.NON_MATERIAL,("res_order",)))
+    claims=(claim("clm_a"),claim("clm_b"))
+    ordered=result("res_order",claims=claims,evidence=evidence,assumptions=assumptions,limitations=limitations,failure_reasons=[FailureReason.AUTHORITY_VIOLATION,FailureReason.MODULE_DECLARED_FAILURE],handoff_module_ids=[ModuleId.MENTOR,ModuleId.POSITIONING])
+    reordered=result("res_order",claims=tuple(reversed(claims)),evidence=tuple(reversed(evidence)),assumptions=tuple(reversed(assumptions)),limitations=tuple(reversed(limitations)),failure_reasons=[FailureReason.MODULE_DECLARED_FAILURE,FailureReason.AUTHORITY_VIOLATION],handoff_module_ids=[ModuleId.POSITIONING,ModuleId.MENTOR])
+    assert EvaluationBatch("bat_nested_order",(ordered,)).batch_fingerprint==EvaluationBatch("bat_nested_order",(reordered,)).batch_fingerprint
+
+    side_a=ContradictionSide(claim_id="clm_a",object_key="object",segment_key="segment",period_key="period",metric_definition_key="metric")
+    side_b=ContradictionSide(claim_id="clm_b",object_key="object",segment_key="segment",period_key="period",metric_definition_key="metric")
+    contradictions=(ContradictionInput("ctr_a",side_a,side_b),ContradictionInput("ctr_b",side_a,side_b))
+    assert EvaluationBatch("bat_ctr_order",(result_a,result_b),contradictions).batch_fingerprint==EvaluationBatch("bat_ctr_order",(result_b,result_a),tuple(reversed(contradictions))).batch_fingerprint
+
+    ids_a=claim("clm_child",confidence=Confidence.LOW,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_parent_a","clm_parent_b"),evidence_ids=("evd_a","evd_b"),assumption_ids=("asm_a","asm_b"),limitation_ids=("lim_a","lim_b"))
+    ids_b=claim("clm_child",confidence=Confidence.LOW,lineage_type=ClaimLineageType.DERIVES,parent_claim_ids=("clm_parent_b","clm_parent_a"),evidence_ids=("evd_b","evd_a"),assumption_ids=("asm_b","asm_a"),limitation_ids=("lim_b","lim_a"))
+    assert ids_a==ids_b
