@@ -1,10 +1,11 @@
 # Development roadmap
 
-## Completed
+## Completed foundations
 
 - [x] OpenSpec and Codex bootstrap.
 - [x] `add-marketing-workflow-persistence`.
-- [x] Create and strictly validate `add-expert-core-foundation`.
+- [x] Expert Core foundation.
+- [x] Module Registry `1.0.0` with zero execution bindings.
 
 ## Current
 
@@ -12,12 +13,11 @@
 - [x] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
 - [ ] Reconcile and review `add-module-registry-foundation` before runtime implementation.
 
-## Foundation next
+## Infrastructure and quality next
 
 - [ ] Implement `add-module-registry-foundation` after the reconciled specification is accepted.
 - [ ] `add-durable-job-persistence`.
 - [ ] `add-redis-worker-foundation`.
-- [ ] `add-marketing-orchestrator-foundation`.
 - [ ] `add-orchestrator-quality-gates`.
 
 ## Product vertical
@@ -38,9 +38,10 @@
 
 ## Sequencing rules
 
-- Один change реализуется в одной ветке `agent/<change-name>` от актуальной `sale-ready`.
-- OpenSpec сначала создаётся и проверяется, затем Codex останавливается.
-- Runtime implementation выполняется отдельным apply step.
-- `master` получает изменения только release merge после integration в `sale-ready`.
-- Roadmap не является implementation spec; исполняемая задача всегда находится в `openspec/changes/<change>/tasks.md`.
-
+- One change uses one `agent/<change-name>` branch from current `sale-ready`.
+- OpenSpec is reviewed before runtime implementation.
+- Runtime implementation is a separate apply step; the roadmap is not an implementation spec.
+- The Orchestrator foundation is planning-only: structured interpretation, exact deterministic scenarios and validated graphs.
+- Execution waits for durable Job/workers and is owned by `MarketingWorkflowService`.
+- Model-driven planning, an executable Orchestrator prompt, runtime QC/replanning and synthesis require later OpenSpec changes.
+- `master` receives changes only after integration through `sale-ready`.

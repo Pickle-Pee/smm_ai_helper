@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Документ фиксирует, какие предоставленные материалы являются нормативными, а какие используются только как design history. Это предотвращает одновременное появление нескольких компонентов с одинаковой ответственностью.
+This document separates product source material, runtime sources and design history so duplicate routing components and conflicting canonical sources are not created.
 
 ## Source precedence
 
-| Domain | Normative source | Supporting/legacy sources | Decision |
+| Domain | Normative contract/runtime source | Supporting source/history | Decision |
 | --- | --- | --- | --- |
 | Shared reasoning policy | `prompts/expert-core-production.md` | `Общий системный промпт для ИИ(1).docx` | EXPERT CORE production — единственный runtime source |
 | Multi-module orchestration | `prompts/orchestrator-production.md` | `Оркестратор.docx`, `Агентский диспетчер задач (1).docx` | Dispatcher не создаётся отдельным runtime layer |
@@ -14,14 +14,11 @@
 
 ## Reconciliation decisions
 
-### General system prompt vs Expert Core
+Early general prompt concerns are split among Expert Core, Orchestrator, Module Registry and specialized modules. Early dispatcher responsibilities overlap Orchestrator planning; a separate dispatcher would duplicate routing and is not created.
 
-Ранний общий промпт смешивает роль CMO, методы, routing, formulas и quality rules. В production-архитектуре ответственность разделена:
+`docs/product/prompts/orchestrator-production.md` is approved version-controlled product source for a broader future lifecycle, not a canonical runtime prompt for `add-marketing-orchestrator-foundation`. The foundation makes no LLM call and creates no `app/prompts/orchestrator`; typed code and deterministic OpenSpec rules own runtime planning behavior.
 
-- общие reasoning rules → Expert Core;
-- routing и workflow → Orchestrator;
-- доступные эксперты и контракты → Module Registry;
-- task-specific methods → module prompts.
+A future model-driven planner must define one versioned runtime prompt in a separate OpenSpec change with evals, call-budget/token and latency review. Until then, no Orchestrator file is called a canonical runtime prompt.
 
 ### Dispatcher vs Orchestrator
 
@@ -43,3 +40,4 @@
 
 DOCX-файлы считаются source history. For module metadata, `app/module_registry/v1.0.0.json` is the sole runtime source; Markdown holds rationale, governance, and import material without duplicating runtime descriptors.
 
+Moving an approved product rule into runtime requires product rationale, an OpenSpec behavior change, one versioned runtime source, tests/evals, conflict review and call-budget review when a model is involved. Legacy DOCX material remains design history rather than runtime source.
