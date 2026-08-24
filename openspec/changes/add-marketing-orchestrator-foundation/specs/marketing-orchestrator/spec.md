@@ -109,6 +109,13 @@ Every internal planning contract SHALL validate all fields at construction, defe
 - **WHEN** a caller supplies a container or scalar subclass or a custom mapping/sequence/set implementation
 - **THEN** construction rejects it with `InvalidContextValueError` before invoking caller-defined iteration, mapping, conversion, comparison, or serialization behavior
 
+#### Scenario: Caller-supplied mapping proxy
+
+- **WHEN** a mapping proxy is supplied directly or nested in an otherwise supported value
+- **THEN** construction rejects it from its outer type with `InvalidContextValueError`
+- **AND** the wrapped mapping is never accessed
+- **AND** mapping proxies remain internal immutable outputs only for validated exact dictionaries
+
 #### Scenario: Optional fact source
 
 - **WHEN** fact provenance is unspecified
@@ -136,6 +143,7 @@ The foundation SHALL validate unique node IDs, canonical registered modules, res
 - **WHEN** either required positioning edge is missing, an extra edge exists, dependency references disagree with edges, node IDs differ, or parallel membership differs
 - **THEN** validation raises `InvalidPlanError`
 - **AND** the expected edge set is independently declared rather than derived from the plan under test
+- **AND** both conditional transition fields for every canonical node exactly match an independently declared scenario table
 
 #### Scenario: Invalid parallel metadata
 

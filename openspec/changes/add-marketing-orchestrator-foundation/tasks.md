@@ -76,3 +76,10 @@ Do not add API/Telegram integration, a dispatcher, changes to `TaskRouter`/`Agen
 - [x] 8.2 Make fact source truthfully optional (`None` means unspecified), while rejecting empty or non-exact strings and keeping source out of matching and identity.
 - [x] 8.3 Add adversarial subclass regressions proving overridden methods are not invoked and normal built-ins remain defensively frozen.
 - [x] 8.4 Rerun targeted, compatibility, full, OpenSpec, compilation, and scope checks and record exact results; confirm required PR CI after push.
+
+## 9. Proxy trust and transition closure
+
+- [x] 9.1 Reject every caller-supplied mapping proxy before access while retaining mapping proxies only as immutable outputs of validated exact dictionaries.
+- [x] 9.2 Validate the independently declared exact `next_if_pass`/`next_if_fail` table for every `new_positioning_v1` node.
+- [x] 9.3 Add hostile wrapped-mapping and exhaustive malformed-transition regressions with independent expectations.
+- [x] 9.4 Rerun targeted, compatibility, full, OpenSpec, compilation, and scope checks and record exact results; confirm required PR CI after push.

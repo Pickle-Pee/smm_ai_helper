@@ -16,7 +16,6 @@ from .errors import InvalidContextValueError
 ImmutableJsonScalar: TypeAlias = None | bool | int | float | str
 ImmutableJsonValue: TypeAlias = ImmutableJsonScalar | tuple["ImmutableJsonValue", ...] | Mapping[str, "ImmutableJsonValue"]
 _STABLE_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$")
-_IMMUTABLE_MAPPING_TYPE = type(MappingProxyType({}))
 
 
 def _error(field: str, message: str) -> InvalidContextValueError:
@@ -82,7 +81,7 @@ def freeze_json_value(value: Any) -> ImmutableJsonValue:
         if not math.isfinite(value):
             raise InvalidContextValueError("context floats must be finite")
         return value
-    if type(value) in (dict, _IMMUTABLE_MAPPING_TYPE):
+    if type(value) is dict:
         if any(type(key) is not str for key in value):
             raise InvalidContextValueError("context mappings require string keys")
         return MappingProxyType(

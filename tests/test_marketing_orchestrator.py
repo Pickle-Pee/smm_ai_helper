@@ -27,6 +27,7 @@ from app.marketing_orchestrator import (
     UnknownModulePlanningError,
     UpstreamFinding,
 )
+from app.marketing_orchestrator.contracts import freeze_json_value
 from app.marketing_orchestrator.validation import PlanValidator
 from app.module_registry import ModuleAvailabilityStatus, ModuleId, ModuleRegistry
 from app.services.agent_registry import AgentRegistry
@@ -53,6 +54,11 @@ EXPECTED_MODULES = (
 EXPECTED_EDGES = (
     ("competitor_analysis", "positioning"),
     ("market_analysis", "positioning"),
+)
+EXPECTED_TRANSITIONS = (
+    ("market_analysis", "positioning", "BLOCKING_INPUT_MISSING"),
+    ("competitor_analysis", "positioning", "BLOCKING_INPUT_MISSING"),
+    ("positioning", None, "BLOCKING_INPUT_MISSING"),
 )
 
 
@@ -260,6 +266,60 @@ class ExplodingMapping(Mapping):
         raise HostileIterationError("mapping length invoked")
 
 
+class HostileProxyMapping(Mapping):
+    def __init__(self):
+        self.calls = {
+            "contains": 0,
+            "eq": 0,
+            "get": 0,
+            "getitem": 0,
+            "hash": 0,
+            "items": 0,
+            "iter": 0,
+            "keys": 0,
+            "len": 0,
+            "repr": 0,
+            "values": 0,
+        }
+
+    def _explode(self, operation):
+        self.calls[operation] += 1
+        raise HostileIterationError(f"hostile proxy backing mapping {operation} invoked")
+
+    def __contains__(self, key):
+        self._explode("contains")
+
+    def __eq__(self, other):
+        self._explode("eq")
+
+    def __getitem__(self, key):
+        self._explode("getitem")
+
+    def __hash__(self):
+        self._explode("hash")
+
+    def __iter__(self):
+        self._explode("iter")
+
+    def __len__(self):
+        self._explode("len")
+
+    def __repr__(self):
+        self._explode("repr")
+
+    def get(self, key, default=None):
+        self._explode("get")
+
+    def items(self):
+        self._explode("items")
+
+    def keys(self):
+        self._explode("keys")
+
+    def values(self):
+        self._explode("values")
+
+
 class ExplodingSet(set):
     calls = 0
 
@@ -337,6 +397,46 @@ def test_exact_builtin_containers_remain_supported_and_defensively_frozen():
     assert context_fact.scenario_relevance == frozenset({SCENARIO})
 
 
+@pytest.mark.parametrize(
+    "construct",
+    [
+        lambda proxy: freeze_json_value(proxy),
+        lambda proxy: replace(fact("product"), value=proxy),
+        lambda proxy: UpstreamFinding("market_analysis", "finding", proxy),
+        lambda proxy: replace(fact("product"), value={"nested": proxy}),
+        lambda proxy: UpstreamFinding("market_analysis", "finding", [proxy]),
+        lambda proxy: freeze_json_value({"one": [("two", {"nested": proxy})]}),
+    ],
+    ids=(
+        "direct-freezer",
+        "authorized-fact",
+        "upstream-finding",
+        "nested-dictionary",
+        "nested-list",
+        "multi-level-nesting",
+    ),
+)
+def test_caller_mapping_proxies_are_rejected_without_accessing_wrapped_mapping(construct):
+    hostile = HostileProxyMapping()
+    proxy = MappingProxyType(hostile)
+
+    with pytest.raises(InvalidContextValueError):
+        construct(proxy)
+
+    assert hostile.calls == {operation: 0 for operation in hostile.calls}
+
+
+def test_mapping_proxy_is_output_only_for_validated_exact_dictionaries():
+    frozen = freeze_json_value({"nested": [1]})
+
+    assert isinstance(frozen, MappingProxyType)
+    assert frozen["nested"] == (1,)
+    with pytest.raises(InvalidContextValueError):
+        freeze_json_value(frozen)
+    with pytest.raises(InvalidContextValueError):
+        freeze_json_value(MappingProxyType({}))
+
+
 def test_source_optional_semantics_and_exact_string_boundary(planner):
     omitted = AuthorizedContextFact(fact_id="fact.omitted-source", label="Product", value="known", confidence=0.9)
     explicit_none = AuthorizedContextFact(fact_id="fact.none-source", label="Product", value="known", source=None, confidence=0.9)
@@ -403,6 +503,10 @@ def test_new_positioning_has_exact_independent_graph(valid_plan):
     assert valid_plan.nodes[0].parallel_group == valid_plan.nodes[1].parallel_group == "evidence_analysis"
     assert valid_plan.nodes[2].parallelizable is False
     assert valid_plan.nodes[2].dependency_references == ("competitor_analysis", "market_analysis")
+    assert tuple(
+        (node.node_id, node.next_if_pass, node.next_if_fail)
+        for node in valid_plan.nodes
+    ) == EXPECTED_TRANSITIONS
     assert len(valid_plan.nodes) == 3
 
 
@@ -618,6 +722,58 @@ def test_validator_rejects_extra_positioning_edge(valid_plan, registry):
     )
     with pytest.raises(InvalidPlanError):
         PlanValidator(registry).validate(malformed)
+
+
+@pytest.mark.parametrize(
+    ("node_index", "field", "value"),
+    [
+        (0, "next_if_pass", None),
+        (0, "next_if_pass", "competitor_analysis"),
+        (1, "next_if_pass", None),
+        (1, "next_if_pass", "market_analysis"),
+        (2, "next_if_pass", "positioning"),
+        (2, "next_if_pass", "market_analysis"),
+        (0, "next_if_fail", None),
+        (0, "next_if_fail", "PLAN_COMPLETE"),
+        (0, "next_if_fail", "positioning"),
+        (1, "next_if_fail", None),
+        (1, "next_if_fail", "PLAN_COMPLETE"),
+        (1, "next_if_fail", "positioning"),
+        (2, "next_if_fail", None),
+        (2, "next_if_fail", "PLAN_COMPLETE"),
+        (2, "next_if_fail", "positioning"),
+    ],
+    ids=(
+        "market-pass-absent-copied-terminal",
+        "market-pass-invented-node",
+        "competitor-pass-absent-copied-terminal",
+        "competitor-pass-invented-node",
+        "positioning-pass-copied-upstream",
+        "positioning-pass-invented-node",
+        "market-fail-absent",
+        "market-fail-invented-stop",
+        "market-fail-copied-pass",
+        "competitor-fail-absent",
+        "competitor-fail-invented-stop",
+        "competitor-fail-copied-pass",
+        "positioning-fail-absent",
+        "positioning-fail-invented-stop",
+        "positioning-fail-copied-pass",
+    ),
+)
+def test_validator_rejects_every_malformed_positioning_transition(
+    valid_plan,
+    registry,
+    node_index,
+    field,
+    value,
+):
+    mutated_node = replace(valid_plan.nodes[node_index], **{field: value})
+    nodes = list(valid_plan.nodes)
+    nodes[node_index] = mutated_node
+
+    with pytest.raises(InvalidPlanError, match="transition metadata"):
+        PlanValidator(registry).validate(replace(valid_plan, nodes=tuple(nodes)))
 
 
 def test_validator_rejects_edge_without_node_dependency_reference(valid_plan, registry):

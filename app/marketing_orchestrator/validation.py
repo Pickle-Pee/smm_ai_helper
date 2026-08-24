@@ -24,6 +24,11 @@ _POSITIONING_EDGES = (
     ("competitor_analysis", "positioning"),
     ("market_analysis", "positioning"),
 )
+_POSITIONING_TRANSITIONS = {
+    "market_analysis": ("positioning", "BLOCKING_INPUT_MISSING"),
+    "competitor_analysis": ("positioning", "BLOCKING_INPUT_MISSING"),
+    "positioning": (None, "BLOCKING_INPUT_MISSING"),
+}
 
 
 class PlanValidator:
@@ -195,6 +200,10 @@ class PlanValidator:
             raise InvalidPlanError("upstream positioning nodes cannot declare dependencies")
         if positioning.dependency_references != ("competitor_analysis", "market_analysis"):
             raise InvalidPlanError("positioning must depend sequentially on both upstream nodes")
+        for node in plan.nodes:
+            actual_transition = (node.next_if_pass, node.next_if_fail)
+            if actual_transition != _POSITIONING_TRANSITIONS[node.node_id]:
+                raise InvalidPlanError("invalid new-positioning transition metadata")
 
     @staticmethod
     def _topological_order(plan: OrchestrationPlan) -> list[str]:
