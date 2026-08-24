@@ -86,6 +86,24 @@ The foundation SHALL accept only already-authorized structured facts with explic
 
 Every planning input used for sufficiency or question generation SHALL be an explicit immutable typed requirement with a stable input key, classification, priority, applicable scenario/module, and approved deterministic question template. Registry prose SHALL NOT be interpreted as an input key.
 
+Authorized facts SHALL keep a unique stable `fact_id`, human-readable `label`, and optional `PlanningInputKey` as distinct fields. A requirement SHALL be satisfied only by exact enum equality after authorization and relevance scoping. Raw strings and normalized label, identifier, source, or Registry prose SHALL NOT satisfy a requirement.
+
+#### Scenario: Prose-like fact label
+
+- **WHEN** an authorized relevant fact is labelled `Product or category` but has no `input_key`
+- **THEN** it does not satisfy `PlanningInputKey.PRODUCT_OR_CATEGORY`
+- **AND** supplying either prose or the enum value as a raw string is rejected at construction
+
+### Requirement: Complete immutable contract boundary
+
+Every internal planning contract SHALL validate all fields at construction, defensively copy supported containers, recursively freeze supported JSON-like values, and raise `InvalidContextValueError` with the affected field for invalid caller data.
+
+#### Scenario: Invalid or mutable metadata
+
+- **WHEN** a caller supplies mutable or incorrectly typed source, evidence, assumptions, constraints, questions, provenance, enum, or confidence metadata
+- **THEN** supported data is defensively copied into its immutable form or unsupported data is rejected immediately
+- **AND** no incidental Python or serialization error is deferred until planning
+
 #### Scenario: Generic single module with empty context
 
 - **WHEN** `MARKET_ANALYSIS` is selected without explicitly supplied typed requirements

@@ -29,17 +29,17 @@ market_analysis       (MARKET_ANALYSIS) ------+
 competitor_analysis   (COMPETITOR_ANALYSIS) --+
 ```
 
-Node order is `market_analysis`, `competitor_analysis`, `positioning`. Edge order is `competitor_analysis -> positioning`, then `market_analysis -> positioning`. Validation compares independently declared exact node IDs, module mapping, edge set, node dependency references and parallel membership. The fixed verification fixture produces plan ID `0f37473541d8647698e9a03714729839bd5d1d6c6beae6151a109152a651fe30`; equivalent effective scoped inputs reproduce it.
+Node order is `market_analysis`, `competitor_analysis`, `positioning`. Edge order is `competitor_analysis -> positioning`, then `market_analysis -> positioning`. Validation compares independently declared exact node IDs, module mapping, edge set, node dependency references and parallel membership. Equivalent effective scoped inputs reproduce the same deterministic SHA-256 plan ID.
 
 ## Context, questions, and validation evidence
 
 Tests prove only authorized module/scenario-tagged facts enter packets; unrelated and unauthorized secret facts are excluded; independent nodes receive no upstream findings; positioning receives findings only from its declared dependencies; known inputs suppress questions; missing blocking keys are deduplicated and capped at three; and preferred/optional gaps become limitations.
 
-Question generation uses only immutable `PlanningInputRequirement` entries with stable `PlanningInputKey`, classification, priority, scenario/module applicability and approved templates. It never converts Registry `blocking_for_strong_conclusion` prose into keys. A generic empty-context `MARKET_ANALYSIS` plan is preliminary with limitations and does not ask `Provide market size.`
+Question generation uses only immutable `PlanningInputRequirement` entries with stable `PlanningInputKey`, classification, priority, scenario/module applicability and approved templates. Authorized facts separate a validated stable `fact_id`, human-only `label`, and optional exact-enum `input_key`. Exact enum equality is the only match: tests prove `label="Product or category"` with no key remains blocking and both `"Product or category"` and `"product_or_category"` raw input-key strings fail construction. Registry prose is never converted into keys.
 
-Plan identity is constructed after authorization and node scoping. Reordering facts produces the same ID; unrelated `CREATOR` facts and unauthorized facts alter neither packets nor ID; changing or removing an effective relevant fact changes the ID.
+Plan identity is constructed after authorization and node scoping. It includes stable fact IDs and canonical frozen values, but excludes labels and free-form sources. Reordering facts produces the same ID; unrelated `CREATOR` facts and unauthorized facts alter neither packets nor ID; changing or removing an effective relevant identity/value changes the ID. Duplicate `fact_id` values fail at `PlanningContext` construction.
 
-Fact and upstream-finding values accept only recursive canonical JSON-like values. Lists and string-keyed mappings are copied into tuples and immutable deterministic mappings. Tests reject byte arrays, sets, custom mutable objects, non-string keys, NaN and infinities, and prove caller-container mutation cannot affect contracts.
+Every planning dataclass validates at construction through the shared `InvalidContextValueError` boundary. Fact and upstream-finding values accept only recursive canonical JSON-like values. Lists and string-keyed mappings are copied into tuples and immutable deterministic mappings. Metadata tests reject mutable/non-string source and evidence, bare-string or byte-array sequences, unsupported enum strings, booleans/non-finite/out-of-range confidence, sets, custom mutable objects and non-string mapping keys. Caller list/dictionary mutation cannot affect constructed contracts.
 
 Malformed fixtures independently cover each missing positioning edge, both edges missing, extra edges, edge/reference disagreement in both directions, wrong deterministic IDs, incorrect topology with the correct module sequence, duplicate IDs, unresolved/unknown modules, missing targets, self-edges, cycles, invalid parallel groups, output/gate mismatches, duplicate/excess/known-input questions, and unsupported graphs.
 
@@ -57,8 +57,9 @@ The explicit state matrix accepts only validated sufficient/partial plans, block
 
 | Command | Exit | Result |
 | --- | ---: | --- |
-| `.venv\Scripts\python.exe -m pytest -q tests\test_marketing_orchestrator.py tests\test_module_registry.py tests\test_expert_core.py tests\test_agent_registry.py tests\test_task_router.py tests\test_task_pipeline_service.py tests\test_marketing_workflow_persistence_service.py --tb=short` | 0 | 137 passed, 6 existing deprecation warnings |
-| `.venv\Scripts\python.exe -m pytest -q` | 0 | 216 passed, 9 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest tests/test_marketing_orchestrator.py -q` | 0 | 83 passed, 4 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q tests\test_marketing_orchestrator.py tests\test_module_registry.py tests\test_expert_core.py tests\test_agent_registry.py tests\test_task_router.py tests\test_task_pipeline_service.py tests\test_marketing_workflow_persistence_service.py --tb=short` | 0 | 156 passed, 6 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q` | 0 | 235 passed, 9 existing deprecation warnings |
 | `.venv\Scripts\python.exe -m compileall app bot` | 0 | compiled successfully |
 | `openspec validate add-marketing-orchestrator-foundation --strict` | 0 | valid |
 | `openspec validate --all --strict` | 0 | 11 passed, 0 failed |

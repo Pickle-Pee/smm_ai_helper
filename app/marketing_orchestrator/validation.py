@@ -6,6 +6,7 @@ from .contracts import (
     DataSufficiency,
     ExecutionReadiness,
     OrchestrationPlan,
+    PlanningInputKey,
     PlanningStatus,
     PlanningStopCondition,
     StructuralValidity,
@@ -29,7 +30,7 @@ class PlanValidator:
     def __init__(self, registry: ModuleRegistry) -> None:
         self._registry = registry
 
-    def validate(self, plan: OrchestrationPlan, *, known_input_keys: frozenset[str] = frozenset()) -> None:
+    def validate(self, plan: OrchestrationPlan, *, known_input_keys: frozenset[PlanningInputKey] = frozenset()) -> None:
         self._validate_global_invariants(plan)
         if plan.scenario_key not in SUPPORTED_SCENARIOS:
             if plan.planning_status is PlanningStatus.UNSUPPORTED:
@@ -89,7 +90,7 @@ class PlanValidator:
             raise InvalidPlanError("duplicate blocking question")
         if len({item.question for item in questions}) != len(questions):
             raise InvalidPlanError("duplicate blocking question")
-        if set(question_keys) & {item.casefold() for item in known_input_keys}:
+        if {item.input_key for item in questions} & known_input_keys:
             raise InvalidPlanError("blocking question asks for known input")
         for question in questions:
             node = node_by_id.get(question.node_id)

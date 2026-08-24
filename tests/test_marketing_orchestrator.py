@@ -70,15 +70,20 @@ def interpretation(*, module=None, scenario=SCENARIO):
     )
 
 
-def fact(key, *, modules=(), scenarios=(SCENARIO,), value="known", authorized=True, sensitivity=Sensitivity.INTERNAL):
+def fact(key, *, modules=(), scenarios=(SCENARIO,), value="known", authorized=True, sensitivity=Sensitivity.INTERNAL, label=None, fact_id=None, input_key=None, source="caller"):
+    typed_key = input_key
+    if typed_key is None and key in PlanningInputKey._value2member_map_:
+        typed_key = PlanningInputKey(key)
     return AuthorizedContextFact(
-        key=key,
+        fact_id=fact_id or f"fact.{key}",
+        label=label or key.replace("_", " ").title(),
         value=value,
+        input_key=typed_key,
         module_relevance=frozenset(modules),
         scenario_relevance=frozenset(scenarios),
-        source="caller",
+        source=source,
         evidence=(f"evidence:{key}",),
-        confidence="HIGH",
+        confidence=0.9,
         sensitivity=sensitivity,
         authorized=authorized,
     )
@@ -123,19 +128,106 @@ def test_planner_rejects_untyped_free_text(planner):
 
 def test_contracts_are_deeply_immutable(planner):
     source = {"nested": ["one"]}
-    context_fact = fact("product", value=source)
+    caller_assumptions = ["Original"]
+    context_fact = fact("product", value=source, fact_id="fact.product-deep-freeze")
     source["nested"].append("two")
-    context = complete_context(known_facts=(context_fact, *complete_context().known_facts[1:]))
+    context = complete_context(known_facts=(context_fact, *complete_context().known_facts[1:]), assumptions=caller_assumptions)
+    caller_assumptions.append("Mutated")
     plan = planner.plan(interpretation(), context)
 
     assert isinstance(context_fact.value, MappingProxyType)
     assert context_fact.value["nested"] == ("one",)
+    assert context.assumptions == ("Original",)
     assert isinstance(plan.nodes, tuple)
     assert isinstance(plan.nodes[0].context_packet.known_facts, tuple)
     with pytest.raises(FrozenInstanceError):
         plan.planning_status = PlanningStatus.INVALID  # type: ignore[misc]
     with pytest.raises((AttributeError, TypeError)):
         plan.nodes.append(plan.nodes[0])  # type: ignore[attr-defined]
+
+
+def test_descriptive_label_without_typed_input_key_does_not_satisfy_requirement(planner):
+    prose = AuthorizedContextFact(
+        fact_id="fact.prose-product",
+        label="Product or category",
+        value="known",
+        input_key=None,
+        scenario_relevance=frozenset({SCENARIO}),
+        source="caller",
+        confidence=0.9,
+    )
+    context = PlanningContext(known_facts=(prose,))
+
+    plan = planner.plan(interpretation(), context)
+
+    assert PlanningInputKey.PRODUCT_OR_CATEGORY in {item.input_key for item in plan.blocking_questions}
+
+
+@pytest.mark.parametrize("raw_key", ["Product or category", "product_or_category"])
+def test_raw_input_key_strings_are_rejected(raw_key):
+    with pytest.raises(InvalidContextValueError, match="input_key"):
+        AuthorizedContextFact(
+            fact_id="fact.raw-key",
+            label="Product",
+            value="known",
+            input_key=raw_key,  # type: ignore[arg-type]
+            source="caller",
+            confidence=0.9,
+        )
+
+
+def test_exact_typed_input_key_satisfies_requirement(planner):
+    typed = fact("product_or_category")
+    plan = planner.plan(interpretation(), PlanningContext(known_facts=(typed,)))
+    assert PlanningInputKey.PRODUCT_OR_CATEGORY not in {item.input_key for item in plan.blocking_questions}
+
+
+@pytest.mark.parametrize("fact_id", ["", "Product Fact", "fact/one"])
+def test_fact_id_is_required_and_uses_stable_format(fact_id):
+    with pytest.raises(InvalidContextValueError, match="fact_id"):
+        AuthorizedContextFact(fact_id=fact_id, label="Product", value="known", source="caller", confidence=0.9)
+
+
+def test_duplicate_fact_id_is_rejected():
+    with pytest.raises(InvalidContextValueError, match="fact_id"):
+        PlanningContext(known_facts=(fact("product"), fact("geographic_scope", fact_id="fact.product")))
+
+
+def test_label_changes_do_not_change_matching_or_plan_identity(planner):
+    first_fact = fact("product_or_category", label="Product or category")
+    second_fact = fact("product_or_category", label="Completely different description")
+    rest = complete_context().known_facts[1:]
+    first = planner.plan(interpretation(), complete_context(known_facts=(first_fact, *rest)))
+    second = planner.plan(interpretation(), complete_context(known_facts=(second_fact, *rest)))
+    assert first.blocking_questions == second.blocking_questions
+    assert first.plan_id == second.plan_id
+
+
+def test_relevant_fact_identity_changes_plan_identity(planner):
+    facts = complete_context().known_facts
+    changed = replace(facts[0], fact_id="fact.product-or-category-v2")
+    assert planner.plan(interpretation(), complete_context()).plan_id != planner.plan(
+        interpretation(), complete_context(known_facts=(changed, *facts[1:]))
+    ).plan_id
+
+
+@pytest.mark.parametrize(
+    ("factory", "field"),
+    [
+        (lambda: fact("product", source=[]), "source"),
+        (lambda: PlanningContext(assumptions=(bytearray(b"x"),)), "assumptions"),
+        (lambda: PlanningContext(constraints="not-a-sequence"), "constraints"),
+        (lambda: replace(fact("product"), scenario_relevance="new_positioning_v1"), "scenario_relevance"),
+        (lambda: replace(interpretation(), scenario_key=bytearray(b"bad")), "scenario_key"),
+        (lambda: AuthorizedContextFact(fact_id="fact.bad", label="Bad", value="x", source="caller", evidence=({"mutable": True},), confidence=0.9), "evidence"),
+        (lambda: AuthorizedContextFact(fact_id="fact.bad", label="Bad", value="x", source="caller", confidence=True), "confidence"),
+        (lambda: AuthorizedContextFact(fact_id="fact.bad", label="Bad", value="x", source="caller", confidence=float("nan")), "confidence"),
+        (lambda: AuthorizedContextFact(fact_id="fact.bad", label="Bad", value="x", source="caller", sensitivity="INTERNAL", confidence=0.9), "sensitivity"),
+    ],
+)
+def test_invalid_metadata_fails_at_contract_boundary(factory, field):
+    with pytest.raises(InvalidContextValueError, match=field):
+        factory()
 
 
 def test_identical_inputs_produce_identical_plan_without_randomness(planner):
@@ -204,20 +296,20 @@ def test_unsupported_scenario_returns_explicit_result_without_graph(planner):
 
 
 def test_context_scoping_includes_module_and_scenario_facts_and_excludes_unrelated(planner):
-    scenario_fact = fact("product", scenarios=(SCENARIO,))
+    scenario_fact = fact("product", scenarios=(SCENARIO,), fact_id="fact.product-scenario")
     market_fact = fact("market_only", modules=(ModuleId.MARKET_ANALYSIS,), scenarios=())
     unrelated = fact("unrelated", modules=(ModuleId.CREATOR,), scenarios=())
     unauthorized = fact("secret", scenarios=(SCENARIO,), authorized=False, sensitivity=Sensitivity.SECRET)
     context = complete_context(known_facts=(scenario_fact, market_fact, unrelated, unauthorized, *complete_context().known_facts[1:]))
 
     plan = planner.plan(interpretation(), context)
-    market_keys = {item.key for item in plan.nodes[0].context_packet.known_facts}
-    competitor_keys = {item.key for item in plan.nodes[1].context_packet.known_facts}
+    market_keys = {item.fact_id for item in plan.nodes[0].context_packet.known_facts}
+    competitor_keys = {item.fact_id for item in plan.nodes[1].context_packet.known_facts}
 
-    assert "product" in market_keys and "product" in competitor_keys
-    assert "market_only" in market_keys and "market_only" not in competitor_keys
-    assert "unrelated" not in market_keys | competitor_keys
-    assert "secret" not in market_keys | competitor_keys
+    assert "fact.product-scenario" in market_keys and "fact.product-scenario" in competitor_keys
+    assert "fact.market_only" in market_keys and "fact.market_only" not in competitor_keys
+    assert "fact.unrelated" not in market_keys | competitor_keys
+    assert "fact.secret" not in market_keys | competitor_keys
 
 
 def test_upstream_findings_only_enter_declared_dependent_packet(planner):
@@ -301,10 +393,8 @@ def test_validator_rejects_duplicate_node_id(valid_plan, registry):
 
 
 def test_validator_rejects_unknown_or_unresolved_module(valid_plan, registry):
-    malformed_node = replace(valid_plan.nodes[0], module_id="MARKET ANALYSIS")  # type: ignore[arg-type]
-    malformed = replace(valid_plan, nodes=(malformed_node, *valid_plan.nodes[1:]))
-    with pytest.raises(InvalidPlanError, match="unresolved alias"):
-        PlanValidator(registry).validate(malformed)
+    with pytest.raises(InvalidContextValueError, match="module_id"):
+        replace(valid_plan.nodes[0], module_id="MARKET ANALYSIS")  # type: ignore[arg-type]
 
 
 def test_validator_rejects_missing_dependency_target(valid_plan, registry):

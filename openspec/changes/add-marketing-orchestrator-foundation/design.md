@@ -30,7 +30,9 @@ The foundation validates these fields and rejects absent, ambiguous or unsupport
 
 ### PlanningContext and tagged facts
 
-A future caller supplies already-authorized structured context. Each immutable fact has a stable `fact_id`, value, provenance/evidence reference, confidence and explicit relevance tags containing canonical module IDs and/or supported scenario keys. Optional project fields use the same tagging model. Upstream findings are separately keyed by producer node.
+A future caller supplies already-authorized structured context. Each immutable fact has a stable, explicit, lowercase `fact_id` (`^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$`), a human-only `label`, an optional exact `PlanningInputKey`, value, typed provenance/evidence, finite confidence in `[0.0, 1.0]`, and explicit relevance tags containing canonical module IDs and/or supported scenario keys. Fact IDs are unique across a `PlanningContext`. Labels, IDs, source prose and Registry prose are never normalized into input keys. Optional project fields use the same tagging model. Upstream findings are separately keyed by producer node.
+
+Every planning dataclass validates at construction and raises `InvalidContextValueError` for invalid caller data. Supported sequences are copied into tuples, semantic enum collections into frozensets, and JSON-like values recursively into immutable deterministic containers; bare strings used as sequences, byte arrays, sets in JSON values, mutable/custom metadata, invalid enums, booleans used as confidence, and non-finite/out-of-range confidence are rejected before planning.
 
 The planner does not query `BrandProfile`, conversation memory, URL services or artifact persistence and does not accept a raw conversation dump. It includes a fact only when its tags match the current node or scenario, excludes secrets unless explicitly authorized and tagged, and never copies unrelated history.
 
@@ -61,7 +63,7 @@ Aliases are resolved before return. Expected outputs and quality gates are descr
 
 ### ContextPacket
 
-The packet contains relevant project context, known facts, upstream findings, evidence, assumptions, confidence, constraints, available tools and open questions. Only dependent nodes receive findings of their declared upstream nodes. Known blocking inputs are satisfied before questions are generated. Missing preferred/optional inputs create limitations rather than blockers.
+The packet contains relevant project context, known facts, upstream findings, evidence, assumptions, confidence, constraints, available tools and open questions. Only dependent nodes receive findings of their declared upstream nodes. Known blocking inputs are satisfied only by an authorized relevant fact carrying the exact matching `PlanningInputKey`; no string normalization or parsing occurs. Missing preferred/optional inputs create limitations rather than blockers.
 
 ## Deterministic scenario catalog
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any, Iterable
@@ -31,8 +30,6 @@ from .contracts import (
 from .errors import InvalidInterpretationError, UnknownModulePlanningError
 from .validation import PlanValidator, SUPPORTED_SCENARIOS
 
-
-_KEY_RE = re.compile(r"[^a-z0-9]+")
 
 _POSITIONING_OUTPUTS = {
     ModuleId.MARKET_ANALYSIS: (
@@ -67,10 +64,6 @@ _POSITIONING_INPUTS: dict[str, tuple[PlanningInputRequirement, ...]] = {
         PlanningInputRequirement(PlanningInputKey.EXISTING_PROOF, InputClassification.PREFERRED, 120, ModuleId.POSITIONING, "new_positioning_v1", "What existing proof supports the product claims?"),
     ),
 }
-
-
-def _canonical_key(value: str) -> str:
-    return _KEY_RE.sub("_", value.casefold()).strip("_")
 
 
 def _stable_value(value: Any) -> Any:
@@ -118,9 +111,10 @@ class MarketingOrchestratorPlanner:
             plan = self._unsupported_plan(interpretation, context)
 
         known_keys = frozenset(
-            _canonical_key(fact.key)
+            fact.input_key
             for node in plan.nodes
             for fact in (*node.context_packet.relevant_project_context, *node.context_packet.known_facts)
+            if fact.input_key is not None
         )
         self._validator.validate(plan, known_input_keys=known_keys)
         return plan
@@ -284,7 +278,7 @@ class MarketingOrchestratorPlanner:
             )
         )
         confidences = {fact.confidence for fact in (*relevant_project, *known) if fact.confidence}
-        confidence = next(iter(confidences)) if len(confidences) == 1 else ("MIXED" if confidences else "UNKNOWN")
+        confidence = min(confidences) if confidences else 0.0
         return ContextPacket(
             relevant_project_context=relevant_project,
             known_facts=known,
@@ -307,24 +301,22 @@ class MarketingOrchestratorPlanner:
         return tuple(sorted(
             selected,
             key=lambda fact: (
-                fact.key.casefold(),
-                fact.source,
-                fact.confidence,
-                json.dumps(_stable_value(fact), ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                fact.fact_id,
             ),
         ))
 
     @staticmethod
-    def _known_keys(packet: ContextPacket) -> frozenset[str]:
+    def _known_keys(packet: ContextPacket) -> frozenset[PlanningInputKey]:
         return frozenset(
-            _canonical_key(fact.key)
+            fact.input_key
             for fact in (*packet.relevant_project_context, *packet.known_facts)
+            if fact.input_key is not None
         )
 
     def _scenario_inputs(self, node_id: str, packet: ContextPacket) -> tuple[ScopedInput, ...]:
         known = self._known_keys(packet)
         return tuple(
-            ScopedInput(requirement, requirement.key.value in known)
+            ScopedInput(requirement, requirement.key in known)
             for requirement in _POSITIONING_INPUTS[node_id]
         )
 
@@ -340,7 +332,7 @@ class MarketingOrchestratorPlanner:
             "graph": {
                 "nodes": [
                     {
-                        "node": _stable_value(node),
+                        "node": self._node_identity(node),
                     }
                     for node in nodes
                 ],
@@ -352,6 +344,34 @@ class MarketingOrchestratorPlanner:
         }
         canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _node_identity(node: PlanNode) -> dict[str, Any]:
+        packet = node.context_packet
+        facts = (*packet.relevant_project_context, *packet.known_facts)
+        return {
+            "node_id": node.node_id,
+            "module_id": node.module_id.value,
+            "objective": node.objective,
+            "scoped_inputs": _stable_value(node.scoped_inputs),
+            "expected_outputs": node.expected_outputs,
+            "quality_gate": node.quality_gate,
+            "dependency_references": node.dependency_references,
+            "next_if_pass": node.next_if_pass,
+            "next_if_fail": node.next_if_fail,
+            "parallel_group": node.parallel_group,
+            "parallelizable": node.parallelizable,
+            "context": {
+                "facts": [
+                    {"fact_id": fact.fact_id, "input_key": fact.input_key.value if fact.input_key else None, "value": _stable_value(fact.value)}
+                    for fact in sorted(facts, key=lambda item: item.fact_id)
+                ],
+                "upstream_findings": _stable_value(packet.upstream_findings),
+                "assumptions": packet.assumptions,
+                "constraints": packet.constraints,
+                "available_tools": _stable_value(packet.available_tools),
+            },
+        }
 
     def _fingerprint_registry(self) -> str:
         payload = [

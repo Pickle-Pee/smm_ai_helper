@@ -62,3 +62,10 @@ Do not add API/Telegram integration, a dispatcher, changes to `TaskRouter`/`Agen
 - [x] 6.4 Derive plan identity only from canonical interpretation, selected graph and authorized relevant context that survives node scoping.
 - [x] 6.5 Enforce a recursively immutable canonical JSON-like value contract and reject mutable or non-deterministic values.
 - [x] 6.6 Add independent regressions for every review finding and rerun targeted, compatibility, full, OpenSpec, compilation and diff checks.
+
+## 7. Typed context boundary hardening
+
+- [x] 7.1 Separate stable unique `fact_id`, human-only `label`, and optional exact-enum `input_key`; remove prose normalization from requirement matching.
+- [x] 7.2 Derive scoped plan identity from stable fact identity and frozen value while excluding labels, source text, unscoped facts, and caller ordering.
+- [x] 7.3 Validate and defensively freeze the complete planning contract graph at construction with `InvalidContextValueError`.
+- [x] 7.4 Add independent regressions for prose-like keys, raw enum strings, duplicate identities, metadata validation, and caller mutation.
