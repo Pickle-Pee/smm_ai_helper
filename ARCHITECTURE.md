@@ -90,6 +90,21 @@ It supports only `explicit_single_module_v1` and `new_positioning_v1`. The latte
 
 This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
 
+### Planned deterministic Quality Gates foundation
+
+OpenSpec change `add-orchestrator-quality-gates` defines the next internal planning-only boundary:
+
+```text
+caller-supplied immutable normalized module result
+ -> exact contract and Registry metadata validation
+ -> RFC-8785 batch fingerprint / selected-evidence contradiction / typed aggregate decisions
+ -> synthesis-eligibility manifest (data only)
+```
+
+It is not current runtime behavior. The future foundation remains pure and non-persistent: it will not call a module, agent, LLM or the existing model-based `QCService`; query context or persistence; create Jobs; use Redis/workers; generate a revised plan; or synthesize user-facing prose. Existing heterogeneous agent results and presenters require later explicit adapters and remain unchanged. Registry `1.0.0` can validate identities, declared output membership and registered handoffs but does not define invocation-specific required result schemas.
+
+Runtime ownership is reserved to `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It may depend only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
+
 ### URL analysis
 
 `UrlAnalyzer` extracts/normalizes a bounded set of URLs/social targets, fetches lightweight page signals, and stores reusable summaries in `UrlCache` when database access is available.
