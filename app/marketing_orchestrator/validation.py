@@ -45,7 +45,7 @@ class PlanValidator:
         node_by_id = {node.node_id: node for node in plan.nodes}
 
         for node in plan.nodes:
-            if not isinstance(node.module_id, ModuleId):
+            if type(node.module_id) is not ModuleId:
                 raise InvalidPlanError("final node contains unresolved alias or unknown module")
             try:
                 descriptor = self._registry.get(node.module_id)

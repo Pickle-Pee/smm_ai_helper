@@ -104,6 +104,18 @@ Every internal planning contract SHALL validate all fields at construction, defe
 - **THEN** supported data is defensively copied into its immutable form or unsupported data is rejected immediately
 - **AND** no incidental Python or serialization error is deferred until planning
 
+#### Scenario: Custom container subclass
+
+- **WHEN** a caller supplies a container or scalar subclass or a custom mapping/sequence/set implementation
+- **THEN** construction rejects it with `InvalidContextValueError` before invoking caller-defined iteration, mapping, conversion, comparison, or serialization behavior
+
+#### Scenario: Optional fact source
+
+- **WHEN** fact provenance is unspecified
+- **THEN** `source=None` is accepted and omission has the same meaning
+- **AND** a supplied source must be a non-empty exact built-in string
+- **AND** source does not participate in input matching or plan identity
+
 #### Scenario: Generic single module with empty context
 
 - **WHEN** `MARKET_ANALYSIS` is selected without explicitly supplied typed requirements

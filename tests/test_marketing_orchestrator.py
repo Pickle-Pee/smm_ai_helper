@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from types import MappingProxyType
@@ -211,6 +212,74 @@ def test_relevant_fact_identity_changes_plan_identity(planner):
     ).plan_id
 
 
+class HostileIterationError(RuntimeError):
+    pass
+
+
+class ExplodingList(list):
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("list iterator invoked")
+
+
+class ExplodingTuple(tuple):
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("tuple iterator invoked")
+
+
+class ExplodingDict(dict):
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("dict iterator invoked")
+
+    def items(self):
+        type(self).calls += 1
+        raise HostileIterationError("dict items invoked")
+
+
+class ExplodingMapping(Mapping):
+    calls = 0
+
+    def __getitem__(self, key):
+        type(self).calls += 1
+        raise HostileIterationError("mapping access invoked")
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("mapping iterator invoked")
+
+    def __len__(self):
+        type(self).calls += 1
+        raise HostileIterationError("mapping length invoked")
+
+
+class ExplodingSet(set):
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("set iterator invoked")
+
+
+class ExplodingFrozenSet(frozenset):
+    calls = 0
+
+    def __iter__(self):
+        type(self).calls += 1
+        raise HostileIterationError("frozenset iterator invoked")
+
+
+class StringSubclass(str):
+    pass
+
+
 @pytest.mark.parametrize(
     ("factory", "field"),
     [
@@ -228,6 +297,65 @@ def test_relevant_fact_identity_changes_plan_identity(planner):
 def test_invalid_metadata_fails_at_contract_boundary(factory, field):
     with pytest.raises(InvalidContextValueError, match=field):
         factory()
+
+
+@pytest.mark.parametrize(
+    ("hostile", "construct", "field"),
+    [
+        (ExplodingList(), lambda value: PlanningContext(known_facts=value), "known_facts"),
+        (ExplodingList(["one"]), lambda value: PlanningContext(assumptions=value), "assumptions"),
+        (ExplodingTuple(("one",)), lambda value: PlanningContext(constraints=value), "constraints"),
+        (ExplodingSet(), lambda value: PlanningContext(available_tools=value), "available_tools"),
+        (ExplodingFrozenSet({SCENARIO}), lambda value: replace(fact("product"), scenario_relevance=value), "scenario_relevance"),
+        (ExplodingDict({"key": "value"}), lambda value: replace(fact("product"), value=value), "context"),
+        (ExplodingMapping(), lambda value: replace(fact("product"), value=value), "context"),
+        (ExplodingList(["evidence"]), lambda value: replace(fact("product"), evidence=value), "evidence"),
+        (ExplodingDict({"key": "value"}), lambda value: UpstreamFinding("market_analysis", "finding", value), "context"),
+        (ExplodingList(["nested"]), lambda value: replace(fact("product"), value=[value]), "context"),
+    ],
+)
+def test_custom_container_subclasses_are_rejected_without_invocation(hostile, construct, field):
+    type(hostile).calls = 0
+    with pytest.raises(InvalidContextValueError, match=field):
+        construct(hostile)
+    assert type(hostile).calls == 0
+
+
+def test_exact_builtin_containers_remain_supported_and_defensively_frozen():
+    facts = [fact("product")]
+    assumptions = ["one"]
+    nested = {"items": ["first"]}
+    context = PlanningContext(known_facts=facts, assumptions=assumptions)
+    context_fact = fact("geographic_scope", value=nested, scenarios={SCENARIO})
+    facts.append(fact("product_truth"))
+    assumptions.append("two")
+    nested["items"].append("second")
+
+    assert context.known_facts == (facts[0],)
+    assert context.assumptions == ("one",)
+    assert context_fact.value["items"] == ("first",)
+    assert context_fact.scenario_relevance == frozenset({SCENARIO})
+
+
+def test_source_optional_semantics_and_exact_string_boundary(planner):
+    omitted = AuthorizedContextFact(fact_id="fact.omitted-source", label="Product", value="known", confidence=0.9)
+    explicit_none = AuthorizedContextFact(fact_id="fact.none-source", label="Product", value="known", source=None, confidence=0.9)
+    valid = AuthorizedContextFact(fact_id="fact.valid-source", label="Product", value="known", source="caller", confidence=0.9)
+
+    assert omitted.source is None
+    assert explicit_none.source is None
+    assert valid.source == "caller"
+    for invalid in ("", [], {}, bytearray(b"x"), StringSubclass("caller"), ExplodingList()):
+        with pytest.raises(InvalidContextValueError, match="source"):
+            replace(valid, source=invalid)
+
+    base_facts = complete_context().known_facts
+    without_source = replace(base_facts[0], source=None)
+    changed_source = replace(base_facts[0], source="different provenance")
+    first = planner.plan(interpretation(), complete_context(known_facts=(without_source, *base_facts[1:])))
+    second = planner.plan(interpretation(), complete_context(known_facts=(changed_source, *base_facts[1:])))
+    assert first.blocking_questions == second.blocking_questions
+    assert first.plan_id == second.plan_id
 
 
 def test_identical_inputs_produce_identical_plan_without_randomness(planner):

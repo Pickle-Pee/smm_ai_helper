@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import fields, is_dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Iterable
 
 from app.module_registry import ModuleId, ModuleRegistry, ModuleRegistryNotFoundError
@@ -29,6 +30,9 @@ from .contracts import (
 )
 from .errors import InvalidInterpretationError, UnknownModulePlanningError
 from .validation import PlanValidator, SUPPORTED_SCENARIOS
+
+
+_IMMUTABLE_MAPPING_TYPE = type(MappingProxyType({}))
 
 
 _POSITIONING_OUTPUTS = {
@@ -69,13 +73,13 @@ _POSITIONING_INPUTS: dict[str, tuple[PlanningInputRequirement, ...]] = {
 def _stable_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
-    if isinstance(value, dict) or hasattr(value, "items"):
+    if type(value) in (dict, _IMMUTABLE_MAPPING_TYPE):
         return {str(key): _stable_value(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
-    if isinstance(value, (tuple, list)):
+    if type(value) in (tuple, list):
         return [_stable_value(item) for item in value]
-    if isinstance(value, (set, frozenset)):
+    if type(value) in (set, frozenset):
         return sorted((_stable_value(item) for item in value), key=lambda item: json.dumps(item, sort_keys=True, ensure_ascii=False))
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if type(value) in (str, int, float, bool) or value is None:
         return value
     if is_dataclass(value):
         return {item.name: _stable_value(getattr(value, item.name)) for item in fields(value)}
@@ -97,10 +101,10 @@ class MarketingOrchestratorPlanner:
         interpretation: RequestInterpretation,
         context: PlanningContext | None = None,
     ) -> OrchestrationPlan:
-        if not isinstance(interpretation, RequestInterpretation):
+        if type(interpretation) is not RequestInterpretation:
             raise InvalidInterpretationError("planner accepts RequestInterpretation only")
         context = context or PlanningContext()
-        if not isinstance(context, PlanningContext):
+        if type(context) is not PlanningContext:
             raise InvalidInterpretationError("planner accepts PlanningContext only")
 
         if interpretation.requested_module is not None:

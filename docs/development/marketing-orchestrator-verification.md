@@ -39,7 +39,9 @@ Question generation uses only immutable `PlanningInputRequirement` entries with 
 
 Plan identity is constructed after authorization and node scoping. It includes stable fact IDs and canonical frozen values, but excludes labels and free-form sources. Reordering facts produces the same ID; unrelated `CREATOR` facts and unauthorized facts alter neither packets nor ID; changing or removing an effective relevant identity/value changes the ID. Duplicate `fact_id` values fail at `PlanningContext` construction.
 
-Every planning dataclass validates at construction through the shared `InvalidContextValueError` boundary. Fact and upstream-finding values accept only recursive canonical JSON-like values. Lists and string-keyed mappings are copied into tuples and immutable deterministic mappings. Metadata tests reject mutable/non-string source and evidence, bare-string or byte-array sequences, unsupported enum strings, booleans/non-finite/out-of-range confidence, sets, custom mutable objects and non-string mapping keys. Caller list/dictionary mutation cannot affect constructed contracts.
+Every planning dataclass validates at construction through the shared `InvalidContextValueError` boundary. Caller containers must be exact built-in `list`/`tuple`, exact built-in `dict`, or exact built-in `set`/`frozenset` only where the field explicitly models a semantic set; the internal mapping-proxy type is the sole trusted immutable mapping exception. Subclasses and custom Mapping/Sequence/Set implementations are rejected before iteration or mapping access. Hostile regressions prove overridden methods are never invoked and every rejection remains `InvalidContextValueError`. Fact and upstream-finding values accept only recursive canonical JSON-like values. Lists and string-keyed mappings are copied into tuples and immutable deterministic mappings. Metadata tests reject mutable/non-string source and evidence, bare-string or byte-array sequences, unsupported enum strings, booleans/non-finite/out-of-range confidence, sets, custom mutable objects and non-string mapping keys. Caller list/dictionary mutation cannot affect constructed contracts.
+
+Fact provenance is truthfully optional: omitted `source` and explicit `None` both mean unspecified provenance. A supplied source must be a non-empty exact built-in string; empty strings, string subclasses, mutable containers, byte arrays and custom objects are rejected. Source remains excluded from requirement matching and plan identity.
 
 Malformed fixtures independently cover each missing positioning edge, both edges missing, extra edges, edge/reference disagreement in both directions, wrong deterministic IDs, incorrect topology with the correct module sequence, duplicate IDs, unresolved/unknown modules, missing targets, self-edges, cycles, invalid parallel groups, output/gate mismatches, duplicate/excess/known-input questions, and unsupported graphs.
 
@@ -57,9 +59,10 @@ The explicit state matrix accepts only validated sufficient/partial plans, block
 
 | Command | Exit | Result |
 | --- | ---: | --- |
-| `.venv\Scripts\python.exe -m pytest tests/test_marketing_orchestrator.py -q` | 0 | 83 passed, 4 existing deprecation warnings |
-| `.venv\Scripts\python.exe -m pytest -q tests\test_marketing_orchestrator.py tests\test_module_registry.py tests\test_expert_core.py tests\test_agent_registry.py tests\test_task_router.py tests\test_task_pipeline_service.py tests\test_marketing_workflow_persistence_service.py --tb=short` | 0 | 156 passed, 6 existing deprecation warnings |
-| `.venv\Scripts\python.exe -m pytest -q` | 0 | 235 passed, 9 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest tests/test_marketing_orchestrator.py -q -k "custom_container_subclasses or exact_builtin_containers or source_optional_semantics"` | 0 | 12 passed, 83 deselected, 1 existing deprecation warning |
+| `.venv\Scripts\python.exe -m pytest tests/test_marketing_orchestrator.py -q` | 0 | 95 passed, 4 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q tests\test_marketing_orchestrator.py tests\test_module_registry.py tests\test_expert_core.py tests\test_agent_registry.py tests\test_task_router.py tests\test_task_pipeline_service.py tests\test_marketing_workflow_persistence_service.py --tb=short` | 0 | 168 passed, 6 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q` | 0 | 247 passed, 9 existing deprecation warnings |
 | `.venv\Scripts\python.exe -m compileall app bot` | 0 | compiled successfully |
 | `openspec validate add-marketing-orchestrator-foundation --strict` | 0 | valid |
 | `openspec validate --all --strict` | 0 | 11 passed, 0 failed |

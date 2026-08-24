@@ -16,6 +16,7 @@ from .errors import InvalidContextValueError
 ImmutableJsonScalar: TypeAlias = None | bool | int | float | str
 ImmutableJsonValue: TypeAlias = ImmutableJsonScalar | tuple["ImmutableJsonValue", ...] | Mapping[str, "ImmutableJsonValue"]
 _STABLE_ID = re.compile(r"^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$")
+_IMMUTABLE_MAPPING_TYPE = type(MappingProxyType({}))
 
 
 def _error(field: str, message: str) -> InvalidContextValueError:
@@ -39,14 +40,14 @@ def _identifier(value: Any, field: str) -> str:
 
 
 def _strings(value: Any, field: str, *, ordered: bool = False) -> tuple[str, ...]:
-    if not isinstance(value, (tuple, list)):
+    if type(value) not in (tuple, list):
         raise _error(field, "must be a tuple or list of strings")
     items = tuple(_string(item, f"{field} item") for item in value)
     return items if ordered else tuple(sorted(set(items)))  # type: ignore[arg-type]
 
 
 def _typed_sequence(value: Any, item_type: type, field: str) -> tuple[Any, ...]:
-    if not isinstance(value, (tuple, list)):
+    if type(value) not in (tuple, list):
         raise _error(field, "must be a tuple or list")
     if any(type(item) is not item_type for item in value):
         raise _error(field, f"items must be {item_type.__name__}")
@@ -54,7 +55,7 @@ def _typed_sequence(value: Any, item_type: type, field: str) -> tuple[Any, ...]:
 
 
 def _enum_set(value: Any, item_type: type[Enum], field: str) -> frozenset[Any]:
-    if not isinstance(value, (set, frozenset, tuple, list)):
+    if type(value) not in (set, frozenset, tuple, list):
         raise _error(field, "must be an explicit enum collection")
     if any(type(item) is not item_type for item in value):
         raise _error(field, f"items must be {item_type.__name__}")
@@ -62,7 +63,7 @@ def _enum_set(value: Any, item_type: type[Enum], field: str) -> frozenset[Any]:
 
 
 def _string_set(value: Any, field: str) -> frozenset[str]:
-    if not isinstance(value, (set, frozenset, tuple, list)):
+    if type(value) not in (set, frozenset, tuple, list):
         raise _error(field, "must be an explicit string collection")
     return frozenset(_strings(tuple(value), field))
 
@@ -81,13 +82,13 @@ def freeze_json_value(value: Any) -> ImmutableJsonValue:
         if not math.isfinite(value):
             raise InvalidContextValueError("context floats must be finite")
         return value
-    if isinstance(value, Mapping):
-        if any(not isinstance(key, str) for key in value):
+    if type(value) in (dict, _IMMUTABLE_MAPPING_TYPE):
+        if any(type(key) is not str for key in value):
             raise InvalidContextValueError("context mappings require string keys")
         return MappingProxyType(
             {key: freeze_json_value(item) for key, item in sorted(value.items())}
         )
-    if isinstance(value, (list, tuple)):
+    if type(value) in (list, tuple):
         return tuple(freeze_json_value(item) for item in value)
     raise InvalidContextValueError(f"unsupported context value: {type(value).__name__}")
 
@@ -179,7 +180,7 @@ class RequestInterpretation:
             raise _error("selector", "exactly one requested_module or scenario_key is required")
         if self.requested_module is not None and type(self.requested_module) not in (str, ModuleId):
             raise _error("requested_module", "must be a string or ModuleId")
-        if isinstance(self.requested_module, str):
+        if type(self.requested_module) in (str, ModuleId):
             if not self.requested_module.strip():
                 raise _error("requested_module", "must not be empty")
             object.__setattr__(self, "requested_module", self.requested_module.strip())
@@ -197,7 +198,7 @@ class AuthorizedContextFact:
     input_key: PlanningInputKey | None = None
     module_relevance: frozenset[ModuleId] = frozenset()
     scenario_relevance: frozenset[str] = frozenset()
-    source: str = ""
+    source: str | None = None
     evidence: tuple[str, ...] = ()
     confidence: float = 0.0
     sensitivity: Sensitivity = Sensitivity.INTERNAL
@@ -211,7 +212,7 @@ class AuthorizedContextFact:
         object.__setattr__(self, "value", freeze_json_value(self.value))
         object.__setattr__(self, "module_relevance", _enum_set(self.module_relevance, ModuleId, "module_relevance"))
         object.__setattr__(self, "scenario_relevance", _string_set(self.scenario_relevance, "scenario_relevance"))
-        object.__setattr__(self, "source", _string(self.source, "source"))
+        object.__setattr__(self, "source", _string(self.source, "source", optional=True))
         object.__setattr__(self, "evidence", _strings(self.evidence, "evidence"))
         object.__setattr__(self, "confidence", _confidence(self.confidence, "confidence"))
         if type(self.sensitivity) is not Sensitivity:

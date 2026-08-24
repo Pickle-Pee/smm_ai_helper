@@ -69,3 +69,10 @@ Do not add API/Telegram integration, a dispatcher, changes to `TaskRouter`/`Agen
 - [x] 7.2 Derive scoped plan identity from stable fact identity and frozen value while excluding labels, source text, unscoped facts, and caller ordering.
 - [x] 7.3 Validate and defensively freeze the complete planning contract graph at construction with `InvalidContextValueError`.
 - [x] 7.4 Add independent regressions for prose-like keys, raw enum strings, duplicate identities, metadata validation, and caller mutation.
+
+## 8. Exact container boundary hardening
+
+- [x] 8.1 Accept only exact approved built-in container and scalar types before iteration, and reject subclasses/custom containers with `InvalidContextValueError`.
+- [x] 8.2 Make fact source truthfully optional (`None` means unspecified), while rejecting empty or non-exact strings and keeping source out of matching and identity.
+- [x] 8.3 Add adversarial subclass regressions proving overridden methods are not invoked and normal built-ins remain defensively frozen.
+- [x] 8.4 Rerun targeted, compatibility, full, OpenSpec, compilation, and scope checks and record exact results; confirm required PR CI after push.
