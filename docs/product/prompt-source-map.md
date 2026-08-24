@@ -8,7 +8,7 @@
 
 | Domain | Normative source | Supporting/legacy sources | Decision |
 | --- | --- | --- | --- |
-| Shared reasoning policy | `app/prompts/expert_core/v1.0.0.md` | `docs/product/prompts/expert-core-production.md`, `agents_prompts/1. EXPERT CORE PRODUCTION.docx`, other DOCX materials | Versioned app-owned Markdown resource is the only runtime source; supporting files are archival provenance |
+| Shared reasoning policy | `prompts/expert-core-production.md` | `Общий системный промпт для ИИ(1).docx` | EXPERT CORE production — единственный runtime source |
 | Multi-module orchestration | `prompts/orchestrator-production.md` | `Оркестратор.docx`, `Агентский диспетчер задач (1).docx` | Dispatcher не создаётся отдельным runtime layer |
 | Module metadata and routing | `prompts/module-registry-production.md` | `Реестр модулей.docx` | Production registry — единственный canonical registry |
 
@@ -41,4 +41,5 @@
 4. Tests/evals for the changed rule.
 5. Review влияния на token budget и conflicts.
 
-Для Expert Core только `app/prompts/expert_core/v1.0.0.md` является version-controlled runtime source of truth. `docs/product/expert-core.md` — product contract. `docs/product/prompts/expert-core-production.md` и DOCX-файлы — archival provenance и не загружаются runtime.
+DOCX-файлы после принятия этого пакета считаются исходными материалами, а Markdown-файлы в репозитории — version-controlled source of truth.
+

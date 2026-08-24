@@ -2,12 +2,10 @@
 
 ## Sources of truth
 
-- `app/prompts/expert_core/v1.0.0.md` — единственный canonical runtime source Expert Core `1.0.0`.
+- `docs/product/prompts/expert-core-production.md` — shared reasoning policy.
 - `docs/product/prompts/orchestrator-production.md` — orchestration policy.
 - `docs/product/prompts/module-registry-production.md` — canonical registry policy.
 - Specialized module prompts — task-specific expertise only.
-
-`docs/product/expert-core.md` — product contract, а не prompt source. `docs/product/prompts/expert-core-production.md` и DOCX-файлы — archival provenance для initial-import review; loader/composer не читает их и не содержит копию Expert Core body.
 
 ## Ownership boundaries
 
@@ -28,7 +26,6 @@
 6. Проверить prompt conflicts, ordering и duplicate injection.
 7. Измерить token overhead и latency на representative scenarios.
 8. Обновить product docs и roadmap.
-9. Записать size/token/composition evidence в `docs/development/expert-core-verification.md`.
 
 ## Review checklist
 
@@ -41,3 +38,4 @@
 - Простые запросы не обязаны использовать complex response template.
 - Prompt не обещает гарантированный marketing result.
 - Изменение имеет rollback path.
+
