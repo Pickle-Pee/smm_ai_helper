@@ -97,7 +97,7 @@ OpenSpec change `add-orchestrator-quality-gates` defines the next internal plann
 ```text
 caller-supplied immutable normalized module result
  -> exact contract and Registry metadata validation
- -> deterministic gate / contradiction / next-step / stop decisions
+ -> batch-fingerprinted gate / selected-evidence contradiction / next-step decisions
  -> synthesis-eligibility manifest (data only)
 ```
 

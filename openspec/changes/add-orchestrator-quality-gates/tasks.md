@@ -23,7 +23,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 3.3 Reject subclasses and custom Mapping/Sequence/Set values without invoking hostile methods.
 - [ ] 3.4 Reject caller-created mapping proxies without inspecting backing mappings; keep internal proxies output-only.
 - [ ] 3.5 Validate the prefixed ASCII ID regex, length and field-specific prefix for every ID.
-- [ ] 3.6 Validate batch-wide uniqueness independently for result, claim, evidence, assumption, limitation, contradiction, exclusion and manifest IDs.
+- [ ] 3.6 Validate caller batch/result/claim/evidence/assumption/limitation/contradiction namespaces independently; validate derived exclusion IDs without inventing manifest/decision IDs.
 - [ ] 3.7 Resolve all local/cross-result lineage, contradiction, limitation and manifest references after uniqueness validation.
 - [ ] 3.8 Normalize caller-caused supported Python/Registry errors to `QualityGateContractError` without catching programmer defects or `BaseException`.
 - [ ] 3.9 Add separate hostile-container tests proving validation performs no iteration, lookup, hashing, comparison, formatting, copying, `str()` or `repr()` before type acceptance.
@@ -72,7 +72,7 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 7.3 Enforce `FAIL` gate to `STOP/RESULT_FAILED` and reject blocking/replan triggers.
 - [ ] 7.4 Implement accepted-gate stop precedence for scope-complete and sufficient-evidence triggers.
 - [ ] 7.5 Implement accepted-gate replan precedence for material finding, invalidated dependency and reversible-test value.
-- [ ] 7.6 Implement lower accepted-gate stop precedence for diminishing/tool/capability limits and deterministic duplicate-trigger deduplication.
+- [ ] 7.6 Implement lower accepted-gate stop precedence for diminishing/tool/capability limits and deterministic duplicate-trigger rejection.
 - [ ] 7.7 Build the immutable manifest with resolved evaluated/accepted IDs, unresolved contradictions, limitations and exclusion records.
 - [ ] 7.8 Test inclusion of eligible accepted results/claims and exclusion of failed, blocked and unresolved claims.
 - [ ] 7.9 Prove decisions/manifests generate no plan, prose, raw dump, chain-of-thought or public response DTO.
@@ -94,3 +94,23 @@ Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
 - [ ] 9.3 Run `.venv\Scripts\python.exe -m pytest` and `.venv\Scripts\python.exe -m compileall app bot`.
 - [ ] 9.4 Run strict change/all OpenSpec validation and `git diff --check origin/sale-ready...HEAD`.
 - [ ] 9.5 Report files, behavior, migrations, exact commands/results, limitations, blockers and manual verification without claiming unexecuted work.
+
+## 10. Closed output-contract implementation evidence
+
+- [ ] 10.1 Implement and test exact `BatchId` prefix/type validation.
+- [ ] 10.2 Implement canonical JSON batch fingerprint construction and prove stability for equal normalized batches.
+- [ ] 10.3 Prove fingerprint sensitivity to every contract-relevant field and rejection of caller fingerprint injection.
+- [ ] 10.4 Implement and test every exact `GateDecision` field, empty policy, ordering rule and stable identity.
+- [ ] 10.5 Implement explicit left/right contradiction evidence selection and selected-evidence claim-membership validation.
+- [ ] 10.6 Prove absent/same selected evidence behavior and zero implicit evidence aggregation, ranking or newest-record selection.
+- [ ] 10.7 Implement and test complete contradiction-record state coherence and preferred-claim eligibility.
+- [ ] 10.8 Implement canonical length-prefixed derived limitation preimages and IDs.
+- [ ] 10.9 Implement canonical length-prefixed derived exclusion preimages and IDs.
+- [ ] 10.10 Test equal-preimage deduplication, different-preimage collision failure and lexical derived-record ordering.
+- [ ] 10.11 Implement and test `DecisionRequest` batch ID/fingerprint matching and exact trigger containers.
+- [ ] 10.12 Implement and test every `DecisionResult` field, identity and matrix-dependent empty tuple.
+- [ ] 10.13 Implement and test the complete batch-identified synthesis manifest and deep immutability.
+- [ ] 10.14 Test every exhaustive, non-overlapping exclusion production path.
+- [ ] 10.15 Prove no unreachable exclusion member or catch-all production path exists.
+- [ ] 10.16 Prove every derived output carries exact batch ID/fingerprint and rejects cross-stage mismatch without object-identity reliance.
+- [ ] 10.17 Prove all remaining input/output contracts match their normative field tables without unrestricted `Any`, untyped mappings or prose normalization.

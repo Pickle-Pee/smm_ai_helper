@@ -5,7 +5,8 @@ The planning-only Marketing Orchestrator needs an exact deterministic boundary f
 ## What Changes
 
 - Add a private `app/marketing_orchestrator/quality_gates/` package for immutable normalized-result contracts and pure evaluation.
-- Define every finite vocabulary, dataclass field, ID namespace, timestamp rule and error phase.
+- Define every finite vocabulary, dataclass field, batch identity/fingerprint, ID namespace, timestamp rule and error phase.
+- Require caller-selected contradiction evidence and deterministic derived limitation/exclusion identities; remove catch-all exclusion states.
 - Derive gate outcomes, execution readiness, decisions and synthesis eligibility rather than trusting caller-supplied values.
 - Preserve provenance, assumptions, limitations and explicit lineage with conservative confidence propagation.
 - Add exact contradiction, stop/replan and synthesis-manifest rules.
@@ -29,4 +30,3 @@ None.
 - No API, Telegram, persistence, transaction, migration, Job, Redis, queue, worker, workflow execution, prompt, LLM/QC call or user-facing synthesis is introduced.
 - Existing agent dictionaries require future explicit adapters and are not accepted directly.
 - Authoritative implementation base: `607696ab02da7dafabfcdd0bfeb2f29724b80c38`.
-

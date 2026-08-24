@@ -6,7 +6,7 @@ Defines a deterministic internal boundary that validates immutable normalized mo
 
 ### Requirement: Exact normalized contracts
 
-The system SHALL accept only the exact enums, fields, optionality, defaults, scalar/container types and prefixed ASCII IDs defined by the design, SHALL reuse Registry `ModuleId` and `ModuleResultStatus`, and SHALL deeply freeze accepted caller data.
+The system SHALL accept only the exact enums, fields, optionality, defaults, scalar/container types and prefixed ASCII IDs defined by the design, including `bat_` batch identity, SHALL reuse Registry `ModuleId` and `ModuleResultStatus`, and SHALL deeply freeze accepted caller data. It SHALL derive the canonical batch SHA-256 fingerprint and carry batch ID/fingerprint on every output.
 
 #### Scenario: Exact immutable construction
 - **WHEN** an exact normalized evaluation batch is constructed and caller containers later mutate
@@ -90,7 +90,7 @@ The system SHALL propagate only through resolved explicit lineage IDs, union pro
 
 ### Requirement: Exact contradiction evaluation
 
-The system SHALL compare contradictions only through exact object, segment, period and metric-definition keys, preserve both claims, never average/delete values and never present precedence as truth.
+The system SHALL compare contradictions only through exact object, segment, period and metric-definition keys and caller-selected evidence belonging to each claim, preserve both claims, never choose or aggregate evidence, never average/delete values and never present precedence as truth.
 
 #### Scenario: Incomparable claims
 - **WHEN** any comparison key differs
@@ -98,7 +98,7 @@ The system SHALL compare contradictions only through exact object, segment, peri
 
 #### Scenario: First-party precedence
 - **WHEN** comparison keys match, source classes are first-party versus generic benchmark, both timestamps exist and first-party is equal or newer
-- **THEN** state is `PRIORITIZED` with `FIRST_PARTY_NOT_OLDER_THAN_GENERIC_BENCHMARK`
+- **THEN** state is `PRIORITIZED` with `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`
 - **AND** both claims remain
 
 #### Scenario: Uncovered precedence
@@ -143,7 +143,12 @@ The system SHALL validate triggers after final gate derivation and SHALL enforce
 
 ### Requirement: Immutable synthesis eligibility manifest
 
-The system SHALL derive a manifest with resolved evaluated/accepted result and claim IDs, limitations, unresolved contradiction IDs and typed exclusion records.
+The system SHALL derive the exact batch-identified manifest fields, deterministic contradiction limitations and exhaustive `RESULT_FAILED`, `RESULT_BLOCKED` or `UNRESOLVED_CONTRADICTION` exclusions defined by the design. Equal derived preimages SHALL deduplicate and different-preimage ID collisions SHALL raise `QualityGateContractError`.
+
+#### Scenario: Stable batch and derived identity
+- **WHEN** equal normalized batches and contradiction adjustments are evaluated
+- **THEN** their batch fingerprints, derived limitation IDs and exclusion IDs are identical
+- **AND** changing any contract-relevant batch value changes the fingerprint preimage
 
 #### Scenario: Mixed outcomes
 - **WHEN** accepted, failed, blocked and unresolved results are evaluated together
@@ -162,4 +167,3 @@ The foundation SHALL live only under `app/marketing_orchestrator/quality_gates/`
 - **WHEN** the foundation is implemented
 - **THEN** existing planner/validator, agents, presenters, public DTOs, `AgentRegistry`, `QCService` and `TaskPipelineService` remain unchanged
 - **AND** no public API, Telegram behavior, migration or transaction ownership is added
-

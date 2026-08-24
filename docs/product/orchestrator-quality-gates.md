@@ -20,7 +20,7 @@ All remaining authority, materiality, limitation, failure, blocking, exclusion, 
 
 ## Identity and time
 
-Every entity uses an exact lowercase ASCII prefixed ID (`res_`, `clm_`, `evd_`, `asm_`, `lim_`, `ctr_`, `exc_`, `man_`) with no trimming or normalization. The immutable evaluation batch owns uniqueness and reference resolution across included results.
+Every entity uses an exact lowercase ASCII prefixed ID (`bat_`, `res_`, `clm_`, `evd_`, `asm_`, `lim_`, `ctr_`, `exc_`) with no trimming or normalization. There is no manifest/decision ID. Canonical normalized UTF-8 JSON produces a lowercase SHA-256 batch fingerprint; every derived output carries both batch ID and fingerprint.
 
 Evidence time accepts only exact aware `datetime`, normalizes explicit offsets to UTC, preserves microseconds and serializes with `Z`. Evaluation uses no ambient clock or timezone. Missing timestamps remain incomparable.
 
@@ -37,7 +37,7 @@ Evidence time accepts only exact aware `datetime`, normalizes explicit offsets t
 
 Only explicit resolved lineage IDs propagate. Provenance, assumptions and limitations are identity-unioned in stable order. Repetition/reformulation/derivation never exceeds the most conservative parent confidence; `UNKNOWN` remains `UNKNOWN`. New evidence is preserved but cannot increase confidence; evidence independence remains deferred.
 
-Contradictions compare exact object, segment, period and metric-definition keys. Both claims remain and are never averaged/deleted. First-party may be prioritized over a generic benchmark only with matching keys and an equal/newer explicit timestamp. Every other uncovered/tied/missing-time case remains unresolved; precedence is not truth.
+Contradictions compare exact keys using only one caller-selected evidence record per side, validated as belonging to that claim. The evaluator never selects or aggregates evidence. First-party may be prioritized only over selected generic-benchmark evidence with equal/newer explicit time, using `FIRST_PARTY_NOT_OLDER_THAN_BENCHMARK`; every other case is unresolved/incomparable.
 
 Unresolved/incomparable claims stay in evaluated results but are excluded from accepted claim IDs with typed records. No remaining usable claim produces `FAIL/NO_USABLE_CLAIMS`; otherwise the accepted result is limited and carries a material contradiction limitation.
 
@@ -45,7 +45,7 @@ Unresolved/incomparable claims stay in evaluated results but are excluded from a
 
 `BLOCKED` gates produce only matching `BLOCKED`; `FAIL` produces only `STOP/RESULT_FAILED`. For accepted gates, completion/sufficient evidence stops first, material finding/dependency invalidation/reversible-test value replans second, diminishing/tool/capability limits stop third, and no trigger continues. Decisions never execute work.
 
-The immutable manifest lists evaluated/accepted IDs, limitations, unresolved contradictions and typed exclusions. It generates no prose, raw dumps, hidden reasoning or public DTO.
+The batch-identified immutable manifest lists exact evaluated/accepted IDs, limitations, unresolved contradictions and exhaustive typed exclusions. Derived contradiction limitations and exclusions use length-prefixed canonical preimages and truncated SHA-256 IDs with collision checks. It generates no prose, raw dumps, hidden reasoning or public DTO.
 
 ## Compatibility
 
