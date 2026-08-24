@@ -1,31 +1,35 @@
-# Change: Add module registry foundation
-
 ## Why
 
-Система имеет production-описание пятнадцати экспертных модулей, aliases, activation/return contracts и routing precedence, но эти сведения должны стать единым version-controlled runtime contract. Без canonical registry routing будет зависеть от копий prompt text, а module IDs и input/output expectations начнут расходиться.
+The product defines fifteen marketing modules, while the current runtime has a separate execution registry for five standalone agents. The foundation must establish canonical typed metadata without conflating product module IDs with executable agent IDs or changing current routing.
 
-## What changes
+## What Changes
 
-- Добавляется canonical, versioned module registry.
-- Добавляются typed module descriptors и enums для module type, dependency type, tool flags и module status.
-- Добавляются canonical module IDs и alias resolution.
-- Добавляются activation и return contracts на уровне internal domain models.
-- Существующий routing получает registry через один read-only boundary.
-- Добавляются validation и deterministic tests registry invariants.
+- Add a read-only product/domain `ModuleRegistry` for immutable descriptors and normalized alias lookup.
+- Make `app/module_registry/v1.0.0.json` the single canonical runtime descriptor resource; Python provides loading, validation, and lookup only.
+- Define distinct availability and result-status concepts, internal activation/return contracts, authority limits, handoffs, tool capabilities, and optional execution bindings.
+- Validate the fixed v1.0.0 module set, aliases, descriptors, handoffs, capabilities, immutability, and optional bindings deterministically and fail fast.
+- Preserve `AgentRegistry` as the only mapping from executable IDs (`strategy`, `content`, `analytics`, `promo`, `trends`) to agent classes.
+- Add durable verification planning for the initial import from approved source material.
+
+## Capabilities
+
+### New Capabilities
+
+- `module-registry`: Versioned, immutable product module metadata with deterministic validation and read-only lookup.
+
+### Modified Capabilities
+
+None.
 
 ## Impact
 
-- Публичные API не меняются.
-- Database schema и Alembic migrations не меняются.
-- `TaskPipelineService` остаётся single-task pipeline.
-- Registry не исполняет модули и не хранит business state.
-- Существующие standalone agents продолжают работать через текущий execution path.
+- Runtime implementation is limited to app-owned registry domain models, the v1.0.0 JSON resource, a loader/provider, and deterministic tests.
+- The current Docker `COPY . .` deployment includes `app/module_registry/v1.0.0.json`; no separate Python wheel/sdist packaging configuration exists.
+- No public API, database, Alembic, Redis, queue/worker, Telegram, LLM-call, QC-call, routing, `AgentRunner`, or `TaskPipelineService` behavior changes.
+- No current agent exactly implements a product module contract, so v1.0.0 declares no execution bindings.
 
 ## Out of scope
 
-- Multi-module workflow execution.
-- Redis, Jobs и workers.
-- Реализация отсутствующих expert modules.
-- LLM-based routing или QC.
-- Изменение пользовательских response formats.
-
+- Selecting or executing product modules, Marketing Orchestrator behavior, workflows, and LLM-based routing.
+- Implementing any of the fifteen expert modules or adapting current agents.
+- Public DTO/result-format changes, persistence changes, and unrelated refactoring.

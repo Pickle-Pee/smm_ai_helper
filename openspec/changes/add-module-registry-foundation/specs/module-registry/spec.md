@@ -1,72 +1,128 @@
+## Purpose
+
+Provide a versioned, immutable product-module metadata registry that downstream domain components can inspect safely without changing or duplicating current agent execution.
+
 ## ADDED Requirements
 
-### Requirement: Canonical module registry
+### Requirement: Canonical versioned registry
 
-The system SHALL provide one canonical, versioned registry of marketing module descriptors.
+The system SHALL load the single canonical runtime registry from the app-owned `v1.0.0` structured resource and SHALL expose exactly one immutable descriptor for each of the fifteen expected canonical module IDs.
 
-#### Scenario: Resolve canonical module
+#### Scenario: Load canonical set
+- **WHEN** registry version `1.0.0` is loaded
+- **THEN** the registry contains exactly the fifteen expected canonical IDs
+- **AND** each canonical ID has exactly one immutable descriptor
+- **AND** the declared source version is `1.0.0`
 
-- **WHEN** routing requests a registered canonical module ID
-- **THEN** the registry returns exactly one immutable descriptor
-- **AND** the descriptor contains its declared applicability, inputs, outputs, tools, gates and handoffs
+#### Scenario: Reject invalid canonical set
+- **WHEN** the resource has a duplicate, missing, or unexpected canonical ID, or not exactly fifteen descriptors
+- **THEN** validation fails before registry use
 
-#### Scenario: Reject duplicate ID
+### Requirement: Immutable typed descriptor
 
-- **WHEN** two descriptors declare the same canonical module ID
-- **THEN** registry validation fails before task execution
-
-### Requirement: Alias resolution
-
-The system SHALL resolve every registered alias to exactly one canonical module ID.
-
-#### Scenario: Resolve alias
-
-- **WHEN** routing requests a registered alias
-- **THEN** the registry returns the descriptor of its canonical module
-- **AND** no second module descriptor is created
-
-#### Scenario: Reject alias collision
-
-- **WHEN** an alias resolves ambiguously or collides with another canonical ID
-- **THEN** registry validation fails
-
-### Requirement: Module activation contract
-
-The system SHALL define an internal activation contract containing the module objective, relevant context, known facts, upstream findings, evidence, assumptions, confidence, constraints, available tools and open questions.
-
-#### Scenario: Build minimal activation packet
-
-- **WHEN** a module is selected
-- **THEN** only context relevant to that module objective is included
-- **AND** unrelated conversation content is not required by the contract
-
-### Requirement: Module return contract
-
-The system SHALL normalize module results using a status and structured fields for summary, findings, evidence, assumptions, hypotheses, recommendations, risks, confidence, open questions, strategic issues and handoff recommendation.
-
-#### Scenario: Return limited result
-
-- **WHEN** a module completes with material evidence limitations
-- **THEN** it returns `PASS_WITH_LIMITATIONS`
-- **AND** the limitations remain represented in evidence, assumptions, confidence or open questions
-
-### Requirement: Registry is not an execution engine
-
-The registry SHALL NOT execute modules, persist project state or orchestrate multi-step workflows.
+Each descriptor SHALL define its canonical ID, module type, applicability, classified input requirements, declared outputs, supported tool flags, quality gates, aliases, handoffs, authority limitations, availability status, and optional execution binding using validated internal domain types.
 
 #### Scenario: Read descriptor
+- **WHEN** a consumer retrieves a canonical descriptor
+- **THEN** all required fields are non-empty and enum/capability values are valid
+- **AND** descriptor and registry collections cannot be mutated
 
-- **WHEN** an execution component queries the registry
-- **THEN** the registry returns metadata only
-- **AND** no model call, database write or queue operation is initiated
+#### Scenario: Reject mutation
+- **WHEN** a consumer attempts to mutate a descriptor or registry collection
+- **THEN** the mutation is rejected
+- **AND** subsequent lookup returns unchanged metadata
 
-### Requirement: Compatibility
+### Requirement: Deterministic alias resolution
 
-Introducing the registry SHALL preserve existing public APIs, database schema and single-task pipeline behavior.
+The system SHALL normalize lookup values by trimming leading/trailing Unicode whitespace, applying Unicode case folding, and replacing every contiguous run of Unicode whitespace, hyphens, or underscores with one underscore. Canonical IDs and aliases SHALL share one normalized namespace.
 
-#### Scenario: Existing standalone agent
+#### Scenario: Resolve alias
+- **WHEN** a registered alias is supplied with differences only in surrounding whitespace, case, or hyphen/underscore/whitespace separators
+- **THEN** lookup returns its one canonical immutable descriptor
+- **AND** no additional descriptor is created
 
-- **WHEN** an existing standalone agent is selected after registry integration
-- **THEN** it continues through the existing execution path
-- **AND** the registry does not create a parallel runner
+#### Scenario: Reject invalid alias namespace
+- **WHEN** a normalized alias is empty, duplicated, collides with any normalized canonical ID, or resolves ambiguously
+- **THEN** validation fails before registry use
 
+### Requirement: Valid references and capabilities
+
+The registry SHALL accept only supported capability flags and existing canonical handoff targets and SHALL prohibit self-handoffs.
+
+#### Scenario: Reject invalid descriptor references
+- **WHEN** a descriptor declares an unsupported tool flag, nonexistent handoff target, or self-handoff
+- **THEN** validation fails before registry use
+
+### Requirement: Separate availability and result status
+
+The domain contract SHALL represent module implementation availability separately from module execution result status.
+
+#### Scenario: Represent metadata-only module
+- **WHEN** a module has no exact executable implementation
+- **THEN** its availability is `metadata_only`
+- **AND** no execution binding is declared
+- **AND** this state is not represented as `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, or `BLOCKED`
+
+#### Scenario: Represent execution result
+- **WHEN** a future execution component reports a module outcome
+- **THEN** its internal result status is one of `PASS`, `PASS_WITH_LIMITATIONS`, `FAIL`, or `BLOCKED`
+- **AND** that status does not change registry availability metadata
+
+### Requirement: Optional execution bindings are metadata only
+
+An execution binding SHALL be permitted only for compatibility classified as `exact`, SHALL reference an executable ID known to the existing execution registry, and SHALL NOT execute or select the agent. Module aliases SHALL NOT become executable-agent aliases.
+
+#### Scenario: Validate exact binding
+- **WHEN** a descriptor declares an execution binding
+- **THEN** validation confirms exact compatibility evidence and a known executable agent ID
+- **AND** lookup returns the binding as metadata without executing it
+
+#### Scenario: Reject invalid binding
+- **WHEN** a metadata-only module declares a binding, an execution-bound module lacks a binding, or a binding targets an unknown or non-exact agent
+- **THEN** validation fails before registry use
+
+#### Scenario: Version 1.0.0 has no bindings
+- **WHEN** the initial registry is loaded
+- **THEN** all fifteen descriptors are metadata-only
+- **AND** no current standalone agent is declared an exact executable binding
+
+### Requirement: Internal activation and return contracts
+
+The system SHALL define internal activation and return contracts for future module consumers without replacing public DTOs or current agent/task result contracts.
+
+#### Scenario: Build activation contract
+- **WHEN** a future internal consumer prepares module activation data
+- **THEN** the contract can represent objective, user goal, required output, relevant context, known facts, upstream findings, evidence, assumptions, confidence, constraints, available tools, and open questions
+
+#### Scenario: Build limited return contract
+- **WHEN** a future module result has material evidence limitations
+- **THEN** the internal result may use `PASS_WITH_LIMITATIONS`
+- **AND** limitations remain represented in evidence, assumptions, confidence, or open questions
+- **AND** no public API or current agent result format is modified
+
+### Requirement: Registry is read-only metadata, not execution
+
+The registry SHALL NOT instantiate agents, select routes, execute modules, persist business state, orchestrate workflows, or initiate model, database, queue, or QC operations.
+
+#### Scenario: Query registry
+- **WHEN** a consumer performs descriptor or alias lookup
+- **THEN** only immutable metadata is returned
+- **AND** no execution or external side effect occurs
+
+### Requirement: Existing execution behavior remains unchanged
+
+Introducing the registry SHALL preserve the existing five-agent execution registry, task-routing decisions, runner behavior, single-task pipeline, public APIs, database schema, Telegram behavior, and model/QC call counts.
+
+#### Scenario: Run existing standalone agent
+- **WHEN** `strategy`, `content`, `analytics`, `promo`, or `trends` is selected through the current task path
+- **THEN** the existing execution registry, router, runner, and pipeline behavior is unchanged
+- **AND** product module aliases do not alter executable agent selection
+
+### Requirement: Deterministic initial-import verification
+
+The initial resource SHALL be verifiable against approved source material for the expected IDs, one descriptor per ID, aliases, classified inputs, outputs, tool flags, quality gates, handoffs, authority limitations, availability/binding state, and source version. Verification MAY record a normalized JSON checksum as evidence.
+
+#### Scenario: Record import evidence
+- **WHEN** the v1.0.0 initial import is implemented and verified
+- **THEN** results are recorded in the durable verification document
+- **AND** the document does not become another runtime descriptor source

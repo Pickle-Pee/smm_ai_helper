@@ -9,10 +9,13 @@
 
 ## Current
 
-- [x] Implement deterministic `add-marketing-orchestrator-foundation` planning contracts on its task branch; pending review and integration.
+- [x] Apply `add-expert-core-foundation` (merged by PR #40).
+- [x] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
+- [ ] Reconcile and review `add-module-registry-foundation` before runtime implementation.
 
 ## Infrastructure and quality next
 
+- [ ] Implement `add-module-registry-foundation` after the reconciled specification is accepted.
 - [ ] `add-durable-job-persistence`.
 - [ ] `add-redis-worker-foundation`.
 - [ ] `add-orchestrator-quality-gates`.
