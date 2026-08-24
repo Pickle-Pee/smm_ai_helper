@@ -5,7 +5,21 @@ Define the shared, governed reasoning-policy instructions that make specialized 
 ## ADDED Requirements
 
 ### Requirement: Maintain one canonical versioned Expert Core policy
-The system SHALL maintain exactly one canonical Expert Core instruction source for covered marketing-agent model requests and SHALL associate that source with a stable, machine-readable version identifier. The canonical policy SHALL be governed as shared product policy rather than copied into individual module prompts, and every semantic policy change MUST update the version according to the documented versioning rules.
+The system SHALL maintain `app/prompts/expert_core/v1.0.0.md` as the only canonical runtime Expert Core instruction body for covered marketing-agent model requests and SHALL associate it with the stable, machine-readable version `1.0.0`. A Python loader or composer MAY load the Markdown resource but SHALL NOT duplicate its instruction body. DOCX files and `docs/product/prompts/expert-core-production.md` SHALL be archival provenance only, while `docs/product/expert-core.md` SHALL be the product contract rather than a runtime prompt source. The canonical policy SHALL be governed as shared product policy rather than copied into individual module prompts, and every policy-text change MUST update the version according to the documented versioning rules.
+
+#### Scenario: Canonical resource is deployed
+- **GIVEN** the current Docker deployment copies the repository into `/app`
+- **WHEN** the application package is deployed
+- **THEN** version `1.0.0` SHALL be loadable from `app/prompts/expert_core/v1.0.0.md`
+- **AND** no DOCX or documentation path SHALL be required at runtime
+
+#### Scenario: Initial import fidelity is verified
+- **GIVEN** the canonical `1.0.0` Markdown resource
+- **WHEN** deterministic source-fidelity tests run
+- **THEN** sections 1 through 59 SHALL each exist exactly once and in ascending order
+- **AND** every section SHALL have the exact expected title declared in the design manifest
+- **AND** the non-negotiable `NEVER` and `ALWAYS` groups and their expected entries SHALL be present
+- **AND** a recorded normalized-content checksum, when used, SHALL match the documented normalization algorithm
 
 #### Scenario: Effective instructions identify the active policy
 - **GIVEN** an active canonical Expert Core policy
@@ -138,7 +152,7 @@ Covered marketing-agent generation SHALL NOT silently fall back to module-only i
 - **AND** the existing execution path SHALL handle the failure without changing its public error contract
 
 ### Requirement: Expose version without changing public or persistent contracts
-The active Expert Core version SHALL be emitted in internal execution diagnostics for covered model requests. The version MUST NOT require a new public response field, database column, migration, queue, worker, or durable job, and existing public request and response contracts SHALL remain compatible.
+The active Expert Core version SHALL be emitted in internal execution diagnostics for covered model requests. The version MUST NOT require or introduce a public API field, database model or column, migration, Redis dependency, queue, worker, Job or other durable job state, or marketing-workflow behavior, and existing public request and response contracts SHALL remain compatible.
 
 #### Scenario: Covered request is diagnosed
 - **GIVEN** a covered standalone marketing-agent model request
