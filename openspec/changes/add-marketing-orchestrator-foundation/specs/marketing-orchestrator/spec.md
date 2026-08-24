@@ -44,6 +44,8 @@ The foundation SHALL return immutable internal plan, node, dependency, input-req
 - **WHEN** equivalent interpretations and tagged context are planned against the same Registry version/checksum
 - **THEN** plan ID, node order, dependency order and topological order are identical
 - **AND** no random ID is required
+- **AND** unauthorized, unrelated and unselected-module facts do not affect plan identity
+- **AND** relevant effective value changes do affect plan identity
 
 #### Scenario: Separate dependency concepts
 
@@ -74,6 +76,22 @@ The foundation SHALL accept only already-authorized structured facts with explic
 - **WHEN** a preferred or optional input is missing
 - **THEN** the plan records a limitation and is not blocked solely for that absence
 
+#### Scenario: Canonical immutable context value
+
+- **WHEN** a caller supplies a supported nested JSON-like value
+- **THEN** mutable containers are recursively copied into immutable deterministic containers
+- **AND** byte arrays, sets, custom objects, non-string mapping keys and non-finite floats are rejected
+
+### Requirement: Machine-readable planning inputs
+
+Every planning input used for sufficiency or question generation SHALL be an explicit immutable typed requirement with a stable input key, classification, priority, applicable scenario/module, and approved deterministic question template. Registry prose SHALL NOT be interpreted as an input key.
+
+#### Scenario: Generic single module with empty context
+
+- **WHEN** `MARKET_ANALYSIS` is selected without explicitly supplied typed requirements
+- **THEN** the planner returns a preliminary planning-only plan with limitations
+- **AND** it does not ask for `market size` or any other descriptor-derived phrase
+
 ### Requirement: Graph and descriptor validation
 
 The foundation SHALL validate unique node IDs, canonical registered modules, resolved aliases, dependency targets, self-edges, cycles, deterministic topology, parallel metadata, descriptor-compatible outputs and quality gates, and explicit blocking inputs before returning a plan.
@@ -82,6 +100,12 @@ The foundation SHALL validate unique node IDs, canonical registered modules, res
 
 - **WHEN** a dependency target is missing, a self-edge exists or a cycle exists
 - **THEN** plan validation returns `INVALID_PLAN`
+
+#### Scenario: Exact positioning topology
+
+- **WHEN** either required positioning edge is missing, an extra edge exists, dependency references disagree with edges, node IDs differ, or parallel membership differs
+- **THEN** validation raises `InvalidPlanError`
+- **AND** the expected edge set is independently declared rather than derived from the plan under test
 
 #### Scenario: Invalid parallel metadata
 
@@ -116,6 +140,12 @@ The plan SHALL separately represent structural validity, `SUFFICIENT`/`PARTIAL`/
 - **WHEN** a graph is structurally valid against Module Registry `1.0.0`
 - **THEN** its execution readiness is `PLANNING_ONLY`
 - **AND** registered module existence is not treated as an execution binding
+
+#### Scenario: State consistency
+
+- **WHEN** status, structural validity, sufficiency, questions, limitations, readiness or stop condition contradict the approved state matrix
+- **THEN** validation raises `InvalidPlanError`
+- **AND** global invariants are enforced before unsupported-result handling
 
 ### Requirement: Planning-only lifecycle and isolation
 

@@ -13,9 +13,11 @@ from app.marketing_orchestrator import (
     ExecutionReadiness,
     GraphDependency,
     InvalidInterpretationError,
+    InvalidContextValueError,
     InvalidPlanError,
     MarketingOrchestratorPlanner,
     PlanningContext,
+    PlanningInputKey,
     PlanningStatus,
     PlanningStopCondition,
     RequestInterpretation,
@@ -231,7 +233,7 @@ def test_upstream_findings_only_enter_declared_dependent_packet(planner):
     assert plan.nodes[0].context_packet.upstream_findings == ()
     assert plan.nodes[1].context_packet.upstream_findings == ()
     assert tuple(item.producer_node_id for item in plan.nodes[2].context_packet.upstream_findings) == (
-        "market_analysis", "competitor_analysis"
+        "competitor_analysis", "market_analysis"
     )
 
 
@@ -351,7 +353,7 @@ def test_validator_rejects_duplicate_or_excess_questions(planner, registry):
     with pytest.raises(InvalidPlanError, match="duplicate"):
         PlanValidator(registry).validate(duplicate)
 
-    extra = BlockingQuestion("product_truth", "Provide product truth.", "positioning")
+    extra = BlockingQuestion(PlanningInputKey.PRODUCT_TRUTH, "What verified product truth can support the position?", "positioning")
     excess = replace(blocked, blocking_questions=(*blocked.blocking_questions, extra))
     with pytest.raises(InvalidPlanError, match="more than three"):
         PlanValidator(registry).validate(excess)
@@ -373,3 +375,217 @@ def test_validator_rejects_unsupported_scenario_graph(valid_plan, registry):
     malformed = replace(valid_plan, scenario_key="another_scenario")
     with pytest.raises(InvalidPlanError, match="unsupported scenario"):
         PlanValidator(registry).validate(malformed)
+
+
+@pytest.mark.parametrize(
+    "dependencies,dependency_refs",
+    [
+        ((GraphDependency("competitor_analysis", "positioning"),), ("competitor_analysis",)),
+        ((GraphDependency("market_analysis", "positioning"),), ("market_analysis",)),
+        ((), ()),
+    ],
+    ids=("missing-market-edge", "missing-competitor-edge", "both-edges-missing"),
+)
+def test_validator_rejects_each_missing_positioning_edge_independently(valid_plan, registry, dependencies, dependency_refs):
+    positioning = replace(valid_plan.nodes[2], dependency_references=dependency_refs)
+    malformed = replace(valid_plan, nodes=(*valid_plan.nodes[:2], positioning), dependencies=dependencies)
+    with pytest.raises(InvalidPlanError, match="exact edge set"):
+        PlanValidator(registry).validate(malformed)
+
+
+def test_validator_rejects_extra_positioning_edge(valid_plan, registry):
+    malformed = replace(
+        valid_plan,
+        dependencies=(*valid_plan.dependencies, GraphDependency("market_analysis", "competitor_analysis")),
+    )
+    with pytest.raises(InvalidPlanError):
+        PlanValidator(registry).validate(malformed)
+
+
+def test_validator_rejects_edge_without_node_dependency_reference(valid_plan, registry):
+    positioning = replace(valid_plan.nodes[2], dependency_references=("competitor_analysis",))
+    with pytest.raises(InvalidPlanError, match="dependency references"):
+        PlanValidator(registry).validate(replace(valid_plan, nodes=(*valid_plan.nodes[:2], positioning)))
+
+
+def test_validator_rejects_node_dependency_reference_without_edge(valid_plan, registry):
+    malformed = replace(valid_plan, dependencies=(valid_plan.dependencies[0],))
+    with pytest.raises(InvalidPlanError, match="dependency references"):
+        PlanValidator(registry).validate(malformed)
+
+
+def test_validator_rejects_wrong_deterministic_positioning_node_id(valid_plan, registry):
+    market = replace(valid_plan.nodes[0], node_id="market")
+    dependencies = (
+        GraphDependency("competitor_analysis", "positioning"),
+        GraphDependency("market", "positioning"),
+    )
+    positioning = replace(valid_plan.nodes[2], dependency_references=("competitor_analysis", "market"))
+    malformed = replace(valid_plan, nodes=(market, valid_plan.nodes[1], positioning), dependencies=dependencies)
+    with pytest.raises(InvalidPlanError, match="node IDs"):
+        PlanValidator(registry).validate(malformed)
+
+
+def test_correct_module_sequence_with_incorrect_topology_is_rejected(valid_plan, registry):
+    nodes = tuple(replace(node, parallel_group=None, parallelizable=False) for node in valid_plan.nodes)
+    with pytest.raises(InvalidPlanError, match="parallel membership"):
+        PlanValidator(registry).validate(replace(valid_plan, nodes=nodes))
+
+
+def test_unsupported_empty_plan_cannot_bypass_planning_only_readiness(planner, registry):
+    unsupported = planner.plan(interpretation(scenario="future_scenario"), PlanningContext())
+    with pytest.raises(InvalidPlanError, match="planning-only"):
+        PlanValidator(registry).validate(replace(unsupported, execution_readiness=ExecutionReadiness.EXECUTABLE))
+
+
+def test_plan_state_matrix_accepts_independently_declared_legal_states(planner, registry, valid_plan):
+    blocked = planner.plan(interpretation(), PlanningContext())
+    unsupported = planner.plan(interpretation(scenario="future_scenario"), PlanningContext())
+    sufficient = replace(valid_plan, data_sufficiency=DataSufficiency.SUFFICIENT, limitations=())
+    partial = valid_plan
+
+    for plan in (sufficient, partial, blocked, unsupported):
+        PlanValidator(registry).validate(plan)
+
+
+@pytest.mark.parametrize(
+    "mutation,message",
+    [
+        ({"planning_status": PlanningStatus.BLOCKED, "data_sufficiency": DataSufficiency.INSUFFICIENT, "stop_condition": PlanningStopCondition.BLOCKING_INPUT_MISSING, "blocking_questions": ()}, "requires blocking questions"),
+        ({"planning_status": PlanningStatus.BLOCKED, "data_sufficiency": DataSufficiency.PARTIAL}, "insufficient data"),
+        ({"planning_status": PlanningStatus.BLOCKED, "data_sufficiency": DataSufficiency.INSUFFICIENT, "stop_condition": PlanningStopCondition.PLAN_COMPLETE, "blocking_questions": (BlockingQuestion(PlanningInputKey.PRODUCT, "What product is being positioned?", "positioning"),)}, "blocking-input"),
+        ({"planning_status": PlanningStatus.VALIDATED, "blocking_questions": (BlockingQuestion(PlanningInputKey.PRODUCT, "What product is being positioned?", "positioning"),)}, "cannot contain blocking"),
+        ({"data_sufficiency": DataSufficiency.PARTIAL, "limitations": ()}, "explicit limitations"),
+        ({"data_sufficiency": DataSufficiency.INSUFFICIENT}, "cannot have insufficient"),
+        ({"data_sufficiency": DataSufficiency.SUFFICIENT, "stop_condition": PlanningStopCondition.BLOCKING_INPUT_MISSING}, "complete stop"),
+        ({"stop_condition": PlanningStopCondition.UNSUPPORTED_SCENARIO}, "complete stop"),
+        ({"planning_status": PlanningStatus.INVALID}, "raise validation errors"),
+    ],
+)
+def test_plan_state_matrix_rejects_each_contradiction(valid_plan, registry, mutation, message):
+    with pytest.raises(InvalidPlanError, match=message):
+        PlanValidator(registry).validate(replace(valid_plan, **mutation))
+
+
+def test_unsupported_state_rejects_supported_graph_and_wrong_stop(planner, valid_plan, registry):
+    unsupported_graph = replace(
+        valid_plan,
+        planning_status=PlanningStatus.UNSUPPORTED,
+        structural_validity=StructuralValidity.INVALID,
+        data_sufficiency=DataSufficiency.INSUFFICIENT,
+        stop_condition=PlanningStopCondition.UNSUPPORTED_SCENARIO,
+        limitations=("unsupported",),
+    )
+    with pytest.raises(InvalidPlanError, match="cannot contain a supported graph"):
+        PlanValidator(registry).validate(unsupported_graph)
+
+    unsupported = planner.plan(interpretation(scenario="future_scenario"), PlanningContext())
+    with pytest.raises(InvalidPlanError, match="unsupported stop"):
+        PlanValidator(registry).validate(replace(unsupported, stop_condition=PlanningStopCondition.PLAN_COMPLETE))
+
+
+def test_single_module_does_not_interpret_registry_prose_as_input_keys(planner):
+    plan = planner.plan(interpretation(module="MARKET_ANALYSIS"), PlanningContext())
+
+    assert plan.blocking_questions == ()
+    assert plan.nodes[0].scoped_inputs == ()
+    assert plan.data_sufficiency is DataSufficiency.PARTIAL
+    assert plan.limitations
+    assert all("market size" not in item.casefold() for item in plan.limitations)
+    source = Path("app/marketing_orchestrator/planner.py").read_text(encoding="utf-8")
+    assert "blocking_for_strong_conclusion" not in source.casefold()
+
+
+def test_every_generated_question_uses_an_approved_missing_typed_requirement(planner):
+    plan = planner.plan(interpretation(), PlanningContext())
+
+    for question in plan.blocking_questions:
+        node = next(node for node in plan.nodes if node.node_id == question.node_id)
+        scoped = next(item for item in node.scoped_inputs if item.requirement.key is question.input_key)
+        assert scoped.present is False
+        assert scoped.requirement.question_template == question.question
+        assert scoped.requirement.scenario_key == SCENARIO
+
+
+def test_plan_identity_uses_only_effective_scoped_context(planner):
+    baseline = planner.plan(interpretation(), complete_context())
+    creator_only = fact("creator_only", modules=(ModuleId.CREATOR,), scenarios=(), value="ignored")
+    unauthorized = fact("unauthorized", value="ignored", authorized=False)
+    changed_context = complete_context(known_facts=(*complete_context().known_facts, creator_only, unauthorized))
+    changed = planner.plan(interpretation(), changed_context)
+
+    assert changed.plan_id == baseline.plan_id
+    assert tuple(node.context_packet for node in changed.nodes) == tuple(node.context_packet for node in baseline.nodes)
+
+
+def test_plan_identity_is_order_independent_but_relevant_content_sensitive(planner):
+    facts = complete_context().known_facts
+    baseline = planner.plan(interpretation(), complete_context(known_facts=facts))
+    reordered = planner.plan(interpretation(), complete_context(known_facts=tuple(reversed(facts))))
+    changed_fact = fact(REQUIRED_POSITIONING_KEYS[0], value="changed")
+    changed = planner.plan(interpretation(), complete_context(known_facts=(changed_fact, *facts[1:])))
+    removed = planner.plan(interpretation(), complete_context(known_facts=facts[1:]))
+
+    assert reordered.plan_id == baseline.plan_id
+    assert changed.plan_id != baseline.plan_id
+    assert removed.plan_id != baseline.plan_id
+
+
+def test_plan_identity_canonicalizes_nested_mapping_order(planner):
+    first_value = {"b": [2, 3], "a": {"y": True, "x": None}}
+    second_value = {"a": {"x": None, "y": True}, "b": [2, 3]}
+    base_facts = complete_context().known_facts
+    first = planner.plan(
+        interpretation(),
+        complete_context(known_facts=(fact(REQUIRED_POSITIONING_KEYS[0], value=first_value), *base_facts[1:])),
+    )
+    second = planner.plan(
+        interpretation(),
+        complete_context(known_facts=(fact(REQUIRED_POSITIONING_KEYS[0], value=second_value), *base_facts[1:])),
+    )
+    assert first.plan_id == second.plan_id
+
+
+def test_context_values_are_recursively_frozen_without_caller_references():
+    source = {"z": [1, {"nested": [2]}], "a": {"value": True}}
+    context_fact = fact("product", value=source)
+    source["z"][1]["nested"].append(3)
+    source["a"]["value"] = False
+
+    assert tuple(context_fact.value) == ("a", "z")
+    assert context_fact.value["z"] == (1, MappingProxyType({"nested": (2,)}))
+    with pytest.raises(TypeError):
+        context_fact.value["new"] = "no"  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        bytearray(b"mutable"),
+        {"unordered"},
+        {1: "non-string key"},
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+    ],
+)
+def test_context_values_reject_noncanonical_or_mutable_values(value):
+    with pytest.raises(InvalidContextValueError):
+        fact("product", value=value)
+
+
+def test_context_values_reject_custom_mutable_objects():
+    class Mutable:
+        pass
+
+    with pytest.raises(InvalidContextValueError):
+        fact("product", value=Mutable())
+
+
+def test_upstream_finding_uses_the_same_immutable_value_contract():
+    source = {"items": ["one"]}
+    finding = UpstreamFinding("market_analysis", "segments", source)
+    source["items"].append("two")
+    assert finding.value["items"] == ("one",)
+    with pytest.raises(InvalidContextValueError):
+        UpstreamFinding("market_analysis", "segments", bytearray(b"mutable"))

@@ -19,7 +19,7 @@ INTERPRET -> CHECK_CONTEXT -> CHECK_EVIDENCE -> PLAN
 
 ## Immutable internal contracts
 
-All collections are deeply immutable and all contracts remain internal.
+All collections are deeply immutable and all contracts remain internal. Caller-visible fact and upstream-finding values use a recursive JSON-like value domain only: `None`, booleans, integers, finite floats, strings, tuples, and immutable string-keyed mappings. Lists and mappings are copied recursively; sets, non-string mapping keys, non-finite floats, byte arrays, custom mutable objects, and other non-canonical values are rejected.
 
 ### RequestInterpretation
 
@@ -57,7 +57,7 @@ Aliases are resolved before return. Expected outputs and quality gates are descr
 
 ### Dependencies and inputs
 
-`GraphDependency` represents only a directed execution-order edge. Input requirements use a separate `REQUIRED`, `BLOCKING`, `PREFERRED` or `OPTIONAL` classification. The two concepts are never overloaded into one enum.
+`GraphDependency` represents only a directed execution-order edge. Input requirements use a separate `REQUIRED`, `BLOCKING`, `PREFERRED` or `OPTIONAL` classification. Each machine-readable requirement declares a stable `PlanningInputKey`, priority, applicable scenario and module, and an approved deterministic question template. Registry descriptor prose, including `blocking_for_strong_conclusion`, is never normalized into an identifier or question. The two dependency concepts are never overloaded into one enum.
 
 ### ContextPacket
 
@@ -72,9 +72,8 @@ The catalog contains routing rules and graph templates only; descriptors remain 
 - Selector: canonical module ID or approved Registry alias.
 - Required modules: the one resolved canonical module; edges and parallel groups: none.
 - Expected outputs/quality gate: descriptor-backed subsets declared by the structured request, defaulting to descriptor declarations.
-- Required/blocking inputs: descriptor declarations checked against tagged known context.
-- Preferred/optional inputs: non-blocking; material absence is a limitation.
-- Result: one-node valid plan, blocked missing-input plan, or unknown-module rejection.
+- Input requirements: only explicitly supplied typed requirements may be evaluated. This foundation supplies none for the generic single-module case and never derives them from descriptor prose.
+- Result: one-node planning-only preliminary plan with explicit limitations, or unknown-module rejection. Descriptor outputs such as `market size` are never treated as missing source inputs.
 
 ### `new_positioning_v1`
 
@@ -96,6 +95,8 @@ Catalog node order is stable. Dependencies sort by downstream then upstream stab
 
 Validation requires unique node IDs; canonical registered module IDs; no aliases; existing dependency targets; no self-dependencies or cycles; deterministic topological ordering; no node parallel with a direct/transitive dependency; descriptor-compatible outputs and quality gates; explicit blocking inputs; no more than three unique decision-changing questions; no question for known inputs; optional/preferred absence as limitations; unsupported-scenario rejection; and structural validity reported separately from execution readiness.
 
+For `new_positioning_v1`, validation compares independently declared exact node IDs, node-to-module mapping, edge set, dependency references, parallel membership, and node/edge order. Both `market_analysis -> positioning` and `competitor_analysis -> positioning` are mandatory; missing or extra edges are invalid even when the module sequence is correct.
+
 ## Sufficiency, readiness and stop conditions
 
 Structural validity describes graph soundness. Data sufficiency describes authorized input coverage. Planning status describes return/block/rejection. Execution readiness describes whether modules can run. Registry `1.0.0` has zero bindings, so every valid plan is `PLANNING_ONLY`; module existence never implies executability.
@@ -107,6 +108,23 @@ Structural validity describes graph soundness. Data sufficiency describes author
 - `INVALID_PLAN`: graph or descriptor invariant fails.
 
 Execution completion, runtime quality validation, dynamic replanning, synthesis, delivery and learning belong to future changes.
+
+### Plan-state consistency matrix
+
+Every row remains `PLANNING_ONLY`; any combination not listed raises `InvalidPlanError` rather than returning an `INVALID` plan.
+
+| Structural validity | Planning status | Data sufficiency | Questions | Limitations | Stop condition | Meaning |
+| --- | --- | --- | --- | --- | --- | --- |
+| `VALID` | `VALIDATED` | `SUFFICIENT` | none | optional | `PLAN_COMPLETE` | complete planning input |
+| `VALID` | `VALIDATED` | `PARTIAL` | none | required | `PLAN_COMPLETE` | preliminary plan with explicit limitations |
+| `VALID` | `BLOCKED` | `INSUFFICIENT` | 1-3 unique approved questions | optional | `BLOCKING_INPUT_MISSING` | decision-changing input is absent |
+| `INVALID` | `UNSUPPORTED` | `INSUFFICIENT` | none | required | `UNSUPPORTED_SCENARIO` | no supported graph is returned |
+
+Global readiness, zero-binding, question-bound, uniqueness, and state-consistency checks run before unsupported-result early return. A blocked plan without evidence, an executable unsupported result, a ready plan with questions, partial data without limitations, sufficient data with a missing-input stop, or any contradictory status/stop/sufficiency combination is invalid.
+
+## Scoped deterministic plan identity
+
+Plan identity is computed only after authorization, relevance filtering, alias resolution, and graph construction. Its canonical payload contains the typed interpretation, scenario, canonical graph identity, Registry version/fingerprint, and the immutable facts or upstream findings that actually survived into selected node packets. It excludes unauthorized facts, facts for unselected modules, unrelated conversation content, irrelevant upstream findings, and caller collection ordering. Effective relevant value changes alter identity; irrelevant additions do not.
 
 ## Architecture, source and rollback
 

@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any, Iterable
 
-from app.module_registry import InputRequirement, ModuleDescriptor, ModuleId, ModuleRegistry, ModuleRegistryNotFoundError
+from app.module_registry import ModuleId, ModuleRegistry, ModuleRegistryNotFoundError
 
 from .contracts import (
     AuthorizedContextFact,
@@ -17,6 +17,8 @@ from .contracts import (
     ExecutionReadiness,
     GraphDependency,
     InputClassification,
+    PlanningInputKey,
+    PlanningInputRequirement,
     OrchestrationPlan,
     PlanNode,
     PlanningContext,
@@ -45,24 +47,24 @@ _POSITIONING_OUTPUTS = {
     ),
 }
 
-_POSITIONING_INPUTS = {
+_POSITIONING_INPUTS: dict[str, tuple[PlanningInputRequirement, ...]] = {
     "market_analysis": (
-        ("product_or_category", InputClassification.REQUIRED),
-        ("geographic_scope", InputClassification.BLOCKING),
-        ("business_model", InputClassification.PREFERRED),
+        PlanningInputRequirement(PlanningInputKey.PRODUCT_OR_CATEGORY, InputClassification.REQUIRED, 10, ModuleId.MARKET_ANALYSIS, "new_positioning_v1", "What product or category should the market analysis cover?"),
+        PlanningInputRequirement(PlanningInputKey.GEOGRAPHIC_SCOPE, InputClassification.BLOCKING, 20, ModuleId.MARKET_ANALYSIS, "new_positioning_v1", "Which geographic market should the analysis cover?"),
+        PlanningInputRequirement(PlanningInputKey.BUSINESS_MODEL, InputClassification.PREFERRED, 30, ModuleId.MARKET_ANALYSIS, "new_positioning_v1", "What business model should the analysis assume?"),
     ),
     "competitor_analysis": (
-        ("competitor_or_category_scope", InputClassification.REQUIRED),
-        ("observable_evidence", InputClassification.BLOCKING),
-        ("target_segment", InputClassification.PREFERRED),
+        PlanningInputRequirement(PlanningInputKey.COMPETITOR_OR_CATEGORY_SCOPE, InputClassification.REQUIRED, 40, ModuleId.COMPETITOR_ANALYSIS, "new_positioning_v1", "Which competitors or category should the competitor analysis cover?"),
+        PlanningInputRequirement(PlanningInputKey.OBSERVABLE_EVIDENCE, InputClassification.BLOCKING, 50, ModuleId.COMPETITOR_ANALYSIS, "new_positioning_v1", "What observable competitor evidence is available?"),
+        PlanningInputRequirement(PlanningInputKey.TARGET_SEGMENT, InputClassification.PREFERRED, 60, ModuleId.COMPETITOR_ANALYSIS, "new_positioning_v1", "Which target segment should be prioritized?"),
     ),
     "positioning": (
-        ("product", InputClassification.REQUIRED),
-        ("target_or_target_hypothesis", InputClassification.REQUIRED),
-        ("customer_job_or_need", InputClassification.REQUIRED),
-        ("relevant_alternative", InputClassification.REQUIRED),
-        ("product_truth", InputClassification.BLOCKING),
-        ("existing_proof", InputClassification.PREFERRED),
+        PlanningInputRequirement(PlanningInputKey.PRODUCT, InputClassification.REQUIRED, 70, ModuleId.POSITIONING, "new_positioning_v1", "What product is being positioned?"),
+        PlanningInputRequirement(PlanningInputKey.TARGET_OR_TARGET_HYPOTHESIS, InputClassification.REQUIRED, 80, ModuleId.POSITIONING, "new_positioning_v1", "Who is the target customer or current target hypothesis?"),
+        PlanningInputRequirement(PlanningInputKey.CUSTOMER_JOB_OR_NEED, InputClassification.REQUIRED, 90, ModuleId.POSITIONING, "new_positioning_v1", "What customer job or need should the positioning address?"),
+        PlanningInputRequirement(PlanningInputKey.RELEVANT_ALTERNATIVE, InputClassification.REQUIRED, 100, ModuleId.POSITIONING, "new_positioning_v1", "What alternative does the customer use today?"),
+        PlanningInputRequirement(PlanningInputKey.PRODUCT_TRUTH, InputClassification.BLOCKING, 110, ModuleId.POSITIONING, "new_positioning_v1", "What verified product truth can support the position?"),
+        PlanningInputRequirement(PlanningInputKey.EXISTING_PROOF, InputClassification.PREFERRED, 120, ModuleId.POSITIONING, "new_positioning_v1", "What existing proof supports the product claims?"),
     ),
 }
 
@@ -131,17 +133,23 @@ class MarketingOrchestratorPlanner:
         scenario_key = "explicit_single_module_v1"
         node_id = descriptor.module_id.value.casefold()
         packet = self._context_packet(context, descriptor.module_id, scenario_key, (), interpretation.constraints)
-        inputs = self._descriptor_inputs(descriptor, packet)
         node = PlanNode(
             node_id=node_id,
             module_id=descriptor.module_id,
             objective=interpretation.decision_goal,
-            scoped_inputs=inputs,
+            scoped_inputs=(),
             expected_outputs=descriptor.outputs,
             quality_gate=descriptor.quality_gate,
             context_packet=packet,
         )
-        return self._finalize(interpretation, context, scenario_key, (node,), ())
+        return self._finalize(
+            interpretation,
+            scenario_key,
+            (node,),
+            (),
+            assumptions=context.assumptions,
+            base_limitations=("explicit single-module plan is preliminary; no typed input requirements were supplied",),
+        )
 
     def _plan_new_positioning(self, interpretation: RequestInterpretation, context: PlanningContext) -> OrchestrationPlan:
         scenario_key = "new_positioning_v1"
@@ -175,12 +183,18 @@ class MarketingOrchestratorPlanner:
             GraphDependency("competitor_analysis", "positioning"),
             GraphDependency("market_analysis", "positioning"),
         )
-        return self._finalize(interpretation, context, scenario_key, tuple(nodes), dependencies)
+        return self._finalize(
+            interpretation,
+            scenario_key,
+            tuple(nodes),
+            dependencies,
+            assumptions=context.assumptions,
+        )
 
     def _unsupported_plan(self, interpretation: RequestInterpretation, context: PlanningContext) -> OrchestrationPlan:
         scenario_key = interpretation.scenario_key or ""
         return OrchestrationPlan(
-            plan_id=self._plan_id(interpretation, context, scenario_key),
+            plan_id=self._plan_id(interpretation, scenario_key, (), ()),
             scenario_key=scenario_key,
             nodes=(),
             dependencies=(),
@@ -196,13 +210,14 @@ class MarketingOrchestratorPlanner:
     def _finalize(
         self,
         interpretation: RequestInterpretation,
-        context: PlanningContext,
         scenario_key: str,
         nodes: tuple[PlanNode, ...],
         dependencies: tuple[GraphDependency, ...],
+        assumptions: tuple[str, ...] = (),
+        base_limitations: tuple[str, ...] = (),
     ) -> OrchestrationPlan:
         questions: list[BlockingQuestion] = []
-        limitations: list[str] = []
+        limitations: list[str] = list(base_limitations)
         seen_questions: set[str] = set()
         for node in nodes:
             for item in node.scoped_inputs:
@@ -213,7 +228,11 @@ class MarketingOrchestratorPlanner:
                     if key not in seen_questions and len(questions) < 3:
                         seen_questions.add(key)
                         questions.append(
-                            BlockingQuestion(item.key, f"Provide {item.key.replace('_', ' ')}.", node.node_id)
+                            BlockingQuestion(
+                                item.requirement.key,
+                                item.requirement.question_template,
+                                node.node_id,
+                            )
                         )
                 else:
                     limitations.append(f"{node.node_id}: missing {item.classification.value.casefold()} input {item.key}")
@@ -227,7 +246,7 @@ class MarketingOrchestratorPlanner:
         else:
             sufficiency = DataSufficiency.SUFFICIENT
         return OrchestrationPlan(
-            plan_id=self._plan_id(interpretation, context, scenario_key),
+            plan_id=self._plan_id(interpretation, scenario_key, nodes, dependencies),
             scenario_key=scenario_key,
             nodes=nodes,
             dependencies=dependencies,
@@ -237,7 +256,7 @@ class MarketingOrchestratorPlanner:
             execution_readiness=ExecutionReadiness.PLANNING_ONLY,
             blocking_questions=questions_tuple,
             limitations=limitations_tuple,
-            assumptions=context.assumptions,
+            assumptions=assumptions,
             stop_condition=PlanningStopCondition.BLOCKING_INPUT_MISSING if blocked else PlanningStopCondition.PLAN_COMPLETE,
         )
 
@@ -251,9 +270,14 @@ class MarketingOrchestratorPlanner:
     ) -> ContextPacket:
         relevant_project = self._relevant_facts(context.project_context, module_id, scenario_key)
         known = self._relevant_facts(context.known_facts, module_id, scenario_key)
-        upstream = tuple(
-            item for item in context.upstream_findings if item.producer_node_id in dependency_refs
-        )
+        upstream = tuple(sorted(
+            (item for item in context.upstream_findings if item.producer_node_id in dependency_refs),
+            key=lambda item: (
+                item.producer_node_id,
+                item.key,
+                json.dumps(_stable_value(item), ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            ),
+        ))
         evidence = tuple(
             dict.fromkeys(
                 item for fact in (*relevant_project, *known) for item in fact.evidence
@@ -266,9 +290,9 @@ class MarketingOrchestratorPlanner:
             known_facts=known,
             upstream_findings=upstream,
             evidence=evidence,
-            assumptions=tuple(context.assumptions),
+            assumptions=tuple(sorted(dict.fromkeys(context.assumptions))),
             confidence=confidence,
-            constraints=tuple(dict.fromkeys((*request_constraints, *context.constraints))),
+            constraints=tuple(sorted(dict.fromkeys((*request_constraints, *context.constraints)))),
             available_tools=context.available_tools,
         )
 
@@ -280,7 +304,15 @@ class MarketingOrchestratorPlanner:
             fact for fact in facts
             if fact.authorized and (module_id in fact.module_relevance or scenario_key in fact.scenario_relevance)
         ]
-        return tuple(sorted(selected, key=lambda fact: (fact.key.casefold(), fact.source, fact.confidence)))
+        return tuple(sorted(
+            selected,
+            key=lambda fact: (
+                fact.key.casefold(),
+                fact.source,
+                fact.confidence,
+                json.dumps(_stable_value(fact), ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            ),
+        ))
 
     @staticmethod
     def _known_keys(packet: ContextPacket) -> frozenset[str]:
@@ -291,28 +323,29 @@ class MarketingOrchestratorPlanner:
 
     def _scenario_inputs(self, node_id: str, packet: ContextPacket) -> tuple[ScopedInput, ...]:
         known = self._known_keys(packet)
-        return tuple(ScopedInput(key, classification, _canonical_key(key) in known) for key, classification in _POSITIONING_INPUTS[node_id])
-
-    def _descriptor_inputs(self, descriptor: ModuleDescriptor, packet: ContextPacket) -> tuple[ScopedInput, ...]:
-        known = self._known_keys(packet)
-        mapping = (
-            (InputRequirement.REQUIRED, InputClassification.REQUIRED),
-            (InputRequirement.BLOCKING_FOR_STRONG_CONCLUSION, InputClassification.BLOCKING),
-            (InputRequirement.PREFERRED, InputClassification.PREFERRED),
-            (InputRequirement.OPTIONAL, InputClassification.OPTIONAL),
+        return tuple(
+            ScopedInput(requirement, requirement.key.value in known)
+            for requirement in _POSITIONING_INPUTS[node_id]
         )
-        result = []
-        for registry_classification, classification in mapping:
-            for raw_key in descriptor.inputs[registry_classification]:
-                key = _canonical_key(raw_key)
-                if key:
-                    result.append(ScopedInput(key, classification, key in known))
-        return tuple(result)
 
-    def _plan_id(self, interpretation: RequestInterpretation, context: PlanningContext, scenario_key: str) -> str:
+    def _plan_id(
+        self,
+        interpretation: RequestInterpretation,
+        scenario_key: str,
+        nodes: tuple[PlanNode, ...],
+        dependencies: tuple[GraphDependency, ...],
+    ) -> str:
         payload = {
             "interpretation": _stable_value(interpretation),
-            "context": _stable_value(context),
+            "graph": {
+                "nodes": [
+                    {
+                        "node": _stable_value(node),
+                    }
+                    for node in nodes
+                ],
+                "dependencies": _stable_value(dependencies),
+            },
             "registry_version": self._registry.version,
             "registry_fingerprint": self._registry_fingerprint,
             "scenario_key": scenario_key,

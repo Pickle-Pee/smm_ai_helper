@@ -1,23 +1,38 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Mapping, TypeAlias
 
 from app.module_registry import ModuleId, ToolCapability
 
 
-def deep_freeze(value: Any) -> Any:
+from .errors import InvalidContextValueError
+
+
+ImmutableJsonScalar: TypeAlias = None | bool | int | float | str
+ImmutableJsonValue: TypeAlias = ImmutableJsonScalar | tuple["ImmutableJsonValue", ...] | Mapping[str, "ImmutableJsonValue"]
+
+
+def freeze_json_value(value: Any) -> ImmutableJsonValue:
+    """Copy and freeze the supported deterministic JSON-like value domain."""
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise InvalidContextValueError("context floats must be finite")
+        return value
     if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise InvalidContextValueError("context mappings require string keys")
         return MappingProxyType(
-            {str(key): deep_freeze(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+            {key: freeze_json_value(item) for key, item in sorted(value.items())}
         )
     if isinstance(value, (list, tuple)):
-        return tuple(deep_freeze(item) for item in value)
-    if isinstance(value, (set, frozenset)):
-        return frozenset(deep_freeze(item) for item in value)
-    return value
+        return tuple(freeze_json_value(item) for item in value)
+    raise InvalidContextValueError(f"unsupported context value: {type(value).__name__}")
 
 
 class Sensitivity(str, Enum):
@@ -31,6 +46,21 @@ class InputClassification(str, Enum):
     BLOCKING = "BLOCKING"
     PREFERRED = "PREFERRED"
     OPTIONAL = "OPTIONAL"
+
+
+class PlanningInputKey(str, Enum):
+    PRODUCT_OR_CATEGORY = "product_or_category"
+    GEOGRAPHIC_SCOPE = "geographic_scope"
+    BUSINESS_MODEL = "business_model"
+    COMPETITOR_OR_CATEGORY_SCOPE = "competitor_or_category_scope"
+    OBSERVABLE_EVIDENCE = "observable_evidence"
+    TARGET_SEGMENT = "target_segment"
+    PRODUCT = "product"
+    TARGET_OR_TARGET_HYPOTHESIS = "target_or_target_hypothesis"
+    CUSTOMER_JOB_OR_NEED = "customer_job_or_need"
+    RELEVANT_ALTERNATIVE = "relevant_alternative"
+    PRODUCT_TRUTH = "product_truth"
+    EXISTING_PROOF = "existing_proof"
 
 
 class StructuralValidity(str, Enum):
@@ -83,7 +113,11 @@ class RequestInterpretation:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
             object.__setattr__(self, name, value.strip())
-        object.__setattr__(self, "constraints", tuple(str(item).strip() for item in self.constraints if str(item).strip()))
+        object.__setattr__(
+            self,
+            "constraints",
+            tuple(sorted({str(item).strip() for item in self.constraints if str(item).strip()})),
+        )
         if (self.requested_module is None) == (self.scenario_key is None):
             raise ValueError("exactly one requested_module or scenario_key is required")
         if isinstance(self.requested_module, str):
@@ -99,7 +133,7 @@ class RequestInterpretation:
 @dataclass(frozen=True, slots=True)
 class AuthorizedContextFact:
     key: str
-    value: Any
+    value: ImmutableJsonValue
     module_relevance: frozenset[ModuleId] = frozenset()
     scenario_relevance: frozenset[str] = frozenset()
     source: str = ""
@@ -113,23 +147,23 @@ class AuthorizedContextFact:
         if not key:
             raise ValueError("context fact key must be a non-empty string")
         object.__setattr__(self, "key", key)
-        object.__setattr__(self, "value", deep_freeze(self.value))
+        object.__setattr__(self, "value", freeze_json_value(self.value))
         object.__setattr__(self, "module_relevance", frozenset(self.module_relevance))
         object.__setattr__(self, "scenario_relevance", frozenset(item.strip() for item in self.scenario_relevance if item.strip()))
-        object.__setattr__(self, "evidence", tuple(item.strip() for item in self.evidence if item.strip()))
+        object.__setattr__(self, "evidence", tuple(sorted({item.strip() for item in self.evidence if item.strip()})))
 
 
 @dataclass(frozen=True, slots=True)
 class UpstreamFinding:
     producer_node_id: str
     key: str
-    value: Any
+    value: ImmutableJsonValue
     evidence: tuple[str, ...] = ()
     confidence: str = "UNKNOWN"
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "value", deep_freeze(self.value))
-        object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(self, "value", freeze_json_value(self.value))
+        object.__setattr__(self, "evidence", tuple(sorted(dict.fromkeys(self.evidence))))
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,17 +200,50 @@ class ContextPacket:
 
 
 @dataclass(frozen=True, slots=True)
-class ScopedInput:
-    key: str
+class PlanningInputRequirement:
+    key: PlanningInputKey
     classification: InputClassification
+    priority: int
+    module_id: ModuleId
+    scenario_key: str
+    question_template: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, PlanningInputKey) or not isinstance(self.classification, InputClassification):
+            raise ValueError("input requirement key and classification must be typed enums")
+        if not isinstance(self.module_id, ModuleId):
+            raise ValueError("input requirement module must be canonical")
+        if self.priority < 0:
+            raise ValueError("input requirement priority must be non-negative")
+        if not self.scenario_key.strip() or not self.question_template.strip():
+            raise ValueError("input requirement scenario and question template are required")
+
+
+@dataclass(frozen=True, slots=True)
+class ScopedInput:
+    requirement: PlanningInputRequirement
     present: bool
+
+    @property
+    def key(self) -> str:
+        return self.requirement.key.value
+
+    @property
+    def classification(self) -> InputClassification:
+        return self.requirement.classification
 
 
 @dataclass(frozen=True, slots=True)
 class BlockingQuestion:
-    input_key: str
+    input_key: PlanningInputKey
     question: str
     node_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.input_key, PlanningInputKey):
+            raise ValueError("blocking question input key must be typed")
+        if not self.question.strip() or not self.node_id.strip():
+            raise ValueError("blocking question template and node are required")
 
 
 @dataclass(frozen=True, slots=True)

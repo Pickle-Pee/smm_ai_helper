@@ -2,9 +2,10 @@
 
 ## Identification
 
-- Branch: `agent/add-marketing-orchestrator-foundation`
+- Branch: `agent/fix-marketing-orchestrator-foundation`
 - Base `origin/sale-ready`: `534f98d37a2e2f4c74953383a0ea515a38ab76bb`
-- Reconciliation commit: `125bb63269e0094eecfa1210b6105c05fd2b3bec`
+- Restored source commits: `125bb63269e0094eecfa1210b6105c05fd2b3bec`, `4252ad9161b67ceb0ab938cb3b4d6bf16f48210f`
+- Recovery: both source commits were cherry-picked in order onto the clean `sale-ready` base; no merge commit or `master` history is present.
 - Contracts/planner/validator: `app/marketing_orchestrator/`
 - Tests: `tests/test_marketing_orchestrator.py`
 
@@ -28,13 +29,21 @@ market_analysis       (MARKET_ANALYSIS) ------+
 competitor_analysis   (COMPETITOR_ANALYSIS) --+
 ```
 
-Node order is `market_analysis`, `competitor_analysis`, `positioning`. Edge order is `competitor_analysis -> positioning`, then `market_analysis -> positioning`. The fixed verification fixture produces plan ID `92f335aff5a29d7c2492f7f387d58819f09a0ddd650f6e8f83037ca2ab5939bc`; equivalent inputs reproduce it.
+Node order is `market_analysis`, `competitor_analysis`, `positioning`. Edge order is `competitor_analysis -> positioning`, then `market_analysis -> positioning`. Validation compares independently declared exact node IDs, module mapping, edge set, node dependency references and parallel membership. The fixed verification fixture produces plan ID `0f37473541d8647698e9a03714729839bd5d1d6c6beae6151a109152a651fe30`; equivalent effective scoped inputs reproduce it.
 
 ## Context, questions, and validation evidence
 
-Tests prove only authorized module/scenario-tagged facts enter packets; unrelated and unauthorized secret facts are excluded; independent nodes receive no upstream findings; positioning receives findings only from its declared dependencies; known inputs suppress questions; missing blocking keys are deduplicated and capped at three; preferred/optional gaps become limitations; and nested values remain immutable.
+Tests prove only authorized module/scenario-tagged facts enter packets; unrelated and unauthorized secret facts are excluded; independent nodes receive no upstream findings; positioning receives findings only from its declared dependencies; known inputs suppress questions; missing blocking keys are deduplicated and capped at three; and preferred/optional gaps become limitations.
 
-Malformed fixtures independently cover duplicate node IDs, unresolved/unknown modules, missing targets, self-edges, cycles, invalid parallel groups, output/gate mismatches, duplicate/excess/known-input questions, executable readiness with zero bindings, and unsupported graphs.
+Question generation uses only immutable `PlanningInputRequirement` entries with stable `PlanningInputKey`, classification, priority, scenario/module applicability and approved templates. It never converts Registry `blocking_for_strong_conclusion` prose into keys. A generic empty-context `MARKET_ANALYSIS` plan is preliminary with limitations and does not ask `Provide market size.`
+
+Plan identity is constructed after authorization and node scoping. Reordering facts produces the same ID; unrelated `CREATOR` facts and unauthorized facts alter neither packets nor ID; changing or removing an effective relevant fact changes the ID.
+
+Fact and upstream-finding values accept only recursive canonical JSON-like values. Lists and string-keyed mappings are copied into tuples and immutable deterministic mappings. Tests reject byte arrays, sets, custom mutable objects, non-string keys, NaN and infinities, and prove caller-container mutation cannot affect contracts.
+
+Malformed fixtures independently cover each missing positioning edge, both edges missing, extra edges, edge/reference disagreement in both directions, wrong deterministic IDs, incorrect topology with the correct module sequence, duplicate IDs, unresolved/unknown modules, missing targets, self-edges, cycles, invalid parallel groups, output/gate mismatches, duplicate/excess/known-input questions, and unsupported graphs.
+
+The explicit state matrix accepts only validated sufficient/partial plans, blocked insufficient plans with one to three questions, and empty unsupported results with the approved stop. Global invariants run before scenario early returns, so executable unsupported results, blocked plans without questions, ready plans with questions, partial plans without limitations, and contradictory status/sufficiency/stop combinations raise `InvalidPlanError`.
 
 ## Readiness and isolation
 
@@ -48,12 +57,12 @@ Malformed fixtures independently cover duplicate node IDs, unresolved/unknown mo
 
 | Command | Exit | Result |
 | --- | ---: | --- |
-| `.venv\Scripts\python.exe -m pytest -q tests/test_marketing_orchestrator.py tests/test_module_registry.py tests/test_agent_registry.py tests/test_task_router.py tests/test_task_pipeline_service.py tests/test_marketing_workflow_persistence_service.py` | 0 | 82 passed, 6 existing deprecation warnings |
-| `.venv\Scripts\python.exe -m pytest -q` | 0 | 182 passed, 9 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q tests\test_marketing_orchestrator.py tests\test_module_registry.py tests\test_expert_core.py tests\test_agent_registry.py tests\test_task_router.py tests\test_task_pipeline_service.py tests\test_marketing_workflow_persistence_service.py --tb=short` | 0 | 137 passed, 6 existing deprecation warnings |
+| `.venv\Scripts\python.exe -m pytest -q` | 0 | 216 passed, 9 existing deprecation warnings |
 | `.venv\Scripts\python.exe -m compileall app bot` | 0 | compiled successfully |
 | `openspec validate add-marketing-orchestrator-foundation --strict` | 0 | valid |
 | `openspec validate --all --strict` | 0 | 11 passed, 0 failed |
-| `git diff --check` | 0 | no whitespace errors |
+| `git diff --check origin/sale-ready...HEAD` | 0 | no whitespace errors |
 
 Warnings are existing Pydantic class-config and naive `datetime.utcnow()` deprecations; this change does not modify those areas.
 
@@ -62,5 +71,6 @@ Warnings are existing Pydantic class-config and naive `datetime.utcnow()` deprec
 - API/Telegram/database/model/migration impact: none; no Alembic migration.
 - Routing/pipeline compatibility: unchanged; compatibility tests pass.
 - LLM/QC/persistence/Redis/queue/worker impact: none.
+- Calls made by the foundation: zero LLM, QC, database, Redis, worker, workflow, persistence, module-execution or external-service calls.
 - Planning is limited to the exact two scenarios and does not interpret free text, fetch context, execute/persist modules or plans, replan at runtime, or synthesize a response.
 - Execution requires future `MarketingWorkflowService`, Job, worker, queue, and executable-binding changes.

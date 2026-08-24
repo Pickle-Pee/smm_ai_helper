@@ -8,6 +8,8 @@ from .contracts import (
     ExecutionReadiness,
     GraphDependency,
     InputClassification,
+    PlanningInputKey,
+    PlanningInputRequirement,
     OrchestrationPlan,
     PlanNode,
     PlanningContext,
@@ -20,6 +22,7 @@ from .contracts import (
 )
 from .errors import (
     InvalidInterpretationError,
+    InvalidContextValueError,
     InvalidPlanError,
     MarketingOrchestratorError,
     UnknownModulePlanningError,
@@ -35,6 +38,9 @@ __all__ = [
     "ExecutionReadiness",
     "GraphDependency",
     "InputClassification",
+    "PlanningInputKey",
+    "PlanningInputRequirement",
+    "InvalidContextValueError",
     "InvalidInterpretationError",
     "InvalidPlanError",
     "MarketingOrchestratorError",

@@ -53,3 +53,12 @@
 ## Explicit exclusions
 
 Do not add API/Telegram integration, a dispatcher, changes to `TaskRouter`/`AgentRunner`/`TaskPipelineService`, Registry bindings, module implementations, execution, workflow persistence, Jobs, queues, Redis, workers, LLM calls/prompts, QC, runtime replanning, synthesis, delivery, learning or unrelated refactoring.
+
+## 6. Review hardening
+
+- [x] 6.1 Validate the exact independently declared positioning node/module/edge topology, dependency references, parallel membership, and deterministic ordering.
+- [x] 6.2 Enforce global planning-only, zero-binding, question and plan-state matrix invariants before every scenario-specific return.
+- [x] 6.3 Replace Registry-prose-derived questions with explicit typed input keys, priorities, applicability and deterministic templates.
+- [x] 6.4 Derive plan identity only from canonical interpretation, selected graph and authorized relevant context that survives node scoping.
+- [x] 6.5 Enforce a recursively immutable canonical JSON-like value contract and reject mutable or non-deterministic values.
+- [x] 6.6 Add independent regressions for every review finding and rerun targeted, compatibility, full, OpenSpec, compilation and diff checks.

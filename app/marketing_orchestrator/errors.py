@@ -6,6 +6,10 @@ class InvalidInterpretationError(MarketingOrchestratorError):
     """The typed interpretation is absent, ambiguous, or unsupported."""
 
 
+class InvalidContextValueError(MarketingOrchestratorError):
+    """A caller-supplied context value is mutable or non-canonical."""
+
+
 class UnknownModulePlanningError(MarketingOrchestratorError):
     """An explicit canonical module ID or alias is not registered."""
 
