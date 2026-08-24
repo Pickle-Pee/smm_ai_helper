@@ -75,21 +75,6 @@ Task sessions are temporary durable records while clarification is in progress. 
 
 See `docs/task_pipeline.md` for the detailed task architecture.
 
-### Internal Marketing Orchestrator planning foundation
-
-`app/marketing_orchestrator/` is a deterministic, side-effect-free internal planning boundary:
-
-```text
-typed RequestInterpretation + caller-authorized tagged PlanningContext
- -> minimal Registry-backed graph
- -> deterministic validation
- -> validated, blocked, or unsupported planning result
-```
-
-It supports only `explicit_single_module_v1` and `new_positioning_v1`. The latter plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
-
-This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
-
 ### URL analysis
 
 `UrlAnalyzer` extracts/normalizes a bounded set of URLs/social targets, fetches lightweight page signals, and stores reusable summaries in `UrlCache` when database access is available.

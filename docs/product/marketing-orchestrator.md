@@ -1,49 +1,59 @@
 # Marketing Orchestrator product contract
 
-## Product responsibility
+## Responsibility
 
-The full product concept manages decision quality across:
-
-```text
-GOAL -> EVIDENCE -> EXPERTISE -> VALIDATION -> DECISION -> LEARNING
-```
-
-[`prompts/orchestrator-production.md`](prompts/orchestrator-production.md) is approved product source material for that future concept. It is not a runtime prompt for the deterministic foundation.
-
-## Foundation contract
-
-OpenSpec change `add-marketing-orchestrator-foundation` owns the implementation contract for:
+ORCHESTRATOR управляет качеством процесса принятия решения:
 
 ```text
-typed request interpretation -> minimal validated plan
+GOAL → EVIDENCE → EXPERTISE → VALIDATION → DECISION → LEARNING
 ```
 
-The lifecycle ends at:
+Канонический prompt: [`prompts/orchestrator-production.md`](prompts/orchestrator-production.md).
+
+## Core lifecycle
 
 ```text
-INTERPRET -> CHECK_CONTEXT -> CHECK_EVIDENCE -> PLAN
--> VALIDATE_PLAN -> RETURN_PLAN_OR_BLOCK
+INTERPRET
+→ CHECK_CONTEXT
+→ DIAGNOSE
+→ CHECK_EVIDENCE
+→ PLAN
+→ EXECUTE
+→ VALIDATE
+→ REPLAN_IF_NEEDED
+→ SYNTHESIZE
+→ STOP
 ```
 
-A future caller supplies structured interpretation and already-authorized, explicitly tagged context. The foundation validates it; it does not infer arbitrary natural language, query BrandProfile/conversation/URL/artifact stores or accept a raw conversation dump.
+## Planning rules
 
-## Initial deterministic scenarios
+- Простой запрос использует один подходящий модуль.
+- Complex request получает минимальный dependency graph.
+- Независимые nodes могут выполняться параллельно.
+- Node, использующий output другого node, выполняется последовательно.
+- Critical blocking input нельзя заменять assumption.
+- Preferred/optional input не должен блокировать полезный preliminary result.
+- Перед дополнительным этапом оценивается value of information.
+- Workflow меняется после material finding, если изменился лучший следующий шаг.
 
-- `explicit_single_module_v1`: one canonical Registry module or approved alias, resolved to a one-node plan.
-- `new_positioning_v1`: independent `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes feed dependent `POSITIONING`.
+## Context rules
 
-Unsupported scenarios are rejected, not guessed. Missing required/blocking facts may yield at most three decision-changing questions. Missing preferred/optional facts become limitations.
+Каждый module activation получает ограниченный context packet, а не весь conversation dump. Packet должен содержать только релевантные goal, known facts, upstream findings, evidence, assumptions, constraints, tools и open questions.
 
-## Planning-only readiness
+## Output rules
 
-Structural validity, data sufficiency, planning status and execution readiness are distinct. Module Registry `1.0.0` has zero execution bindings, so every valid plan remains `PLANNING_ONLY`.
+Orchestrator не показывает пользователю module dump. Он синтезирует единый ответ с главным выводом, evidence, приоритетными действиями, validation и material risks. Формат адаптируется к сложности запроса.
 
-## Future lifecycle and constraints
+## Stop conditions
 
-Execution, runtime quality validation, replanning, synthesis, delivery and learning are future concerns. Execution belongs to `MarketingWorkflowService` after durable Job and worker infrastructure exists.
+- `ANSWER_OBTAINED`;
+- `USER_SCOPE_COMPLETE`;
+- `DIMINISHING_INFORMATION_VALUE`;
+- `EVIDENCE_SATURATION`;
+- `TOOL_OR_DATA_LIMIT`;
+- `REVERSIBLE_TEST_IS_BETTER`.
 
-- Existing API/Telegram traffic and the `TaskRouter` -> `AgentRunner` -> `TaskPipelineService` flow remain unchanged.
-- The foundation calls no modules, agents, models or QC and persists no plan/workflow record.
-- No separate dispatcher service is created.
-- No Orchestrator prompt is copied into Python or added under `app/prompts/orchestrator`.
-- Model-driven planning requires a separate OpenSpec change, versioned runtime prompt, evals and call-budget review.
+## Architecture constraint
+
+Orchestrator не встраивается как multi-step engine в `TaskPipelineService`. Execution multi-step plans принадлежит `MarketingWorkflowService` и durable Job infrastructure.
+

@@ -1,55 +1,43 @@
 # Tasks
 
-## 1. Internal contracts
+## 1. Discovery
 
-- [x] 1.1 Add deeply immutable `RequestInterpretation`, tagged `PlanningContext`/facts and validation; accept only an explicit module/alias or supported scenario key, never arbitrary free-text inference.
-- [x] 1.2 Add immutable plan, node, graph-dependency, input-requirement and context-packet contracts with separate structural validity, data sufficiency, planning status and execution readiness.
-- [x] 1.3 Derive stable plan identity from canonical input/context identities, Registry version/checksum and scenario; use stable node IDs and no random IDs.
-- [x] 1.4 Keep all contracts internal with no public DTO, API, Telegram, database or migration changes.
+- [ ] 1.1 Найти фактические boundaries `TaskPipelineService`, `MarketingWorkflowPersistenceService`, `MarketingRun`, `MarketingArtifact` и agent routing.
+- [ ] 1.2 Проверить применимые `AGENTS.md` и существующие OpenSpec capabilities.
+- [ ] 1.3 Зафиксировать, какие inputs уже доступны из BrandProfile, conversation facts, URL context и artifacts.
 
-## 2. Deterministic planner
+## 2. Contracts
 
-- [x] 2.1 Implement the read-only Registry-backed planner lifecycle: `INTERPRET -> CHECK_CONTEXT -> CHECK_EVIDENCE -> PLAN -> VALIDATE_PLAN -> RETURN_PLAN_OR_BLOCK`.
-- [x] 2.2 Implement only `explicit_single_module_v1` and `new_positioning_v1`; reject every other scenario without guessing.
-- [x] 2.3 Resolve aliases before return and store only canonical module IDs.
-- [x] 2.4 Build deterministic node, edge, topological and blocking-question order.
-- [x] 2.5 Scope tagged authorized context per node; exclude unrelated facts/secrets, include upstream findings only for dependent nodes and do not query context/persistence services.
-- [x] 2.6 Check known inputs before questions; cap unique decision-changing blocking questions at three; turn missing preferred/optional inputs into limitations.
-- [x] 2.7 Return `PLANNING_ONLY` execution readiness for Registry `1.0.0`; add no execution binding.
+- [ ] 2.1 Добавить internal request interpretation contract.
+- [ ] 2.2 Добавить orchestration plan/node/dependency contracts.
+- [ ] 2.3 Добавить stop-condition и data-sufficiency enums либо переиспользовать существующие совместимые types.
+- [ ] 2.4 Добавить scoped module context packet contract.
 
-## 3. Validation
+## 3. Planner
 
-- [x] 3.1 Validate unique nodes, canonical registered modules, resolved aliases, existing dependency targets, no self-edge/cycle and deterministic topology.
-- [x] 3.2 Validate parallel metadata against direct/transitive dependencies.
-- [x] 3.3 Validate expected-output and quality-gate selections against Registry descriptors.
-- [x] 3.4 Validate explicit input classification without overloading graph dependency types.
-- [x] 3.5 Implement exact planning stop results: `PLAN_COMPLETE`, `BLOCKING_INPUT_MISSING`, `UNKNOWN_MODULE`, `UNSUPPORTED_SCENARIO`, `INVALID_PLAN`.
+- [ ] 3.1 Реализовать отдельный planning component, использующий Module Registry.
+- [ ] 3.2 Реализовать minimum-sufficient module selection для явно покрытых сценариев.
+- [ ] 3.3 Реализовать dependency graph construction.
+- [ ] 3.4 Реализовать plan validation: unknown modules, missing dependencies, cycles и blocking inputs.
+- [ ] 3.5 Не добавлять execution/queue behavior.
 
-## 4. Independent tests (no external services)
+## 4. Tests
 
-- [x] 4.1 Exact supported scenario catalog and explicit single-module plan.
-- [x] 4.2 Canonical alias resolution and unknown-module rejection.
-- [x] 4.3 `new_positioning_v1` graph, parallel upstream nodes and sequential downstream node.
-- [x] 4.4 Deterministic node, dependency, topology, plan identity and question order.
-- [x] 4.5 Unsupported scenario and missing dependency rejection.
-- [x] 4.6 Cycle, self-dependency and invalid parallel metadata rejection.
-- [x] 4.7 Expected-output and quality-gate descriptor mismatch rejection.
-- [x] 4.8 Maximum three unique blocking questions, no duplicates and no question for known context.
-- [x] 4.9 Missing optional/preferred input produces a limitation, not a blocker.
-- [x] 4.10 Scoped node context, unrelated-context exclusion and upstream findings only on dependent nodes.
-- [x] 4.11 Structurally valid plan reports `PLANNING_ONLY` execution readiness.
-- [x] 4.12 Spies/fakes prove zero agent, model, QC, database, Redis, worker, module-execution and persistence calls.
-- [x] 4.13 Regression tests prove existing single-task routing and `TaskPipelineService` behavior is unchanged.
+- [ ] 4.1 Простой запрос создаёт single-node plan.
+- [ ] 4.2 Complex request создаёт dependency-aware plan.
+- [ ] 4.3 Independent nodes помечаются как parallelizable.
+- [ ] 4.4 Dependent nodes остаются sequential.
+- [ ] 4.5 Blocking input возвращает не более трёх critical questions.
+- [ ] 4.6 Existing context не запрашивается повторно.
+- [ ] 4.7 Registry aliases разрешаются в canonical IDs.
+- [ ] 4.8 `TaskPipelineService` не получает multi-step responsibility.
 
 ## 5. Documentation and verification
 
-- [x] 5.1 Update `ARCHITECTURE.md` only after implementation exists, describing the actual internal planning boundary without an execution path.
-- [x] 5.2 Complete `docs/development/marketing-orchestrator-verification.md` with actual supported catalog, Registry version/checksum, deterministic examples, context evidence, coverage, readiness and compatibility results.
-- [x] 5.3 Run `.venv\Scripts\python.exe -m pytest`.
-- [x] 5.4 Run `.venv\Scripts\python.exe -m compileall app bot`.
-- [x] 5.5 Run `openspec validate add-marketing-orchestrator-foundation --strict` and `openspec validate --all --strict`.
-- [x] 5.6 Run `git diff --check` and report exact commands, limitations, and no API/database/migration impact.
+- [ ] 5.1 Обновить `ARCHITECTURE.md` фактическим planning boundary.
+- [ ] 5.2 Обновить roadmap.
+- [ ] 5.3 Выполнить `python -m compileall app bot`.
+- [ ] 5.4 Выполнить `python -m pytest`.
+- [ ] 5.5 Выполнить `openspec validate add-marketing-orchestrator-foundation --strict`.
+- [ ] 5.6 Сообщить фактические результаты, limitations, API changes и migrations.
 
-## Explicit exclusions
-
-Do not add API/Telegram integration, a dispatcher, changes to `TaskRouter`/`AgentRunner`/`TaskPipelineService`, Registry bindings, module implementations, execution, workflow persistence, Jobs, queues, Redis, workers, LLM calls/prompts, QC, runtime replanning, synthesis, delivery, learning or unrelated refactoring.

@@ -1,115 +1,63 @@
 # Design: Marketing orchestrator foundation
 
-## Responsibility and lifecycle
+## Responsibility
 
-The foundation has one responsibility:
+Orchestrator преобразует пользовательскую цель и доступный project state в минимально достаточный validated plan. Он не является expert module и не выполняет module business logic.
 
-```text
-typed request interpretation -> minimal validated plan
-```
+## Interpretation contract
 
-Its planning-only lifecycle is:
+Интерпретация фиксирует:
 
-```text
-INTERPRET -> CHECK_CONTEXT -> CHECK_EVIDENCE -> PLAN
--> VALIDATE_PLAN -> RETURN_PLAN_OR_BLOCK
-```
+- requested output;
+- decision goal;
+- business goal;
+- intent;
+- object;
+- depth;
+- execution/learning/mixed mode;
+- critical constraints.
 
-`INTERPRET` validates a structured value supplied by a future authorized caller; it does not parse arbitrary user text. The component does not intercept API or Telegram traffic, replace `TaskRouter` or `AgentRunner`, alter `TaskPipelineService`, instantiate modules, call agents/models/QC, execute or persist a plan, create workflow records, enqueue work, synthesize an answer, replan from runtime findings or learn. Early dispatcher material is design history absorbed into this boundary; no separate runtime dispatcher is created.
+## Plan model
 
-## Immutable internal contracts
+Plan содержит nodes и dependencies. Node содержит module ID, objective, inputs, expected outputs, quality gate и conditional next steps. Plan является internal contract и не добавляет публичный API.
 
-All collections are deeply immutable and all contracts remain internal.
+## Planning algorithm
 
-### RequestInterpretation
+1. Interpret request.
+2. Check existing context and avoid repeated questions.
+3. Detect root-problem risk.
+4. Classify data sufficiency.
+5. Resolve minimum suitable modules through Registry.
+6. Build dependency graph.
+7. Validate graph.
+8. Return plan or blocking questions.
 
-- `requested_output`, `decision_goal`, `business_goal`, `intent`, `object`, `depth`, `mode` and `constraints`;
-- exactly one structured selector: `requested_module` (canonical ID or alias) or `scenario_key`.
+Первый implementation MAY be deterministic/rule-based. Model-driven planning требует отдельного change и evals.
 
-The foundation validates these fields and rejects absent, ambiguous or unsupported selectors. It never guesses a selector from free text.
+## Parallelism
 
-### PlanningContext and tagged facts
+Nodes могут быть parallel только если у них нет data dependency и conflicting assumptions. Parallelism metadata не означает немедленный async execution.
 
-A future caller supplies already-authorized structured context. Each immutable fact has a stable `fact_id`, value, provenance/evidence reference, confidence and explicit relevance tags containing canonical module IDs and/or supported scenario keys. Optional project fields use the same tagging model. Upstream findings are separately keyed by producer node.
+## Context packet
 
-The planner does not query `BrandProfile`, conversation memory, URL services or artifact persistence and does not accept a raw conversation dump. It includes a fact only when its tags match the current node or scenario, excludes secrets unless explicitly authorized and tagged, and never copies unrelated history.
+Каждый node получает scoped packet. Full conversation dump не является контрактом. BrandProfile, relevant facts, artifacts и evidence передаются по существующим service boundaries.
 
-### OrchestrationPlan
+## Architecture integration
 
-- deterministic `plan_id`, derived from canonical serialization of the validated interpretation, relevant tagged-context identities, Registry version/checksum and scenario key;
-- `scenario_key`, nodes and graph dependencies;
-- `structural_validity`;
-- `data_sufficiency`: `SUFFICIENT`, `PARTIAL` or `INSUFFICIENT`;
-- `planning_status`: `VALIDATED`, `BLOCKED`, `UNSUPPORTED` or `INVALID`;
-- `execution_readiness`: `PLANNING_ONLY` for Registry `1.0.0`;
-- blocking questions, assumptions, limitations and planning-time stop condition.
+- Single-task requests продолжают использовать `TaskPipelineService`.
+- Multi-step plan создаётся отдельным orchestrator component.
+- Future execution координируется `MarketingWorkflowService`.
+- Durable state хранится в PostgreSQL entities/services.
+- Redis transport подключается позже.
 
-No random ID is used. A blocked plan can still have a deterministic identity and structurally valid graph.
+## Failure behavior
 
-### PlanNode
+- Unknown module/alias → plan validation error.
+- Dependency cycle → plan validation error.
+- Blocking input missing → blocked plan с максимум тремя critical questions.
+- Optional input missing → план допускает preliminary/limited result.
 
-- stable scenario-defined `node_id` and canonical Registry module ID;
-- objective, scoped inputs, expected outputs and quality gate;
-- dependency references and conditional next-step metadata;
-- parallelization group/eligibility metadata and immutable context packet.
+## Rollback
 
-Aliases are resolved before return. Expected outputs and quality gates are descriptor-backed subsets; scenario rules do not copy entire descriptors.
+Удаление plan boundary не требует data migration; существующий single-task execution остаётся доступным.
 
-### Dependencies and inputs
-
-`GraphDependency` represents only a directed execution-order edge. Input requirements use a separate `REQUIRED`, `BLOCKING`, `PREFERRED` or `OPTIONAL` classification. The two concepts are never overloaded into one enum.
-
-### ContextPacket
-
-The packet contains relevant project context, known facts, upstream findings, evidence, assumptions, confidence, constraints, available tools and open questions. Only dependent nodes receive findings of their declared upstream nodes. Known blocking inputs are satisfied before questions are generated. Missing preferred/optional inputs create limitations rather than blockers.
-
-## Deterministic scenario catalog
-
-The catalog contains routing rules and graph templates only; descriptors remain owned by Registry `1.0.0`.
-
-### `explicit_single_module_v1`
-
-- Selector: canonical module ID or approved Registry alias.
-- Required modules: the one resolved canonical module; edges and parallel groups: none.
-- Expected outputs/quality gate: descriptor-backed subsets declared by the structured request, defaulting to descriptor declarations.
-- Required/blocking inputs: descriptor declarations checked against tagged known context.
-- Preferred/optional inputs: non-blocking; material absence is a limitation.
-- Result: one-node valid plan, blocked missing-input plan, or unknown-module rejection.
-
-### `new_positioning_v1`
-
-This scenario is supported by the approved `NEW POSITIONING` workflow, the product source's parallelization example, Registry handoffs from both analyses to `POSITIONING`, and the roadmap.
-
-- Required modules/stable node order: `MARKET_ANALYSIS` (`market_analysis`), `COMPETITOR_ANALYSIS` (`competitor_analysis`), `POSITIONING` (`positioning`).
-- Edges: `market_analysis -> positioning` and `competitor_analysis -> positioning`.
-- Expected outputs: `market_analysis` selects `market_definition`, `segments`, `audience_findings`, `market_opportunities`, `research_gaps.`; `competitor_analysis` selects `competitor_set`, `observable_positioning`, `offers`, `proof`, `patterns`, `market_gaps`, `differentiation_hypotheses.`; `positioning` selects `category`, `target`, `value_proposition`, `differentiation`, `RTB`, `positioning_statement`, `USP_directions`, `offer`, `message_hierarchy`, `claim_risks`, `validation_plan.`. The trailing periods are part of those three canonical Registry `1.0.0` output strings. Every name is validated as a member of the current descriptor; the catalog does not redefine its schema.
-- Required/blocking inputs: product/category and materially relevant geography; competitor name/URL or category plus search scope; product, target hypothesis, customer need and relevant alternative. Known tagged context is checked first. Upstream findings may support downstream evidence but cannot fabricate product truth or target.
-- Preferred/optional inputs: descriptor declarations; absence limits confidence/coverage but does not block a preliminary plan.
-- Parallel group `evidence_analysis`: `market_analysis` and `competitor_analysis` only. `positioning` is sequential after both.
-- Stop/block: block only for a missing decision-changing required/blocking input after context checking; otherwise return the validated planning-only graph.
-
-Any other scenario key returns `UNSUPPORTED` with `UNSUPPORTED_SCENARIO`; no graph is guessed. Catalog expansion requires an OpenSpec revision.
-
-## Graph invariants and ordering
-
-Catalog node order is stable. Dependencies sort by downstream then upstream stable node ID. Topological order uses Kahn's algorithm with catalog order as tie-breaker. Questions deduplicate by input key and order by earliest affected node, input declaration order and normalized text.
-
-Validation requires unique node IDs; canonical registered module IDs; no aliases; existing dependency targets; no self-dependencies or cycles; deterministic topological ordering; no node parallel with a direct/transitive dependency; descriptor-compatible outputs and quality gates; explicit blocking inputs; no more than three unique decision-changing questions; no question for known inputs; optional/preferred absence as limitations; unsupported-scenario rejection; and structural validity reported separately from execution readiness.
-
-## Sufficiency, readiness and stop conditions
-
-Structural validity describes graph soundness. Data sufficiency describes authorized input coverage. Planning status describes return/block/rejection. Execution readiness describes whether modules can run. Registry `1.0.0` has zero bindings, so every valid plan is `PLANNING_ONLY`; module existence never implies executability.
-
-- `PLAN_COMPLETE`: supported, structurally valid and no missing blocking planning input.
-- `BLOCKING_INPUT_MISSING`: decision-changing required/blocking input remains after context matching; return at most three questions.
-- `UNKNOWN_MODULE`: explicit module/alias resolution fails.
-- `UNSUPPORTED_SCENARIO`: key is outside the catalog.
-- `INVALID_PLAN`: graph or descriptor invariant fails.
-
-Execution completion, runtime quality validation, dynamic replanning, synthesis, delivery and learning belong to future changes.
-
-## Architecture, source and rollback
-
-Standalone requests continue through the current single-task pipeline. Future execution is owned by `MarketingWorkflowService` after durable Job/workers exist. This foundation does not use `MarketingWorkflowPersistenceService`, `MarketingRun` or `MarketingArtifact`.
-
-The deterministic implementation loads no Orchestrator prompt. Behavior is typed code plus these approved rules. Removing it requires no migration and leaves current runtime flows intact.
