@@ -140,9 +140,11 @@ Future durable Job state also belongs in PostgreSQL.
 
 OpenSpec change `add-durable-job-persistence` defines an additive `jobs` table and an unused internal persistence service. A Job is one durable future execution request; it does not replace `MarketingRun` workflow progress or `MarketingArtifact` output.
 
-- Ownership is exclusive and optional: MarketingRun-owned, runless user-owned, or system/anonymous. A workflow step is valid only for a run-owned Job.
+- Ownership is exclusive: MarketingRun-owned, direct-user-owned, or trusted-internal system. There is no public anonymous Job class. A workflow step is valid only for a run-owned Job.
+- Run-owned and direct-user-owned Jobs are operational aggregate children deleted with their owner through database/ORM cascade; they are not retained audit history and owner deletion never reclassifies work as system-owned.
+- Request identity/input is immutable through the supported persistence service, which deep-copies bounded JSON and accepts only caller-sanitized failure strings. Direct session writes remain unsupported rather than universally blocked.
 - The closed lifecycle is `pending -> running -> succeeded|failed`; retry, cancellation, timeout, delivery, and dead-letter states are not part of this foundation.
-- Job mutations may add/flush and participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
+- One injected aware UTC clock owns creation/transition instants. Job mutations add/flush without refresh and may participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
 - PostgreSQL commit establishes durability. A persisted Job is inert: this contract introduces no publication, claim, polling, execution, Redis, worker, LLM/QC, API, or Telegram behavior.
 
 See `docs/product/durable-job-persistence.md`. Runtime behavior requires a later apply task after the OpenSpec artifacts are accepted.

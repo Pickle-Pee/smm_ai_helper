@@ -44,9 +44,9 @@ Competitor analysis
 
 Orchestrator не является универсальным CMO и не подменяет специализированные модули.
 
-Текущий runtime foundation реализует только deterministic planning и всегда возвращает `PLANNING_ONLY`. Quality Gates, replanning, synthesis и execution из полного product concept не следует считать уже подключённым поведением.
+Текущий Orchestrator runtime foundation реализует только deterministic planning и всегда возвращает `PLANNING_ONLY`. Implemented Quality Gates foundation также остаётся internal и planning-only; replanning, synthesis и execution из полного product concept не подключены.
 
-Планируемый Quality Gates foundation в `app/marketing_orchestrator/quality_gates/` принимает только caller-supplied typed normalized results и возвращает deterministic structural decisions. Confidence использует только `UNKNOWN < LOW < MEDIUM < HIGH`; identities и lineage явные, timestamps caller-supplied и UTC-normalized. Foundation не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Пользовательский synthesis остаётся отдельной будущей интеграцией; foundation может сформировать только immutable eligibility manifest.
+Implemented Quality Gates foundation в `app/marketing_orchestrator/quality_gates/` принимает только caller-supplied typed normalized results и возвращает deterministic structural decisions. Confidence использует только `UNKNOWN < LOW < MEDIUM < HIGH`; identities и lineage явные, timestamps caller-supplied и UTC-normalized. Foundation не интегрирован в execution workflows, не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Пользовательский synthesis остаётся отдельной будущей интеграцией; foundation может сформировать только immutable eligibility manifest.
 
 ### 3. Module Registry
 
@@ -104,9 +104,9 @@ PostgreSQL — durable source of truth. Redis — transport и coordination, н�
 
 - `MarketingRun` хранит состояние и прогресс multi-step workflow;
 - `MarketingArtifact` хранит именованный reusable output шага;
-- `Job` хранит immutable request input и lifecycle `pending -> running -> succeeded|failed`.
+- `Job` хранит request input, immutable через supported persistence service, и lifecycle `pending -> running -> succeeded|failed`.
 
-Job может принадлежать `MarketingRun`, runless user или быть system/anonymous; одновременно ссылаться на run и user нельзя. Commit/rollback принадлежит вызывающему transaction owner, поэтому будущие Job и MarketingRun/Artifact изменения могут быть атомарны в PostgreSQL.
+Job является operational child `MarketingRun`, direct user или trusted-internal system record без owner reference; public anonymous Job creation отсутствует. Удаление run/user каскадно удаляет owned Jobs, а не превращает их в system work; retained audit history не входит в foundation. Commit/rollback принадлежит вызывающему transaction owner, поэтому будущие Job и MarketingRun/Artifact изменения могут быть атомарны в PostgreSQL.
 
 Persisted Job остаётся inert до отдельных reviewed changes: foundation не публикует в Redis, не claim/execute work, не делает retry/idempotency/cancellation/timeout/delivery, не вызывает modules, LLM или QC и не меняет API/Telegram behavior.
 
