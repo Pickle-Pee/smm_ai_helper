@@ -45,6 +45,6 @@
 - Execution waits for durable Job/workers and is owned by `MarketingWorkflowService`.
 - Model-driven planning, an executable Orchestrator prompt, runtime QC/replanning and synthesis require later OpenSpec changes.
 - Quality Gates are a pure normalized-result foundation; agent adapters, revised-plan generation, workflow execution and user-facing synthesis remain later changes.
-- Durable Job persistence is PostgreSQL-only and uses `pending -> running -> succeeded|failed`; publication, claiming, retries, idempotency, cancellation and delivery remain later changes.
+- Durable Job persistence is PostgreSQL-only and uses `pending/version=0 -> running/version=1 -> succeeded|failed/version=2`; a mandatory observed version under the row lock permits only one successful transition per observed version, and dirty target owner/immutable history is rejected before SQL. Publication, claiming, retries, idempotency, cancellation and delivery remain later changes.
 - Durable Jobs are operational run/user aggregate children or trusted-internal system records; owner deletion cascades, public anonymous creation and user/system listing are absent, and retained audit history requires a separate change.
 - `master` receives changes only after integration through `sale-ready`.

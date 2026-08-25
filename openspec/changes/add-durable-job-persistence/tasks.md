@@ -16,27 +16,32 @@
 - [x] 1.12 Remove caller creation/transition timestamps and define one injected UTC clock plus exact timestamp equalities/order.
 - [x] 1.13 Define total validation precedence, no-refresh behavior, deliberate direct-user/system query absence, and the final two-index set.
 - [x] 1.14 Split runtime/evidence tasks and correct Quality Gates documentation without changing runtime behavior.
+- [x] 1.15 Resolve dirty-target ambiguity by rejecting tracked immutable/version, owner-relationship/collection, and deletion history before transition SQL without clearing caller state.
+- [x] 1.16 Add persisted monotonic version and mandatory expected-version semantics so only one transition based on an observed version can succeed.
 
 ## 2. SQLAlchemy model and relationship contract
 
 - [ ] 2.1 Add `JobStatus` with exact ordered members/values `pending`, `running`, `succeeded`, and `failed` and no aliases.
-- [ ] 2.2 Add `Job` mapped to `jobs` with exactly the thirteen approved columns and no others.
+- [ ] 2.2 Add `Job` mapped to `jobs` with exactly the fourteen approved columns and no others.
 - [ ] 2.3 Add `job_id VARCHAR(32)` primary key with callable UUID-hex application generation and no server default.
 - [ ] 2.4 Add nullable `user_id INTEGER` and `marketing_run_id VARCHAR(64)` owner columns with no application/server defaults beyond null.
 - [ ] 2.5 Add nullable `workflow_step VARCHAR(64)` and required `kind VARCHAR(64)` with no normalization behavior.
 - [ ] 2.6 Add `status VARCHAR(32)` with exact Python `pending` default and server default `'pending'`.
-- [ ] 2.7 Add non-null `payload_json JSONB` with callable `default=dict`, server default `'{}'::jsonb`, and no shared object.
-- [ ] 2.8 Add nullable `result_json JSONB` and nullable `error VARCHAR(4000)` with no server defaults.
-- [ ] 2.9 Add timezone-aware `created_at` and `updated_at` with `server_default=now()` and no automatic update hook.
-- [ ] 2.10 Add nullable timezone-aware `started_at` and `completed_at` without defaults.
-- [ ] 2.11 Add `user_id -> users.id ON DELETE CASCADE` with matching SQL type/nullability.
-- [ ] 2.12 Add `marketing_run_id -> marketing_runs.run_id ON DELETE CASCADE` with matching SQL type/nullability.
-- [ ] 2.13 Add `User.jobs` with exact `back_populates`, `cascade="all, delete-orphan"`, and `passive_deletes=True`.
-- [ ] 2.14 Add `MarketingRun.jobs` with exact `back_populates`, `cascade="all, delete-orphan"`, and `passive_deletes=True`.
-- [ ] 2.15 Keep Job JSON columns free of `MutableDict` or any tracked-mutation wrapper.
-- [ ] 2.16 Add only the run and status composite secondary indexes defined by the design.
-- [ ] 2.17 Add no user or kind index and no unique constraint beyond the primary key.
-- [ ] 2.18 Add no retry/attempt/lease/worker/idempotency/delivery/cancellation/timeout/audit field or index.
+- [ ] 2.7 Add non-null `version INTEGER` with exact Python default `0`, server default `0`, and no caller-write interface.
+- [ ] 2.8 Add non-null `payload_json JSONB` with callable `default=dict`, server default `'{}'::jsonb`, and no shared object.
+- [ ] 2.9 Add nullable `result_json JSONB` and nullable `error VARCHAR(4000)` with no server defaults.
+- [ ] 2.10 Add timezone-aware `created_at` and `updated_at` with `server_default=now()` and no automatic update hook.
+- [ ] 2.11 Add nullable timezone-aware `started_at` and `completed_at` without defaults.
+- [ ] 2.12 Add `user_id -> users.id ON DELETE CASCADE` with matching SQL type/nullability.
+- [ ] 2.13 Add `marketing_run_id -> marketing_runs.run_id ON DELETE CASCADE` with matching SQL type/nullability.
+- [ ] 2.14 Add `Job.user` with `back_populates="jobs"`, default `save-update, merge` cascade, default `passive_deletes=False`, and no delete/delete-orphan cascade.
+- [ ] 2.15 Add `User.jobs` with `back_populates="user"`, `cascade="all, delete-orphan"`, and `passive_deletes=True`.
+- [ ] 2.16 Add `Job.marketing_run` with `back_populates="jobs"`, default `save-update, merge` cascade, default `passive_deletes=False`, and no delete/delete-orphan cascade.
+- [ ] 2.17 Add `MarketingRun.jobs` with `back_populates="marketing_run"`, `cascade="all, delete-orphan"`, and `passive_deletes=True`.
+- [ ] 2.18 Keep Job JSON columns free of `MutableDict` or any tracked-mutation wrapper.
+- [ ] 2.19 Add only the run and status composite secondary indexes defined by the design.
+- [ ] 2.20 Add no user or kind index and no unique constraint beyond the primary key.
+- [ ] 2.21 Add no retry/attempt/lease/worker/idempotency/delivery/cancellation/timeout/audit field or index.
 
 ## 3. Exact constraints and Alembic operations
 
@@ -49,54 +54,59 @@
 - [ ] 3.7 Implement `ck_jobs_exclusive_owner` with exact predicate `marketing_run_id IS NULL OR user_id IS NULL`.
 - [ ] 3.8 Implement `ck_jobs_step_requires_run` with exact predicate `workflow_step IS NULL OR marketing_run_id IS NOT NULL`.
 - [ ] 3.9 Implement `ck_jobs_status` with exactly the four approved status strings.
-- [ ] 3.10 Implement `ck_jobs_payload_object` with exact `jsonb_typeof(payload_json) = 'object'` predicate.
-- [ ] 3.11 Implement `ck_jobs_result_object` with the exact nullable JSON-object predicate.
-- [ ] 3.12 Implement `ck_jobs_lifecycle` with the complete four-branch predicate and matching ASCII-whitespace failure rule.
-- [ ] 3.13 Implement `ck_jobs_timestamp_order` with all creation/start/completion ordering and status-specific update equalities.
-- [ ] 3.14 Create `ix_jobs_run_created_job` on exact ascending columns `(marketing_run_id, created_at, job_id)`.
-- [ ] 3.15 Create `ix_jobs_status_created_job` on exact ascending columns `(status, created_at, job_id)`.
-- [ ] 3.16 Implement downgrade by dropping status index, run index, and then `jobs`, in that order only.
-- [ ] 3.17 Add static revision-parent/head assertions with no alteration of existing tables, migrations, constraints, or indexes.
-- [ ] 3.18 Keep every existing migration byte-for-byte unchanged.
+- [ ] 3.10 Implement `ck_jobs_version_nonnegative` with exact predicate `version >= 0`.
+- [ ] 3.11 Implement `ck_jobs_payload_object` with exact `jsonb_typeof(payload_json) = 'object'` predicate.
+- [ ] 3.12 Implement `ck_jobs_result_object` with the exact nullable JSON-object predicate.
+- [ ] 3.13 Implement `ck_jobs_lifecycle` with the complete four-branch predicate and matching ASCII-whitespace failure rule.
+- [ ] 3.14 Implement `ck_jobs_timestamp_order` with all creation/start/completion ordering and status-specific update equalities.
+- [ ] 3.15 Create `ix_jobs_run_created_job` on exact ascending columns `(marketing_run_id, created_at, job_id)`.
+- [ ] 3.16 Create `ix_jobs_status_created_job` on exact ascending columns `(status, created_at, job_id)`.
+- [ ] 3.17 Implement downgrade by dropping status index, run index, and then `jobs`, in that order only.
+- [ ] 3.18 Add static revision-parent/head assertions with no alteration of existing tables, migrations, constraints, or indexes.
+- [ ] 3.19 Keep every existing migration byte-for-byte unchanged.
 
 ## 4. Validation and persistence service implementation
 
-- [ ] 4.1 Add the exact six-class Job persistence error taxonomy and stable safe messages without raw values.
+- [ ] 4.1 Add the exact eight-class Job persistence error taxonomy, including dirty-mutation and stale-version errors, with stable safe messages and no raw values.
 - [ ] 4.2 Add an injected callable clock with an aware UTC production default and exact-type validation.
 - [ ] 4.3 Validate Job IDs as exact built-in lowercase 32-character UUID-hex strings.
-- [ ] 4.4 Validate kind and workflow step as exact built-in canonical-key strings with no trimming/normalization.
-- [ ] 4.5 Validate MarketingRun IDs as exact built-in valid-Unicode strings of 1-64 characters excluding U+0000 and without normalization.
-- [ ] 4.6 Validate user IDs as exact positive built-in integers and reject booleans.
-- [ ] 4.7 Validate exact JSON dictionaries/lists/scalars and signed 64-bit integer bounds.
-- [ ] 4.8 Detect JSON cycles using the active recursion path while allowing repeated acyclic references.
-- [ ] 4.9 Enforce maximum JSON container depth 16 with top-level object at depth 1.
-- [ ] 4.10 Reject lone surrogates, U+0000, and all JSON strings/keys that fail strict UTF-8/PostgreSQL compatibility.
-- [ ] 4.11 Implement exact deterministic canonical JSON serialization for byte measurement.
-- [ ] 4.12 Enforce 262,144-byte payload and 1,048,576-byte result limits with typed size errors.
-- [ ] 4.13 Defensively deep-copy validated JSON before any session access or await.
-- [ ] 4.14 Validate caller-sanitized errors as exact Unicode strings of 1-4000 characters with the exact ASCII-whitespace rule.
-- [ ] 4.15 Reject exception objects, automatic stringification, traceback capture, and raw provider-response persistence.
-- [ ] 4.16 Validate the four-row ownership truth table and workflow-step/run coherence before session access.
-- [ ] 4.17 Query an explicitly supplied owner with autoflush disabled and reject a valid missing owner before clock acquisition.
-- [ ] 4.18 Implement `create_job` in the exact ten-step order, assigning one clock instant to creation/update and flushing once.
-- [ ] 4.19 Implement malformed-ID validation and valid-missing `None` behavior for `get_job` with no autoflush/lock/refresh.
-- [ ] 4.20 Implement `list_jobs_for_run` validation, no run pre-query, empty-missing result, and exact unbounded ordering.
-- [ ] 4.21 Keep direct-user/system listing, pagination, generic filtering, and generic mutation absent.
-- [ ] 4.22 Prevalidate transition ID, exact status, outcome presence, result JSON, and error input before session access.
-- [ ] 4.23 Load transition target with autoflush disabled, `SELECT ... FOR UPDATE`, and `populate_existing`.
-- [ ] 4.24 Raise typed not-found only after pure input validation and before locked-state legality processing.
-- [ ] 4.25 Evaluate the complete legal-transition graph only after the persisted row is locked/reloaded.
-- [ ] 4.26 Obtain one transition clock instant after legality and apply exact UTC/order validation.
-- [ ] 4.27 Apply only approved lifecycle/outcome fields and validate final coherence before one explicit flush.
-- [ ] 4.28 Pass duplicate/FK/check/driver/database errors through unchanged for caller rollback.
-- [ ] 4.29 Prohibit every autonomous commit, rollback, refresh, and implicit autoflush owned by the service.
-- [ ] 4.30 Keep the service unused by current runtime paths and free of Redis/queue/worker/LLM/QC/API/Telegram dependencies.
+- [ ] 4.4 Validate mandatory `expected_version` as an exact built-in non-boolean integer in `0..2147483647` before session access.
+- [ ] 4.5 Validate kind and workflow step as exact built-in canonical-key strings with no trimming/normalization.
+- [ ] 4.6 Validate MarketingRun IDs as exact built-in valid-Unicode strings of 1-64 characters excluding U+0000 and without normalization.
+- [ ] 4.7 Validate user IDs as exact positive built-in integers and reject booleans.
+- [ ] 4.8 Validate exact JSON dictionaries/lists/scalars and signed 64-bit integer bounds.
+- [ ] 4.9 Detect JSON cycles using the active recursion path while allowing repeated acyclic references.
+- [ ] 4.10 Enforce maximum JSON container depth 16 with top-level object at depth 1.
+- [ ] 4.11 Reject lone surrogates, U+0000, and all JSON strings/keys that fail strict UTF-8/PostgreSQL compatibility.
+- [ ] 4.12 Implement exact deterministic canonical JSON serialization for byte measurement.
+- [ ] 4.13 Enforce 262,144-byte payload and 1,048,576-byte result limits with typed size errors.
+- [ ] 4.14 Defensively deep-copy validated JSON before any session access or await.
+- [ ] 4.15 Validate caller-sanitized errors as exact Unicode strings of 1-4000 characters with the exact ASCII-whitespace rule.
+- [ ] 4.16 Reject exception objects, automatic stringification, traceback capture, and raw provider-response persistence.
+- [ ] 4.17 Validate the four-row ownership truth table and workflow-step/run coherence before session access.
+- [ ] 4.18 Query an explicitly supplied owner with autoflush disabled and reject a valid missing owner before clock acquisition.
+- [ ] 4.19 Implement `create_job` in the exact design order, assigning version `0`, one clock instant to creation/update, and flushing once.
+- [ ] 4.20 Implement malformed-ID validation and valid-missing `None` behavior for `get_job` with no autoflush/lock/refresh.
+- [ ] 4.21 Implement `list_jobs_for_run` validation, no run pre-query, empty-missing result, and exact unbounded ordering.
+- [ ] 4.22 Keep direct-user/system listing, pagination, generic filtering, generic mutation, and caller version writes absent.
+- [ ] 4.23 Prevalidate transition ID, expected version, exact status, outcome presence, result JSON, and error input before target inspection or session access.
+- [ ] 4.24 Inspect only identity-mapped target immutable/version fields, target owner relationships, target membership changes in identity-mapped owner collections, and pending target deletion inside `no_autoflush`; reject tracked changes before SQL without clearing or restoring any caller state.
+- [ ] 4.25 Load a clean transition target with autoflush disabled, exact-primary-key `SELECT ... FOR UPDATE`, and `populate_existing` so ordinary untracked in-place JSON is replaced by persisted state.
+- [ ] 4.26 Raise typed not-found only after pure input and dirty-target validation and before stale/legality processing.
+- [ ] 4.27 Compare locked persisted version with mandatory `expected_version` and raise typed stale-version before lifecycle legality, clock, mutation, or flush.
+- [ ] 4.28 Evaluate the complete legal-transition graph only after lock/reload and matching-version validation.
+- [ ] 4.29 Obtain one transition clock instant after legality and apply exact UTC/order validation.
+- [ ] 4.30 Apply only approved lifecycle/outcome fields, increment version exactly once, validate final coherence, and explicitly flush once.
+- [ ] 4.31 Return mutation results without refresh so lifecycle/version state remains the just-flushed service-owned state.
+- [ ] 4.32 Pass duplicate/FK/check/driver/database errors through unchanged for caller rollback.
+- [ ] 4.33 Prohibit every autonomous commit, rollback, refresh, state expiration/restoration, and implicit autoflush owned by the service.
+- [ ] 4.34 Keep the service unused by current runtime paths and free of Redis/queue/worker/LLM/QC/API/Telegram dependencies.
 
 ## 5. Independent model and service evidence
 
-- [ ] 5.1 Assert the exact thirteen-column set, SQL/Python types, lengths, and nullability.
+- [ ] 5.1 Assert the exact fourteen-column set, SQL/Python types, lengths, and nullability.
 - [ ] 5.2 Assert exact `JobStatus` order/values and rejection of raw strings/aliases at the service boundary.
-- [ ] 5.3 Assert callable UUID/payload defaults, independent empty payload objects, and exact server defaults.
+- [ ] 5.3 Assert callable UUID/payload defaults, independent empty payload objects, version application/server defaults of `0`, and every exact server default.
 - [ ] 5.4 Assert timezone-aware Job timestamp columns without changing existing naive timestamp columns.
 - [ ] 5.5 Test loaded User deletion deletes direct-user Jobs without owner-nullifying updates.
 - [ ] 5.6 Test unloaded User deletion relies on PostgreSQL cascade with the same final rows.
@@ -124,10 +134,10 @@
 - [ ] 5.28 Test result size exactly at 1,048,576 bytes and one byte over.
 - [ ] 5.29 Test `payload_json=None` maps to a new empty object and empty result object is valid on success.
 - [ ] 5.30 Test mutation of the caller's original payload/result after validation cannot alter persisted data.
-- [ ] 5.31 Test scalar reassignment cannot persist through a supported transition.
-- [ ] 5.32 Test complete payload reassignment cannot persist through a supported transition.
-- [ ] 5.33 Test top-level in-place payload mutation cannot persist through a supported transition.
-- [ ] 5.34 Test nested in-place payload mutation cannot persist through a supported transition.
+- [ ] 5.31 Test tracked protected-scalar reassignment is rejected before SQL and cannot persist through a supported transition.
+- [ ] 5.32 Test complete payload reassignment or explicitly flagged payload history is rejected before SQL and cannot persist through a supported transition.
+- [ ] 5.33 Test ordinary untracked top-level in-place payload mutation is replaced by persisted state and cannot persist through a supported transition.
+- [ ] 5.34 Test ordinary untracked nested in-place payload mutation is replaced by persisted state and cannot persist through a supported transition.
 - [ ] 5.35 Test/document unsupported direct-session mutation and absence of `MutableDict` or universal enforcement claims.
 - [ ] 5.36 Test an approved sanitized failure error is preserved exactly and invalid Unicode/U+0000 is rejected.
 - [ ] 5.37 Test empty and exact ASCII-whitespace-only errors are rejected in Python and PostgreSQL.
@@ -137,13 +147,13 @@
 - [ ] 5.41 Test creation calls the injected clock exactly once and sets `created_at = updated_at`.
 - [ ] 5.42 Test creation normalizes timezone offsets to UTC while preserving microseconds.
 - [ ] 5.43 Test naive, datetime-subclass, string, and invalid clock return rejection before add/flush.
-- [ ] 5.44 Test exact pending creation coherence, one add/flush, no refresh/commit/rollback.
+- [ ] 5.44 Test exact pending/version-0 creation coherence, one add/flush, no refresh/commit/rollback.
 - [ ] 5.45 Test malformed `get_job` ID raises before query.
 - [ ] 5.46 Test `get_job` existing and valid-missing results with no lock/flush/refresh.
 - [ ] 5.47 Test run listing filter/order, valid-missing empty result, no run pre-query, lock, pagination, or refresh.
-- [ ] 5.48 Test legal `pending -> running` independently with exact outcome/timestamp fields.
-- [ ] 5.49 Test legal `running -> succeeded` independently with exact result/timestamp fields.
-- [ ] 5.50 Test legal `running -> failed` independently with exact error/timestamp fields.
+- [ ] 5.48 Test legal `pending/version=0 -> running/version=1` independently using expected version `0` with exact outcome/timestamp fields and one increment.
+- [ ] 5.49 Test legal `running/version=1 -> succeeded/version=2` independently using expected version `1` with exact result/timestamp fields and one increment.
+- [ ] 5.50 Test legal `running/version=1 -> failed/version=2` independently using expected version `1` with exact error/timestamp fields and one increment.
 - [ ] 5.51 Test skipped `pending -> succeeded` rejection independently.
 - [ ] 5.52 Test skipped `pending -> failed` rejection independently.
 - [ ] 5.53 Test backward `running -> pending` rejection independently.
@@ -164,38 +174,70 @@
 - [ ] 5.68 Test successful terminal timestamp equality/order with one post-lock clock call.
 - [ ] 5.69 Test failed terminal timestamp equality/order with one post-lock clock call.
 - [ ] 5.70 Test backwards start/completion time rejection with zero mutation/explicit flush.
-- [ ] 5.71 Test pure invalid input takes precedence over missing target and performs no query.
-- [ ] 5.72 Test valid missing target takes precedence over illegal-state/clock processing.
-- [ ] 5.73 Test every illegal edge leaves the Job unchanged with zero clock call/explicit flush.
-- [ ] 5.74 Test transition SQL locks the exact primary-key row and evaluates state after lock acquisition.
-- [ ] 5.75 Test persisted-row reload discards unsupported dirty immutable state before lifecycle mutation.
+- [ ] 5.71 Test pure invalid Job ID/expected-version/status/outcome input takes precedence over dirty/missing target and performs no query.
+- [ ] 5.72 Test a valid missing target takes precedence over stale-version/illegal-state/clock processing.
+- [ ] 5.73 Test every illegal edge using the current version leaves the Job unchanged with zero clock call/explicit flush.
+- [ ] 5.74 Test transition SQL locks the exact primary-key row, compares expected version, and evaluates lifecycle state only after lock acquisition.
+- [ ] 5.75 Test a clean tracked target reload replaces ordinary untracked JSON state before lifecycle/version mutation without refreshing the returned mutation result.
+- [ ] 5.76 Test expected-version exact-type/range validation, including rejection of booleans, integer subclasses, negatives, values above `2147483647`, and non-integers before target inspection or SQL.
+- [ ] 5.77 Test `expected_version` is a mandatory positional transition argument whose omission fails at call binding without database access.
+- [ ] 5.78 Test caller reassignment of service-managed target version is rejected before SQL without overwriting caller state.
+- [ ] 5.79 Test target `Job.user` reassignment is rejected before SQL without owner-FK or lifecycle/version persistence.
+- [ ] 5.80 Test target `Job.marketing_run` reassignment is rejected before SQL without owner-FK or lifecycle/version persistence.
+- [ ] 5.81 Test identity-mapped `User.jobs` append involving the target is rejected before SQL.
+- [ ] 5.82 Test identity-mapped `User.jobs` removal involving the target is rejected before SQL rather than deleting or reclassifying it.
+- [ ] 5.83 Test identity-mapped `MarketingRun.jobs` append involving the target is rejected before SQL.
+- [ ] 5.84 Test identity-mapped `MarketingRun.jobs` removal involving the target is rejected before SQL rather than deleting or reclassifying it.
+- [ ] 5.85 Test conflicting owner scalar/relationship/collection histories involving the target still produce one deterministic dirty-mutation rejection before SQL.
+- [ ] 5.86 Test a transition target present in `session.deleted` is rejected before SQL.
+- [ ] 5.87 Assert every dirty-target rejection executes no query or row lock and triggers no autoflush.
+- [ ] 5.88 Assert dirty-target rejection performs no refresh, expiration, history reset, relationship restoration, or caller-state mutation.
+- [ ] 5.89 Assert dirty-target rejection performs no lifecycle/version mutation, clock call, or explicit flush.
+- [ ] 5.90 Assert `DirtyJobMutationError` has a stable safe message instructing caller rollback and containing no raw field/value data.
+- [ ] 5.91 After caller rollback/reload from every owner-dirty case, prove persisted owner foreign keys and lifecycle/version remain unchanged.
+- [ ] 5.92 Test unrelated dirty/new/deleted session state is neither inspected globally nor rejected, cleared, restored, expired, refreshed, or otherwise mutated by a supported target transition.
+- [ ] 5.93 Test stale expected version is detected after lock/reload and before lifecycle legality, clock access, mutation, or explicit flush.
+- [ ] 5.94 Test stale rejection leaves status, outcome, timestamps, and version unchanged and does not retry automatically.
+- [ ] 5.95 Test every successful legal transition increments version exactly once and returns the incremented in-memory value without refresh.
+- [ ] 5.96 Test every invalid, dirty, missing, stale, illegal, clock-rejected, and flush-failed transition has no successful version increment.
+- [ ] 5.97 Test an old-version terminal repeat is stale before edge evaluation, while the same request using current terminal version reaches typed illegal-transition evaluation.
+- [ ] 5.98 Test complete validation precedence: Job ID, expected version, target status, outcome input, dirty target, not found, stale version, illegal edge, clock/order, then database failure.
 
 ## 6. PostgreSQL migration, constraint, transaction, and concurrency evidence
 
 - [ ] 6.1 Add an isolated/serial PostgreSQL migration fixture that restores the starting revision even on failure.
 - [ ] 6.2 Test upgrade from `20260814_0003` preserves seeded earlier tables and rows.
-- [ ] 6.3 Test reflected Job columns, types, nullability, defaults, primary key, and absence of unapproved columns.
+- [ ] 6.3 Test the exact fourteen reflected Job columns, types, nullability, defaults, primary key, and absence of unapproved columns.
 - [ ] 6.4 Test `ck_jobs_job_id_format` independently with accepted/rejected rows.
 - [ ] 6.5 Test `ck_jobs_kind_format` independently with accepted/rejected rows.
 - [ ] 6.6 Test `ck_jobs_workflow_step_format` independently with accepted/rejected rows.
 - [ ] 6.7 Test `ck_jobs_exclusive_owner` independently against all four truth-table rows.
 - [ ] 6.8 Test `ck_jobs_step_requires_run` independently with accepted/rejected rows.
 - [ ] 6.9 Test `ck_jobs_status` independently with all valid/invalid values.
-- [ ] 6.10 Test `ck_jobs_payload_object` independently with object and non-object JSONB.
-- [ ] 6.11 Test `ck_jobs_result_object` independently with null/object/non-object JSONB.
-- [ ] 6.12 Test `ck_jobs_lifecycle` independently for each valid status branch and incoherent field combination.
-- [ ] 6.13 Test `ck_jobs_timestamp_order` independently for every equality/order rule and reversed timestamp.
-- [ ] 6.14 Test exact user and MarketingRun FK targets plus both `ON DELETE CASCADE` actions.
-- [ ] 6.15 Test exact run/status index names, ascending column order, and absence of user/kind indexes.
-- [ ] 6.16 Test downgrade removes only Job indexes/table and returns exactly to `20260814_0003`.
-- [ ] 6.17 Test deterministic re-upgrade recreates the identical reflected contract.
-- [ ] 6.18 Test revision continuity and prove the new revision is the sole head independently.
-- [ ] 6.19 Test duplicate primary-key failure propagates with zero service commit/rollback.
-- [ ] 6.20 Test missing-owner FK race/failure propagates with zero service commit/rollback.
-- [ ] 6.21 Test check/driver flush failure propagates with rollback ownership left to the caller.
-- [ ] 6.22 Test Job plus MarketingRun/Artifact mutations commit atomically in one caller transaction.
-- [ ] 6.23 Test caller rollback removes/reverts flushed Job plus MarketingRun/Artifact mutations together.
-- [ ] 6.24 Test concurrent transition makes the waiter observe committed state and reject a now-illegal edge.
+- [ ] 6.10 Test `ck_jobs_version_nonnegative` independently with zero/positive accepted and negative rejected rows.
+- [ ] 6.11 Test `ck_jobs_payload_object` independently with object and non-object JSONB.
+- [ ] 6.12 Test `ck_jobs_result_object` independently with null/object/non-object JSONB.
+- [ ] 6.13 Test `ck_jobs_lifecycle` independently for each valid status branch and incoherent field combination.
+- [ ] 6.14 Test `ck_jobs_timestamp_order` independently for every equality/order rule and reversed timestamp.
+- [ ] 6.15 Test exact user and MarketingRun FK targets plus both `ON DELETE CASCADE` actions.
+- [ ] 6.16 Test exact run/status index names, ascending column order, and absence of user/kind indexes.
+- [ ] 6.17 Test downgrade removes only Job indexes/table and returns exactly to `20260814_0003`.
+- [ ] 6.18 Test deterministic re-upgrade recreates the identical reflected contract.
+- [ ] 6.19 Test revision continuity and prove the new revision is the sole head independently.
+- [ ] 6.20 Test duplicate primary-key failure propagates with zero service commit/rollback.
+- [ ] 6.21 Test missing-owner FK race/failure propagates with zero service commit/rollback.
+- [ ] 6.22 Test check/driver flush failure propagates with rollback ownership left to the caller.
+- [ ] 6.23 Test Job plus MarketingRun/Artifact mutations commit atomically in one caller transaction.
+- [ ] 6.24 Test caller rollback removes/reverts flushed Job plus MarketingRun/Artifact mutations together.
+- [ ] 6.25 Prove transition uses exact-primary-key `SELECT ... FOR UPDATE`, reloads persisted state, and compares version only after lock acquisition.
+- [ ] 6.26 Test two `pending/version=0 -> running` contenders with expected version `0`: exactly one commits version `1` and the waiter raises stale-version.
+- [ ] 6.27 Test success/failure contenders from `running/version=1`: exactly one commits its terminal outcome at version `2` and the waiter raises stale-version without overwriting it.
+- [ ] 6.28 Test adjacent same-snapshot commands when `pending -> succeeded` locks first: it raises illegal-transition and `pending -> running` can then succeed at version `1`.
+- [ ] 6.29 Test adjacent same-snapshot commands when `pending -> running` commits first: the waiter requesting succeeded with old version `0` raises stale-version.
+- [ ] 6.30 Prove across both adjacent-command lock orders that only the running command succeeds from the shared pending/version-0 observation.
+- [ ] 6.31 Test a newly observed sequential `running/version=1 -> succeeded` command succeeds at version `2`, establishing that distinct observed versions may succeed sequentially.
+- [ ] 6.32 Test repeated terminal request with old version is stale, while a request using the current terminal version is illegal and neither changes outcome/version.
+- [ ] 6.33 Add source evidence that optimistic version comparison supplements the row lock and uses no compare-and-swap SQL update or automatic retry.
 
 ## 7. Compatibility and isolation evidence
 

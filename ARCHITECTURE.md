@@ -142,8 +142,8 @@ OpenSpec change `add-durable-job-persistence` defines an additive `jobs` table a
 
 - Ownership is exclusive: MarketingRun-owned, direct-user-owned, or trusted-internal system. There is no public anonymous Job class. A workflow step is valid only for a run-owned Job.
 - Run-owned and direct-user-owned Jobs are operational aggregate children deleted with their owner through database/ORM cascade; they are not retained audit history and owner deletion never reclassifies work as system-owned.
-- Request identity/input is immutable through the supported persistence service, which deep-copies bounded JSON and accepts only caller-sanitized failure strings. Direct session writes remain unsupported rather than universally blocked.
-- The closed lifecycle is `pending -> running -> succeeded|failed`; retry, cancellation, timeout, delivery, and dead-letter states are not part of this foundation.
+- Request identity/input and ownership are immutable through the supported persistence service. Before transition SQL, tracked target immutable/version/owner-relationship, owner-collection, or deletion history is rejected without clearing caller state; ordinary untracked in-place JSON is replaced by the locked persisted row. The service deep-copies bounded input JSON and accepts only caller-sanitized failure strings. Direct session writes remain unsupported rather than universally blocked.
+- The closed lifecycle is `pending/version=0 -> running/version=1 -> succeeded|failed/version=2`. Every transition requires the caller's exact observed version under the row lock, so only one request based on a given version can succeed. Retry, cancellation, timeout, delivery, and dead-letter states are not part of this foundation.
 - One injected aware UTC clock owns creation/transition instants. Job mutations add/flush without refresh and may participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
 - PostgreSQL commit establishes durability. A persisted Job is inert: this contract introduces no publication, claim, polling, execution, Redis, worker, LLM/QC, API, or Telegram behavior.
 

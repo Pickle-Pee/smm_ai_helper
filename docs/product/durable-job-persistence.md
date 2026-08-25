@@ -27,11 +27,15 @@ Ownership is exclusive:
 
 A workflow step is valid only for a run-owned Job. A Job has no direct Module Registry ownership or execution binding. Direct-user/system listing is intentionally absent: an internal creator retains `job_id` and may perform lookup; future query surfaces require a separate reviewed change.
 
+The ORM contract is bidirectional and explicit: `Job.user <-> User.jobs` and `Job.marketing_run <-> MarketingRun.jobs`. The Job-side relationships are navigation-only after creation and do not cascade deletion to an owner. The owner-side collections use aggregate-child `all, delete-orphan` cascade with passive database deletes. Removing an owned Job from either collection deletes it; it never silently becomes system-owned.
+
 ## Supported-boundary immutability
 
-Identity, owners, workflow step, kind, payload, and creation time are immutable through supported Job persistence operations after creation. Input dictionaries are validated and deep-copied before database access, and each empty payload uses a distinct callable default.
+Identity, owners, workflow step, kind, payload, and creation time are immutable through supported Job persistence operations after creation. Version is service-managed and caller-read-only. Input dictionaries are validated and deep-copied before database access, and each empty payload uses a distinct callable default.
 
-Direct ORM/session assignment or in-place JSON mutation followed by a caller-controlled flush is unsupported and is not claimed to be universally prevented. The foundation introduces no `MutableDict`, database trigger, or repository-wide immutability framework. A supported transition reloads the locked PostgreSQL row without autoflush and writes only lifecycle fields.
+Before any transition SQL or lock, the service inspects already identity-mapped target state without autoflush. It rejects tracked changes to protected scalars or version, either Job-side owner relationship, identity-mapped owner collections involving the target, and pending target deletion with a typed dirty-mutation error that instructs the caller to roll back. Rejection performs no SQL, refresh, expiration, state restoration, lifecycle/version mutation, or explicit flush; unrelated dirty objects remain untouched and do not block the operation.
+
+Plain JSON uses no `MutableDict`. Whole-value payload reassignment or explicitly flagged history is tracked and rejected. Ordinary in-place top-level or nested dictionary mutation is not tracked; after the dirty-state gate passes, a supported transition reloads the locked PostgreSQL row with `populate_existing`, replacing that in-memory JSON before flushing only legal lifecycle/version fields. Direct ORM/session mutation followed by a caller-controlled flush remains unsupported and is not claimed to be universally prevented. The foundation introduces no database trigger or repository-wide immutability framework.
 
 ## Bounded JSON and persisted-error safety
 
@@ -53,16 +57,18 @@ pending -> running -> succeeded
                    \-> failed
 ```
 
-- `pending`: `updated_at = created_at`; no result, error, start, or completion time.
-- `running`: `updated_at = started_at >= created_at`; no result, error, or completion time.
-- `succeeded`: terminal; structured result and `updated_at = completed_at >= started_at` are required; error is prohibited.
-- `failed`: terminal; sanitized error and `updated_at = completed_at >= started_at` are required; result is prohibited.
+- `pending`, version `0`: `updated_at = created_at`; no result, error, start, or completion time.
+- `running`, version `1`: `updated_at = started_at >= created_at`; no result, error, or completion time.
+- `succeeded`, version `2`: terminal; structured result and `updated_at = completed_at >= started_at` are required; error is prohibited.
+- `failed`, version `2`: terminal; sanitized error and `updated_at = completed_at >= started_at` are required; result is prohibited.
 
-One injected aware UTC clock is called once per creation/legal transition. Same-state, skipped, backward, and terminal transitions are illegal. Retry, cancellation, timeout, dead-letter, delivery, and worker-lease states are not part of this vocabulary.
+One injected aware UTC clock is called once per creation/legal transition. The schema stores `version INTEGER NOT NULL` with application/server defaults `0` and `ck_jobs_version_nonnegative`. Each successful transition increments the persisted version exactly once. Validation, dirty, missing, stale, illegal, and clock/order rejection does not mutate version; a database flush failure cannot make its candidate increment durable and requires caller rollback. Same-state, skipped, backward, and terminal transitions are illegal. Retry, cancellation, timeout, dead-letter, delivery, and worker-lease states are not part of this vocabulary.
 
 ## Persistence and transaction boundary
 
-The planned internal service creates, validates lookup identifiers, lists run Jobs deterministically, and performs row-locked legal transitions using exact validation precedence. Mutations add/flush once and never refresh, commit, or roll back. The caller owns rollback and may atomically combine Job, MarketingRun, and MarketingArtifact changes.
+The planned internal service creates, validates lookup identifiers, lists run Jobs deterministically, and performs row-locked legal transitions using exact validation precedence. Every transition requires the caller's exact observed `expected_version`; after locking and reloading, a mismatch raises a typed stale-version error before lifecycle legality, clock access, mutation, or flush. Thus two commands based on the same observed version cannot both succeed, while a later command based on a newly observed committed version may succeed sequentially. The row lock remains the transaction-serialization mechanism; this design does not replace it with compare-and-swap SQL.
+
+Mutations add/flush once and never refresh, commit, or roll back. The caller owns rollback and may atomically combine Job, MarketingRun, and MarketingArtifact changes.
 
 PostgreSQL commit is the durability boundary. A committed Job is not proof that work was published, claimed, or executed. Cross-system publication/recovery and semantic deduplication require later queue/reliability changes; this foundation introduces no outbox.
 

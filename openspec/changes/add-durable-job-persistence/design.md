@@ -79,6 +79,7 @@ The table name is `jobs`. `JobStatus` is a Python `str, Enum` with exactly `pend
 | `workflow_step` | `VARCHAR(64)` / exact `str | None` | yes | `None` | none | immutable after creation |
 | `kind` | `VARCHAR(64)` / exact `str` | no | required | none | immutable after creation |
 | `status` | `VARCHAR(32)` / exact `JobStatus` | no | `pending` | `'pending'` | legal transition only |
+| `version` | `INTEGER` / exact `int` | no | `0` | `0` | service-managed; incremented once per successful transition |
 | `payload_json` | `JSONB` / exact `dict[str, JsonValue]` | no | callable `default=dict` | `'{}'::jsonb` | immutable after creation |
 | `result_json` | `JSONB` / exact `dict[str, JsonValue] | None` | yes | `None` | none | written once on success |
 | `error` | `VARCHAR(4000)` / exact `str | None` | yes | `None` | none | written once on failure |
@@ -96,23 +97,37 @@ Foreign keys are exact:
 - `user_id -> users.id ON DELETE CASCADE`;
 - `marketing_run_id -> marketing_runs.run_id ON DELETE CASCADE`.
 
-Both `User.jobs` and `MarketingRun.jobs` use `back_populates`, `cascade="all, delete-orphan"`, and `passive_deletes=True`. The database foreign key is the authoritative unloaded-collection cascade. For a loaded collection, SQLAlchemy may issue child deletes because of the ORM delete cascade; for an unloaded collection it relies on PostgreSQL. Neither path issues owner-nullifying updates, and both paths end with the same Job rows deleted. Removing a child from either loaded aggregate collection also deletes it rather than converting it to system ownership. Tests cover loaded and unloaded parent deletion independently.
+The four relationship attributes are exact:
+
+| Attribute | Direction / FK | `back_populates` | ORM cascade | `passive_deletes` | Supported behavior |
+| --- | --- | --- | --- | --- | --- |
+| `Job.user` | optional many-to-one; child owns nullable `user_id` FK | `"jobs"` | default `save-update, merge`; no delete/delete-orphan | default `False`; the child side does not own parent deletion | read/navigation for a direct-user Job; assignment is unsupported and is rejected as dirty target history before a supported transition |
+| `User.jobs` | one-to-many direct-user aggregate collection over child nullable `user_id` FK | `"user"` | `all, delete-orphan` | `True` | read/navigation and owner deletion; append/remove/reassignment is unsupported after Job creation and target-specific pending history is rejected before transition SQL |
+| `Job.marketing_run` | optional many-to-one; child owns nullable `marketing_run_id` FK | `"jobs"` | default `save-update, merge`; no delete/delete-orphan | default `False`; the child side does not own parent deletion | read/navigation for a run-owned Job; assignment is unsupported and is rejected as dirty target history before a supported transition |
+| `MarketingRun.jobs` | one-to-many run aggregate collection over child nullable `marketing_run_id` FK | `"marketing_run"` | `all, delete-orphan` | `True` | read/navigation and owner deletion; append/remove/reassignment is unsupported after Job creation and target-specific pending history is rejected before transition SQL |
+
+The database foreign key is the authoritative unloaded-collection cascade. For a loaded parent collection, SQLAlchemy may issue child deletes because of the ORM delete cascade; for an unloaded collection it relies on PostgreSQL. Neither path issues owner-nullifying updates, and both paths end with the same Job rows deleted. Removing a child from either loaded aggregate collection is unsupported application mutation and, if explicitly flushed outside the service, uses delete-orphan rather than converting it to system ownership. Tests cover loaded and unloaded parent deletion independently. A system Job has `Job.user is None`, `Job.marketing_run is None`, and no membership in either owner collection.
 
 There is no `MutableDict` wrapper. `default=dict` produces a distinct empty object for every Job. The accepted input is defensively deep-copied before the first database await, so later mutation of the caller's source object cannot change the Job.
 
-### 3. Supported-boundary immutability
+### 3. Supported-boundary immutability and target-specific dirty rejection
 
-`job_id`, owner references, `workflow_step`, `kind`, `payload_json`, and `created_at` are immutable **through `JobPersistenceService` after creation**. The service exposes no general update method. `transition_job` changes only `status`, `result_json`, `error`, `updated_at`, `started_at`, and `completed_at` as the legal edge requires.
+`job_id`, owner references, `workflow_step`, `kind`, `payload_json`, and `created_at` are immutable **through `JobPersistenceService` after creation**. `version` is service-managed and read-only to callers. The service exposes no general update method. `transition_job` changes only `status`, `version`, `result_json`, `error`, `updated_at`, `started_at`, and `completed_at` as the legal edge requires.
 
-The boundary handles mutation cases exactly:
+Before any transition query, lock, autoflush, refresh, clock call, or lifecycle mutation, the service runs a synchronous target-specific dirty check inside `db_session.no_autoflush`:
 
-- scalar reassignment and complete payload reassignment on a returned ORM object are unsupported direct-session mutation;
-- top-level and nested in-place payload mutation are unsupported and are not made trackable with `MutableDict`;
-- caller mutation of the original dictionary after `create_job` cannot affect the Job because validation/deep-copy completes before owner lookup or any other await;
-- before a supported transition, the lock query runs with autoflush disabled and `populate_existing` enabled, reloading the row from PostgreSQL and discarding unsupported in-session mutations of immutable fields;
-- the transition then mutates only lifecycle fields and performs its one explicit flush.
+1. Build the SQLAlchemy identity key for the already validated `Job` primary key and resolve it directly from the current session identity map without issuing SQL.
+2. If the target Job is present, inspect its SQLAlchemy state without loading attributes. Reject `history.has_changes()` for `job_id`, `user_id`, `marketing_run_id`, `workflow_step`, `kind`, `payload_json`, `created_at`, or caller-written `version`.
+3. Reject pending history on `Job.user` or `Job.marketing_run`.
+4. Inspect only already identity-mapped `User` and `MarketingRun` objects. Without loading their `jobs` collections, inspect collection history and reject when an added or deleted element is the target Job instance or has the validated target `job_id`. This covers append, removal, reassignment, and conflicting cross-owner state while ignoring unrelated collection changes.
+5. Reject when the target Job is present in the session's pending-deletion set.
+6. Raise `DirtyJobMutationError` with the stable instruction that the caller must roll back. Do not query, lock, autoflush, flush, refresh, expire, restore, mutate, commit, or roll back any caller state.
 
-Tests prove each mutation form cannot be persisted *through a supported service operation*. Direct assignment followed by a caller-controlled `session.flush()` or direct SQL is explicitly outside the repository contract and may persist; this foundation does not claim universal ORM/database immutability. Tests document that unsupported behavior so callers do not rely on accidental JSON tracking semantics.
+Only after this check passes does the service select and lock the target. `populate_existing` is retained to obtain the current persisted lifecycle/version and to replace ordinary untracked in-place JSON changes, but it is never claimed to clear tracked scalar or bidirectional relationship history safely.
+
+Plain JSONB dictionaries have no `MutableDict`. Complete `payload_json` reassignment and explicit SQLAlchemy modified history are detectable and rejected. Ordinary top-level or nested in-place dictionary mutation is not tracked by SQLAlchemy and therefore is not part of the dirty-rejection guarantee; after the target passes the tracked-history check, the no-autoflush `populate_existing` load replaces that untracked in-memory JSON with the persisted value before the lifecycle flush. Tests distinguish these two behaviors and prove neither form persists through a supported transition.
+
+Caller mutation of the original dictionary after `create_job` cannot affect the Job because validation/deep-copy completes before owner lookup or any other await. Direct assignment followed by a caller-controlled `session.flush()` or direct SQL is explicitly outside the repository contract and may persist. The dirty check is not a global session-cleanliness rule: unrelated dirty objects and unrelated owner-collection history remain untouched and do not block the target transition.
 
 ### 4. Exact JSON domain, serialization, and data safety
 
@@ -164,6 +179,7 @@ The migration and model use the following exact predicates. Python validation ow
 | `ck_jobs_exclusive_owner` | `marketing_run_id`, `user_id` | `marketing_run_id IS NULL OR user_id IS NULL` | exact ownership truth table |
 | `ck_jobs_step_requires_run` | `workflow_step`, `marketing_run_id` | `workflow_step IS NULL OR marketing_run_id IS NOT NULL` | owner/step coherence validation |
 | `ck_jobs_status` | `status` | `status IN ('pending', 'running', 'succeeded', 'failed')` | exact `JobStatus` validation |
+| `ck_jobs_version_nonnegative` | `version` | `version >= 0` | exact built-in expected-version validation and service-owned increment |
 | `ck_jobs_payload_object` | `payload_json` | `jsonb_typeof(payload_json) = 'object'` | exact recursive JSON validation |
 | `ck_jobs_result_object` | `result_json` | `result_json IS NULL OR jsonb_typeof(result_json) = 'object'` | exact recursive JSON validation |
 | `ck_jobs_lifecycle` | status/outcome/lifecycle fields | predicate below | final-coherence validation before flush |
@@ -233,14 +249,16 @@ pending -> running -> succeeded
                    \-> failed
 ```
 
-| Status | Legal predecessor | Legal successor | Required | Prohibited | Timestamp equalities |
-| --- | --- | --- | --- | --- | --- |
-| `pending` | creation only | `running` | payload, created/updated | started/completed/result/error | `updated_at = created_at` |
-| `running` | `pending` | `succeeded`, `failed` | payload, started, created/updated | completed/result/error | `updated_at = started_at >= created_at` |
-| `succeeded` | `running` | none | payload, started/completed, result | error | `updated_at = completed_at >= started_at >= created_at` |
-| `failed` | `running` | none | payload, started/completed, sanitized error | result | `updated_at = completed_at >= started_at >= created_at` |
+| Status | Legal predecessor | Legal successor | Service-created version | Required | Prohibited | Timestamp equalities |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pending` | creation only | `running` | `0` | payload, created/updated | started/completed/result/error | `updated_at = created_at` |
+| `running` | `pending` | `succeeded`, `failed` | `1` | payload, started, created/updated | completed/result/error | `updated_at = started_at >= created_at` |
+| `succeeded` | `running` | none | `2` | payload, started/completed, result | error | `updated_at = completed_at >= started_at >= created_at` |
+| `failed` | `running` | none | `2` | payload, started/completed, sanitized error | result | `updated_at = completed_at >= started_at >= created_at` |
 
 Same-state, skipped, backward, and terminal transitions are illegal. Failure is terminal and representable without retries. There is no `cancelled`, `retrying`, `scheduled`, `timed_out`, `dead_lettered`, or delivery state.
+
+`version` is a PostgreSQL `INTEGER` in the exact supported range `0..2147483647`. Creation assigns `0`; callers cannot supply a creation version or write it through any supported method. Every successful legal lifecycle transition increments the locked value exactly once, so service-created rows follow `pending/0`, `running/1`, and terminal/2. Validation requires `expected_version` to be an exact built-in integer in the same range and rejects booleans. Validation, dirty, missing, stale, illegal, and clock/order rejection does not mutate version. A database flush failure cannot make the candidate increment durable and leaves rollback to the caller; the service does not restore failed-session state. No wraparound or reset behavior exists; the two-edge supported lifecycle cannot exhaust the PostgreSQL range, while directly modified out-of-contract rows remain unsupported.
 
 `JobPersistenceService` receives an injected callable UTC clock; production defaults to an exact aware `datetime.now(timezone.utc)` provider. The service requires the returned value to be an exact aware `datetime`, normalizes it to UTC while preserving microseconds, and calls it exactly once per successful creation or legal transition.
 
@@ -274,6 +292,7 @@ list_jobs_for_run(
 transition_job(
     db_session: AsyncSession,
     job_id: str,
+    expected_version: int,
     to_status: JobStatus,
     *,
     result_json: dict[str, JsonValue] | None = None,
@@ -281,16 +300,18 @@ transition_job(
 ) -> Job
 ```
 
-No method accepts `created_at`, `occurred_at`, an exception object, a user/system list filter, pagination, or a generic field update.
+No method accepts a creation `version`, `created_at`, `occurred_at`, an exception object, a user/system list filter, pagination, or a generic field update. `expected_version` is mandatory and positional; callers cannot omit it.
 
 The exact error taxonomy is:
 
 - `JobPersistenceError`: stable safe base domain error;
-- `InvalidJobDataError`: invalid identifier/key/owner/error/clock input;
+- `InvalidJobDataError(JobPersistenceError)`: invalid identifier/key/owner/expected-version/error/clock input;
 - `InvalidJobJsonError(InvalidJobDataError)`: invalid JSON type, cycle, depth, Unicode, integer, finite-number, or serialization input;
 - `JobJsonTooLargeError(InvalidJobDataError)`: payload/result canonical UTF-8 size exceeded;
-- `JobNotFoundError`: a valid transition target is absent;
-- `IllegalJobTransitionError`: the locked current state cannot legally precede the requested target or target/outcome combination is illegal.
+- `DirtyJobMutationError(JobPersistenceError)`: the target Job has pending tracked immutable/version/owner-relationship/owner-collection state or pending deletion; its stable message instructs the caller to roll back;
+- `JobNotFoundError(JobPersistenceError)`: a valid transition target is absent;
+- `StaleJobVersionError(JobPersistenceError)`: the locked persisted `version` differs from mandatory `expected_version`;
+- `IllegalJobTransitionError(JobPersistenceError)`: the locked current state cannot legally precede the requested target or target/outcome combination is illegal.
 
 Messages never include raw payload, result, error, credential, or provider values. Duplicate primary-key, foreign-key race, check-constraint, and other SQLAlchemy/database failures are not translated; the “database error translation” step is explicitly pass-through so the original exception reaches the caller for rollback.
 
@@ -301,7 +322,7 @@ Messages never include raw payload, result, error, credential, or provider value
 3. Validate/canonical-measure/deep-copy payload JSON before any await.
 4. With autoflush disabled, query the specified User or MarketingRun by primary key; missing owner raises `InvalidJobDataError`. System ownership performs no owner query. This existence check is not authorization and the foreign key remains authoritative against races.
 5. Call the injected clock once and validate/normalize it.
-6. Construct exact `pending` state with `created_at = updated_at` and no lifecycle outcome fields.
+6. Construct exact `pending` state with `version = 0`, `created_at = updated_at`, and no lifecycle outcome fields.
 7. Add the Job.
 8. Flush exactly once.
 9. Pass any database exception through unchanged; do not roll back.
@@ -328,19 +349,23 @@ There is intentionally no run existence pre-query, limit, pagination, refresh, d
 #### `transition_job` total order
 
 1. Validate Job-ID syntax.
-2. Require an exact `JobStatus` target value; raw strings/aliases are invalid.
-3. Validate target/outcome presence rules and any supplied result/error type, JSON, canonical size, Unicode, and sanitization properties before session access. Pure input errors take precedence over missing Job/state errors.
-4. With autoflush disabled, select the exact Job row by primary key using `FOR UPDATE` and `populate_existing`, discarding unsupported in-session immutable-field changes.
-5. Raise `JobNotFoundError` if the valid target is absent.
-6. Evaluate the locked current state and raise `IllegalJobTransitionError` for a same-state, skipped, backward, terminal, or otherwise illegal edge before clock access or mutation.
-7. Call the injected clock once; validate/normalize it and validate ordering against the locked row.
-8. Apply only the target status, allowed outcome, and exact lifecycle timestamp fields.
-9. Validate the complete final lifecycle/timestamp coherence in memory.
-10. Flush exactly once.
-11. Pass any database exception through unchanged; do not roll back.
-12. Return the Job without refresh.
+2. Validate `expected_version` as an exact built-in non-boolean integer in `0..2147483647`.
+3. Require an exact `JobStatus` target value; raw strings/aliases are invalid.
+4. Validate target/outcome presence rules and any supplied result/error type, JSON, canonical size, Unicode, and sanitization properties without session access.
+5. Inside `db_session.no_autoflush`, run the target-specific identity-map/state/history/deletion check from Decision 3. `DirtyJobMutationError` occurs before SQL and leaves all caller state unchanged.
+6. Still with autoflush disabled, select the exact Job row by primary key using `FOR UPDATE` and `populate_existing`. At this point no tracked target immutable/version/relationship history exists; ordinary untracked JSON state is replaced by the row.
+7. Raise `JobNotFoundError` if the valid target is absent.
+8. Compare locked `job.version` with `expected_version`.
+9. Raise `StaleJobVersionError` on mismatch before lifecycle legality, clock access, mutation, or flush.
+10. Evaluate the locked current state and raise `IllegalJobTransitionError` for a same-state, skipped, backward, terminal, or otherwise illegal edge.
+11. Call the injected clock once; validate/normalize it and validate ordering against the locked row.
+12. Apply only the target status, allowed outcome, and exact lifecycle timestamp fields.
+13. Set `version = version + 1` exactly once.
+14. Validate the complete final lifecycle/version/timestamp coherence in memory.
+15. Flush exactly once.
+16. Return the Job without refresh. Any database exception from the flush passes through unchanged; the service does not roll back.
 
-For multiple invalid conditions, precedence is: malformed pure input -> valid-target not found -> illegal locked transition -> invalid clock/order -> database failure. No failed operation mutates or explicitly flushes a lifecycle update.
+For multiple invalid conditions, precedence is: malformed Job ID -> malformed `expected_version` -> malformed target status -> malformed result/error/JSON/sanitization input -> dirty target state -> valid-target not found -> stale locked version -> illegal locked transition -> invalid clock/order -> database failure. Dirty rejection wins over not-found only when the requested target is already represented by dirty identity-mapped state. No rejected validation, dirty, missing, stale, illegal, or clock/order operation mutates lifecycle/version fields or explicitly flushes.
 
 ### 9. Transaction and concurrency boundary
 
@@ -355,7 +380,17 @@ caller owns transaction and rollback
 
 A future caller can use one `AsyncSession` transaction for Job creation/transition plus MarketingRun/MarketingArtifact mutations. Flush establishes database validity but not durability. PostgreSQL commit is the durability boundary. If any flush or later operation fails, the exception propagates and the caller rolls back the entire unit.
 
-The row lock serializes transitions only. It is held until caller commit/rollback. A waiting transaction evaluates the newly committed state after lock acquisition and applies only a still-legal transition. A missing row acquires no row lock. Lock timeout/deadlock policy remains later caller/worker infrastructure work; this is not a claim, lease, distributed lock, retry, or recovery mechanism.
+The row lock is held until caller commit/rollback, and optimistic version comparison occurs only after that lock is acquired. The guarantee is exact: **two requests based on the same observed version cannot both succeed**. `expected_version` does not replace `SELECT FOR UPDATE`, and this foundation does not use compare-and-swap SQL updates.
+
+Concurrency cases are exact:
+
+- **Same-edge contention:** two callers observe `pending/version=0` and both request `running` with `expected_version=0`. Exactly one commits `running/version=1`; the waiter locks afterward and raises `StaleJobVersionError`.
+- **Competing terminal outcomes:** two callers observe `running/version=1`; one requests success and one failure with `expected_version=1`. Exactly one commits its terminal state at `version=2`; the waiter raises `StaleJobVersionError` without changing outcome fields.
+- **Concurrent adjacent commands from one snapshot:** both observe `pending/version=0`; one requests running and one requests succeeded with `expected_version=0`. If the succeeded request locks first, it raises `IllegalJobTransitionError`; if it locks after the running commit, it raises `StaleJobVersionError`. Only the running request succeeds.
+- **Valid sequential adjacent transition:** a caller observes the committed `running/version=1` state and requests succeeded with `expected_version=1`; it succeeds at `version=2`.
+- **Repeated terminal request:** a request based on old `version=1` after a terminal transition raises `StaleJobVersionError` before terminal-edge evaluation and leaves version/outcome unchanged. A request using current `version=2` reaches lifecycle evaluation and is an illegal terminal transition.
+
+Calls based on different successfully observed versions are sequentially valid and may both succeed. The design does not claim that all overlapping calls universally produce a failure. A missing row acquires no row lock. Lock timeout/deadlock policy remains later caller/worker infrastructure work; this is not a claim, lease, distributed lock, retry, or recovery mechanism.
 
 A committed `pending` Job is durable but inert. This design provides no atomicity with future Redis publication, delivery guarantee, outbox, or execution guarantee.
 
@@ -373,7 +408,7 @@ Plan one new Alembic revision, proposed ID `20260825_0004`, with exact parent `2
 
 Upgrade operations, in order:
 
-1. create `jobs` with exactly the approved columns, primary key, two `ON DELETE CASCADE` foreign keys, server defaults, and ten named checks;
+1. create `jobs` with exactly fourteen approved columns, primary key, two `ON DELETE CASCADE` foreign keys, server defaults, and eleven named checks including `ck_jobs_version_nonnegative`;
 2. create `ix_jobs_run_created_job`;
 3. create `ix_jobs_status_created_job`.
 
@@ -400,6 +435,8 @@ Future implementation is expected to touch only `app/models.py`, `app/services/j
 - [Owner deletion removes Job history] -> Jobs are explicitly operational aggregate records, not an audit log; no deletion reclassifies them.
 - [Trusted code misuses system ownership] -> no public switch exists; every future producer requires reviewed authorization/wiring.
 - [Direct session writes bypass supported immutability/limits] -> document them as unsupported, reload before supported transitions, and avoid claiming universal enforcement.
+- [Bidirectional relationship history could reapply an owner FK during transition flush] -> reject target-specific tracked immutable/version/relationship/collection/deletion state before SQL and never clear caller state.
+- [Concurrent commands from one observed state could both appear legal after serialization] -> require `expected_version` under the row lock so only one request per observed version succeeds.
 - [Bounded JSON rejects future large real outputs] -> store references/artifacts instead; changing limits requires evidence and a reviewed contract update.
 - [Sanitized errors omit debugging detail] -> diagnostics belong in secured observability, not durable user/work records.
 - [A committed pending Job is mistaken for enqueued work] -> describe it as durable-but-inert until queue integration.
@@ -410,7 +447,7 @@ Future implementation is expected to touch only `app/models.py`, `app/services/j
 
 1. Re-check the clean branch, single Alembic head, and accepted artifacts.
 2. Add the exact model/status/relationships and separately test every constraint/default/immutability rule.
-3. Generate one migration from the then-current sole head and reconcile it to the exact two-FK/two-index/ten-check contract.
+3. Generate one migration from the then-current sole head and reconcile it to the exact fourteen-column/two-FK/two-index/eleven-check contract.
 4. Add the persistence service, injected clock, validators, lifecycle, transaction, and concurrency evidence without wiring a caller.
 5. Verify isolated PostgreSQL upgrade, downgrade, re-upgrade, head continuity, compatibility/isolation, full tests, compilation, and strict OpenSpec validation.
 6. Deploy the additive migration before any later trusted producer is authorized to create Jobs.

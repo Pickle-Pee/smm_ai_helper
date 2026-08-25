@@ -13,6 +13,7 @@ The system SHALL persist each Job as one durable execution request with a stable
 - **GIVEN** valid input and an authorized ownership association
 - **WHEN** a Job is created through the supported persistence boundary
 - **THEN** it SHALL begin in `pending`
+- **AND** SHALL begin at version `0`
 - **AND** SHALL have one creation instant assigned to both creation and update timestamps
 - **AND** SHALL have no start time, completion time, result, or error
 
@@ -57,6 +58,8 @@ A Job SHALL be exactly one MarketingRun-owned aggregate child, one direct-user-o
 
 Run-owned and direct-user-owned Jobs SHALL be operational aggregate records rather than retained audit history. Deleting a MarketingRun SHALL delete its run-owned Jobs, and deleting a User SHALL delete its direct-user Jobs. Owner deletion SHALL NOT null an owner reference or reclassify a Job as system work. Loaded and unloaded ORM collections SHALL produce the same final database result without owner-nullifying updates.
 
+The exact ORM attributes SHALL be `Job.user` (optional many-to-one through child-owned nullable `user_id`, `back_populates="jobs"`, default `save-update, merge` cascade, `passive_deletes=False`), `User.jobs` (one-to-many, `back_populates="user"`, `all, delete-orphan`, `passive_deletes=True`), `Job.marketing_run` (optional many-to-one through child-owned nullable `marketing_run_id`, `back_populates="jobs"`, default `save-update, merge` cascade, `passive_deletes=False`), and `MarketingRun.jobs` (one-to-many, `back_populates="marketing_run"`, `all, delete-orphan`, `passive_deletes=True`). Job-side relationships SHALL support read/navigation but not post-create assignment through the service. Owner collections SHALL support read/navigation and aggregate deletion; post-create append/remove/reassignment is unsupported application mutation and pending target history SHALL be rejected by transition. A system Job SHALL have both Job-side relationships absent and no owner-collection membership.
+
 #### Scenario: Delete MarketingRun
 
 - **GIVEN** a MarketingRun with owned Jobs and MarketingArtifacts
@@ -78,9 +81,9 @@ Run-owned and direct-user-owned Jobs SHALL be operational aggregate records rath
 - **THEN** PostgreSQL `ON DELETE CASCADE` SHALL delete the Jobs
 - **AND** the final rows SHALL match deletion with a loaded collection
 
-### Requirement: Keep request identity and input immutable through the supported boundary
+### Requirement: Protect immutable and owner state through the supported boundary
 
-After creation, the supported persistence operations SHALL expose no way to change Job identity, owner references, workflow step, kind, payload, or creation time. Lifecycle transition SHALL reload the locked persisted row before mutation and SHALL update only status, outcome, and lifecycle timestamps. Direct SQLAlchemy/session mutation outside the persistence boundary SHALL be unsupported and SHALL NOT be described as universally prevented.
+After creation, the supported persistence operations SHALL expose no way to change Job identity, owner references, workflow step, kind, payload, or creation time. Version SHALL be service-managed and read-only to callers. Before transition database access, the boundary SHALL reject pending tracked changes to target immutable/version fields, target owner relationships, identity-mapped owner collections involving the target, or target deletion. Rejection SHALL occur without SQL, autoflush, lock, refresh, caller-state clearing, lifecycle mutation, or explicit flush and SHALL instruct the caller to roll back. Unrelated dirty state SHALL remain untouched and SHALL NOT block the target operation.
 
 #### Scenario: Caller mutates original payload
 
@@ -88,12 +91,33 @@ After creation, the supported persistence operations SHALL expose no way to chan
 - **WHEN** the caller mutates its original dictionary after the creation call
 - **THEN** the Job payload SHALL remain the defensively copied accepted value
 
-#### Scenario: Unsupported returned-object mutation precedes transition
+#### Scenario: Reject tracked immutable mutation before transition SQL
 
-- **GIVEN** a caller directly reassigns or mutates immutable fields on a returned ORM Job
-- **WHEN** a supported lifecycle transition subsequently locks that Job
-- **THEN** the transition SHALL reload the persisted immutable fields without autoflush
-- **AND** SHALL persist only the legal lifecycle mutation
+- **GIVEN** a caller has reassigned a target Job immutable field, payload object, or service-managed version in the supplied session
+- **WHEN** a supported transition is requested for that target
+- **THEN** `DirtyJobMutationError` SHALL be raised before SQL, lock, clock, mutation, or flush
+- **AND** the boundary SHALL NOT clear or restore caller state
+
+#### Scenario: Reject owner relationship or collection mutation
+
+- **GIVEN** pending target-specific history reassigns either owner relationship, appends or removes the target through either owner collection, creates conflicting ownership, or marks the target for deletion
+- **WHEN** transition is requested for that target
+- **THEN** `DirtyJobMutationError` SHALL be raised before database access
+- **AND** the caller SHALL remain responsible for rollback
+
+#### Scenario: Reload untracked in-place payload mutation
+
+- **GIVEN** a caller made an ordinary top-level or nested in-place payload mutation that the unwrapped JSON mapping does not track
+- **WHEN** target-specific tracked-history checks pass and transition locks the Job
+- **THEN** the persisted payload SHALL replace the untracked in-memory value
+- **AND** only the legal lifecycle/version mutation SHALL be flushed
+
+#### Scenario: Ignore unrelated dirty state
+
+- **GIVEN** the supplied session contains dirty objects or owner-collection history unrelated to the target Job
+- **WHEN** transition is requested for a clean target
+- **THEN** target-specific dirty validation SHALL NOT reject it
+- **AND** SHALL NOT clear, expire, restore, or mutate the unrelated state
 
 #### Scenario: Direct session mutation remains unsupported
 
@@ -164,23 +188,26 @@ The only states SHALL be `pending`, `running`, `succeeded`, and `failed`. The on
 
 #### Scenario: Start pending Job
 
-- **GIVEN** a `pending` Job
-- **WHEN** it transitions to `running`
+- **GIVEN** a `pending` Job and its current observed version
+- **WHEN** it transitions to `running` using that expected version
 - **THEN** one transition instant SHALL be assigned to both start and update timestamps
+- **AND** version SHALL increment exactly once
 - **AND** result, error, and completion time SHALL remain absent
 
 #### Scenario: Complete running Job successfully
 
-- **GIVEN** a `running` Job and a valid bounded result object
-- **WHEN** it transitions to `succeeded`
+- **GIVEN** a `running` Job, its current observed version, and a valid bounded result object
+- **WHEN** it transitions to `succeeded` using that expected version
 - **THEN** one transition instant SHALL be assigned to both completion and update timestamps
+- **AND** version SHALL increment exactly once
 - **AND** the copied result SHALL be persisted and error SHALL remain absent
 
 #### Scenario: Complete running Job with failure
 
-- **GIVEN** a `running` Job and a valid caller-sanitized error
-- **WHEN** it transitions to `failed`
+- **GIVEN** a `running` Job, its current observed version, and a valid caller-sanitized error
+- **WHEN** it transitions to `failed` using that expected version
 - **THEN** one transition instant SHALL be assigned to both completion and update timestamps
+- **AND** version SHALL increment exactly once
 - **AND** the error SHALL be persisted and result SHALL remain absent
 
 #### Scenario: Reject illegal transition
@@ -188,7 +215,30 @@ The only states SHALL be `pending`, `running`, `succeeded`, and `failed`. The on
 - **GIVEN** a Job whose locked current state cannot legally precede the requested state
 - **WHEN** transition is requested
 - **THEN** a typed illegal-transition error SHALL be raised
-- **AND** no clock call, lifecycle mutation, or explicit flush SHALL occur
+- **AND** no clock call, lifecycle/version mutation, or explicit flush SHALL occur
+
+### Requirement: Protect transitions with a persisted optimistic version
+
+Each Job SHALL store `version` as PostgreSQL `INTEGER NOT NULL` with application default `0`, server default `0`, and named check `ck_jobs_version_nonnegative` enforcing `version >= 0`. Creation SHALL assign version `0`. A successful lifecycle transition SHALL require the caller's exact observed version, compare it after row locking, and increment the persisted version exactly once. Expected version SHALL be a mandatory exact built-in non-boolean integer in `0..2147483647`; invalid input SHALL be rejected before database access. A mismatch SHALL raise `StaleJobVersionError` before lifecycle legality, clock access, mutation, or flush. Validation, dirty, missing, stale, illegal, and clock/order rejection SHALL NOT mutate version. A database flush failure SHALL NOT make the candidate increment durable and SHALL leave rollback/state recovery to the caller. No wraparound or reset behavior SHALL be supported.
+
+#### Scenario: Reject stale observed version
+
+- **GIVEN** the locked Job version differs from the caller's valid expected version
+- **WHEN** transition is requested
+- **THEN** `StaleJobVersionError` SHALL be raised before lifecycle-edge evaluation
+- **AND** status, outcome, timestamps, and version SHALL remain unchanged
+
+#### Scenario: Reject malformed expected version
+
+- **WHEN** supplied expected version is boolean, negative, above `2147483647`, a subclass, or a non-integer
+- **THEN** a typed invalid-data error SHALL be raised before dirty-state inspection or database access
+
+#### Scenario: Increment once on success
+
+- **GIVEN** the locked Job version equals the valid expected version and the lifecycle edge is legal
+- **WHEN** transition succeeds
+- **THEN** version SHALL equal its prior value plus one
+- **AND** no other version write SHALL occur
 
 ### Requirement: Use deterministic UTC lifecycle timestamps
 
@@ -213,9 +263,9 @@ The persistence boundary SHALL own one injected/testable UTC clock. Creation SHA
 
 ### Requirement: Provide deterministic internal persistence operations
 
-The internal boundary SHALL support creation, validated lookup by Job identifier, deterministic unbounded listing for one MarketingRun, and lifecycle transition. It SHALL not support direct-user/system listing, pagination, generic filtering, or generic field mutation. Creators SHALL retain returned Job identifiers; future query surfaces require a separate reviewed change.
+The internal boundary SHALL support creation, validated lookup by Job identifier, deterministic unbounded listing for one MarketingRun, and lifecycle transition requiring an observed expected version. It SHALL not support direct-user/system listing, pagination, generic filtering, generic field mutation, or caller-written version. Creators SHALL retain returned Job identifiers; future query surfaces require a separate reviewed change.
 
-Pure input validation SHALL precede database access. For transition, valid-target absence SHALL precede locked-state legality, which SHALL precede clock/order validation and database flush errors. Mutation methods SHALL return without refresh; read methods SHALL not flush or refresh.
+Pure Job-ID, expected-version, target-status, and result/error validation SHALL precede target-specific dirty inspection and database access. Dirty target state SHALL precede valid-target absence; absence SHALL precede stale-version comparison; stale version SHALL precede locked-state legality; legality SHALL precede clock/order validation and database flush errors. Mutation methods SHALL return without refresh; read methods SHALL not flush or refresh.
 
 #### Scenario: Load malformed Job identifier
 
@@ -248,7 +298,7 @@ Pure input validation SHALL precede database access. For transition, valid-targe
 
 ### Requirement: Preserve caller-owned transactions and serialize transitions
 
-Job mutations SHALL add or flush within the supplied session and SHALL NOT commit, roll back, or refresh independently. Lifecycle transition SHALL select exactly one Job by primary key using a row-level lock, autoflush disabled, and persisted-row reload; current state SHALL be evaluated only after the lock is acquired. Database failures SHALL propagate unchanged for caller-owned rollback.
+Job mutations SHALL add or flush within the supplied session and SHALL NOT commit, roll back, or refresh independently. Lifecycle transition SHALL reject target-specific dirty state before SQL, then select exactly one Job by primary key using a row-level lock, autoflush disabled, and persisted-row reload. It SHALL compare the locked version before evaluating current lifecycle state. Database failures SHALL propagate unchanged for caller-owned rollback.
 
 #### Scenario: Create without autonomous transaction ownership
 
@@ -268,16 +318,43 @@ Job mutations SHALL add or flush within the supplied session and SHALL NOT commi
 - **WHEN** the caller rolls back
 - **THEN** no mutation from that transaction SHALL remain durable
 
-#### Scenario: Concurrent transition
+#### Scenario: Same-edge contention
 
-- **GIVEN** two transactions attempt to transition the same Job
-- **WHEN** the first locks and commits a legal edge
-- **THEN** the second SHALL evaluate the newly committed state after acquiring the lock
-- **AND** SHALL apply only a transition that remains legal
+- **GIVEN** two callers observed `pending` at version `0`
+- **WHEN** both request `running` with expected version `0`
+- **THEN** exactly one SHALL succeed at version `1`
+- **AND** the waiter SHALL raise a stale-version error
+
+#### Scenario: Competing terminal outcomes
+
+- **GIVEN** two callers observed `running` at version `1`
+- **WHEN** one requests success and one failure with expected version `1`
+- **THEN** exactly one SHALL succeed at version `2`
+- **AND** the waiter SHALL raise a stale-version error without changing the committed outcome
+
+#### Scenario: Concurrent adjacent commands from one snapshot
+
+- **GIVEN** two callers observed `pending` at version `0`
+- **WHEN** one requests `running` and one requests `succeeded`, both with expected version `0`
+- **THEN** only the running request SHALL succeed
+- **AND** the succeeded request SHALL be illegal if it locks first or stale if it locks after the running commit
+
+#### Scenario: Valid sequential adjacent transition
+
+- **GIVEN** a caller observes committed `running` at version `1`
+- **WHEN** it requests `succeeded` with expected version `1` and valid result
+- **THEN** transition SHALL succeed at version `2`
+
+#### Scenario: Repeat terminal request with old version
+
+- **GIVEN** a terminal Job at version `2`
+- **WHEN** a caller repeats a terminal request using old expected version `1`
+- **THEN** a stale-version error SHALL be raised before terminal-edge evaluation
+- **AND** outcome fields and version SHALL remain unchanged
 
 ### Requirement: Add one reversible schema revision
 
-The capability SHALL use one additive migration from sole head `20260814_0003`. Upgrade SHALL create only `jobs`, ten named checks, two `ON DELETE CASCADE` foreign keys, and secondary indexes `ix_jobs_run_created_job` and `ix_jobs_status_created_job`. No user or kind index SHALL be added. Downgrade SHALL remove the two indexes in reverse order and then the table.
+The capability SHALL use one additive migration from sole head `20260814_0003`. Upgrade SHALL create only the fourteen-column `jobs` table, eleven named checks including `ck_jobs_version_nonnegative`, two `ON DELETE CASCADE` foreign keys, and secondary indexes `ix_jobs_run_created_job` and `ix_jobs_status_created_job`. No user or kind index SHALL be added. Downgrade SHALL remove the two indexes in reverse order and then the table.
 
 #### Scenario: Upgrade from current head
 
