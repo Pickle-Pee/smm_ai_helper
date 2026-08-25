@@ -258,7 +258,7 @@ pending -> running -> succeeded
 
 Same-state, skipped, backward, and terminal transitions are illegal. Failure is terminal and representable without retries. There is no `cancelled`, `retrying`, `scheduled`, `timed_out`, `dead_lettered`, or delivery state.
 
-`version` is a PostgreSQL `INTEGER` in the exact supported range `0..2147483647`. Creation assigns `0`; callers cannot supply a creation version or write it through any supported method. Every successful legal lifecycle transition increments the locked value exactly once, so service-created rows follow `pending/0`, `running/1`, and terminal/2. Validation requires `expected_version` to be an exact built-in integer in the same range and rejects booleans. Validation, dirty, missing, stale, illegal, and clock/order rejection does not mutate version. A database flush failure cannot make the candidate increment durable and leaves rollback to the caller; the service does not restore failed-session state. No wraparound or reset behavior exists; the two-edge supported lifecycle cannot exhaust the PostgreSQL range, while directly modified out-of-contract rows remain unsupported.
+`version` is a PostgreSQL `INTEGER` in the exact supported range `0..2147483647`. Creation assigns `0`; callers cannot supply a creation version or write it through any supported method. Every successful legal lifecycle transition increments the locked value exactly once, so service-created rows follow `pending/0`, `running/1`, and terminal/2. Validation requires `expected_version` to be an exact built-in integer in the same range and rejects booleans. After lock/reload and a successful stale comparison, a persisted value of `2147483647` raises `JobVersionExhaustedError` before lifecycle legality, clock access, mutation, or flush; no attempt is made to store `2147483648`. Validation, dirty, missing, stale, exhausted, illegal, and clock/order rejection does not mutate version. A database flush failure cannot make a candidate increment durable and leaves rollback to the caller; the service does not restore failed-session state. No wraparound or reset behavior exists.
 
 `JobPersistenceService` receives an injected callable UTC clock; production defaults to an exact aware `datetime.now(timezone.utc)` provider. The service requires the returned value to be an exact aware `datetime`, normalizes it to UTC while preserving microseconds, and calls it exactly once per successful creation or legal transition.
 
@@ -311,6 +311,7 @@ The exact error taxonomy is:
 - `DirtyJobMutationError(JobPersistenceError)`: the target Job has pending tracked immutable/version/owner-relationship/owner-collection state or pending deletion; its stable message instructs the caller to roll back;
 - `JobNotFoundError(JobPersistenceError)`: a valid transition target is absent;
 - `StaleJobVersionError(JobPersistenceError)`: the locked persisted `version` differs from mandatory `expected_version`;
+- `JobVersionExhaustedError(JobPersistenceError)`: the locked persisted `version` is `2147483647` after stale comparison, so transition cannot increment it safely;
 - `IllegalJobTransitionError(JobPersistenceError)`: the locked current state cannot legally precede the requested target or target/outcome combination is illegal.
 
 Messages never include raw payload, result, error, credential, or provider values. Duplicate primary-key, foreign-key race, check-constraint, and other SQLAlchemy/database failures are not translated; the “database error translation” step is explicitly pass-through so the original exception reaches the caller for rollback.
@@ -357,15 +358,16 @@ There is intentionally no run existence pre-query, limit, pagination, refresh, d
 7. Raise `JobNotFoundError` if the valid target is absent.
 8. Compare locked `job.version` with `expected_version`.
 9. Raise `StaleJobVersionError` on mismatch before lifecycle legality, clock access, mutation, or flush.
-10. Evaluate the locked current state and raise `IllegalJobTransitionError` for a same-state, skipped, backward, terminal, or otherwise illegal edge.
-11. Call the injected clock once; validate/normalize it and validate ordering against the locked row.
-12. Apply only the target status, allowed outcome, and exact lifecycle timestamp fields.
-13. Set `version = version + 1` exactly once.
-14. Validate the complete final lifecycle/version/timestamp coherence in memory.
-15. Flush exactly once.
-16. Return the Job without refresh. Any database exception from the flush passes through unchanged; the service does not roll back.
+10. If locked `job.version == 2147483647`, raise `JobVersionExhaustedError` before lifecycle legality, clock access, mutation, or flush. The lock query is the only SQL owned by this rejected operation; do not attempt to write `2147483648`.
+11. Evaluate the locked current state and raise `IllegalJobTransitionError` for a same-state, skipped, backward, terminal, or otherwise illegal edge.
+12. Call the injected clock once; validate/normalize it and validate ordering against the locked row.
+13. Apply only the target status, allowed outcome, and exact lifecycle timestamp fields.
+14. Set `version = version + 1` exactly once.
+15. Validate the complete final lifecycle/version/timestamp coherence in memory.
+16. Flush exactly once.
+17. Return the Job without refresh. Any database exception from the flush passes through unchanged; the service does not roll back.
 
-For multiple invalid conditions, precedence is: malformed Job ID -> malformed `expected_version` -> malformed target status -> malformed result/error/JSON/sanitization input -> dirty target state -> valid-target not found -> stale locked version -> illegal locked transition -> invalid clock/order -> database failure. Dirty rejection wins over not-found only when the requested target is already represented by dirty identity-mapped state. No rejected validation, dirty, missing, stale, illegal, or clock/order operation mutates lifecycle/version fields or explicitly flushes.
+For multiple invalid conditions, precedence is: malformed Job ID -> malformed `expected_version` -> malformed target status -> malformed result/error/JSON/sanitization input -> dirty target state -> valid-target not found -> stale locked version -> exhausted locked version -> illegal locked transition -> invalid clock/order -> database failure. Dirty rejection wins over not-found only when the requested target is already represented by dirty identity-mapped state. No rejected validation, dirty, missing, stale, exhausted, illegal, or clock/order operation mutates lifecycle/version fields or explicitly flushes.
 
 ### 9. Transaction and concurrency boundary
 

@@ -219,7 +219,7 @@ The only states SHALL be `pending`, `running`, `succeeded`, and `failed`. The on
 
 ### Requirement: Protect transitions with a persisted optimistic version
 
-Each Job SHALL store `version` as PostgreSQL `INTEGER NOT NULL` with application default `0`, server default `0`, and named check `ck_jobs_version_nonnegative` enforcing `version >= 0`. Creation SHALL assign version `0`. A successful lifecycle transition SHALL require the caller's exact observed version, compare it after row locking, and increment the persisted version exactly once. Expected version SHALL be a mandatory exact built-in non-boolean integer in `0..2147483647`; invalid input SHALL be rejected before database access. A mismatch SHALL raise `StaleJobVersionError` before lifecycle legality, clock access, mutation, or flush. Validation, dirty, missing, stale, illegal, and clock/order rejection SHALL NOT mutate version. A database flush failure SHALL NOT make the candidate increment durable and SHALL leave rollback/state recovery to the caller. No wraparound or reset behavior SHALL be supported.
+Each Job SHALL store `version` as PostgreSQL `INTEGER NOT NULL` with application default `0`, server default `0`, and named check `ck_jobs_version_nonnegative` enforcing `version >= 0`. Creation SHALL assign version `0`. A successful lifecycle transition SHALL require the caller's exact observed version, compare it after row locking, and increment the persisted version exactly once. Expected version SHALL be a mandatory exact built-in non-boolean integer in `0..2147483647`; invalid input SHALL be rejected before database access. A mismatch SHALL raise `StaleJobVersionError` before exhaustion or lifecycle legality. After a matching comparison, persisted version `2147483647` SHALL raise `JobVersionExhaustedError` before lifecycle legality, clock access, mutation, flush, or any attempt to store `2147483648`. Validation, dirty, missing, stale, exhausted, illegal, and clock/order rejection SHALL NOT mutate version. A database flush failure SHALL NOT make a candidate increment durable and SHALL leave rollback/state recovery to the caller. No wraparound or reset behavior SHALL be supported.
 
 #### Scenario: Reject stale observed version
 
@@ -239,6 +239,13 @@ Each Job SHALL store `version` as PostgreSQL `INTEGER NOT NULL` with application
 - **WHEN** transition succeeds
 - **THEN** version SHALL equal its prior value plus one
 - **AND** no other version write SHALL occur
+
+#### Scenario: Reject exhausted persisted version
+
+- **GIVEN** the locked Job and valid expected version both equal `2147483647`
+- **WHEN** transition is requested
+- **THEN** `JobVersionExhaustedError` SHALL be raised after stale comparison and before lifecycle-edge evaluation
+- **AND** no clock access, lifecycle/outcome/timestamp/version mutation, explicit flush, or attempt to store `2147483648` SHALL occur
 
 ### Requirement: Use deterministic UTC lifecycle timestamps
 
@@ -265,7 +272,7 @@ The persistence boundary SHALL own one injected/testable UTC clock. Creation SHA
 
 The internal boundary SHALL support creation, validated lookup by Job identifier, deterministic unbounded listing for one MarketingRun, and lifecycle transition requiring an observed expected version. It SHALL not support direct-user/system listing, pagination, generic filtering, generic field mutation, or caller-written version. Creators SHALL retain returned Job identifiers; future query surfaces require a separate reviewed change.
 
-Pure Job-ID, expected-version, target-status, and result/error validation SHALL precede target-specific dirty inspection and database access. Dirty target state SHALL precede valid-target absence; absence SHALL precede stale-version comparison; stale version SHALL precede locked-state legality; legality SHALL precede clock/order validation and database flush errors. Mutation methods SHALL return without refresh; read methods SHALL not flush or refresh.
+Pure Job-ID, expected-version, target-status, and result/error validation SHALL precede target-specific dirty inspection and database access. Dirty target state SHALL precede valid-target absence; absence SHALL precede stale-version comparison; stale version SHALL precede exhausted version; exhaustion SHALL precede locked-state legality; legality SHALL precede clock/order validation and database flush errors. Mutation methods SHALL return without refresh; read methods SHALL not flush or refresh.
 
 #### Scenario: Load malformed Job identifier
 
