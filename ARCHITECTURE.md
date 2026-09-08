@@ -136,7 +136,7 @@ PostgreSQL is the current durable source of truth for:
 
 Future durable Job state also belongs in PostgreSQL.
 
-### Approved durable Job persistence contract (not implemented)
+### Implemented durable Job persistence
 
 OpenSpec change `add-durable-job-persistence` defines an additive `jobs` table and an unused internal persistence service. A Job is one durable future execution request; it does not replace `MarketingRun` workflow progress or `MarketingArtifact` output.
 
@@ -147,11 +147,11 @@ OpenSpec change `add-durable-job-persistence` defines an additive `jobs` table a
 - One injected aware UTC clock owns creation/transition instants. Job mutations add/flush without refresh and may participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
 - PostgreSQL commit establishes durability. A persisted Job is inert: this contract introduces no publication, claim, polling, execution, Redis, worker, LLM/QC, API, or Telegram behavior.
 
-See `docs/product/durable-job-persistence.md`. Runtime behavior requires a later apply task after the OpenSpec artifacts are accepted.
+See `docs/product/durable-job-persistence.md`. The persistence service and migration `20260825_0004` are implemented; execution belongs to the workflow layer.
 
 ## Planned MVP workflow architecture
 
-The following is planned and requires OpenSpec changes before implementation:
+The workflow extends the implemented persistence foundations:
 
 ```text
 Telegram / API ingress
@@ -161,7 +161,7 @@ MarketingWorkflowService
         |
         +--> MarketingRun / MarketingArtifact (PostgreSQL)
         |
-        +--> JobPersistenceService (approved PostgreSQL contract; not implemented)
+        +--> JobPersistenceService (implemented PostgreSQL persistence)
                 |
                 v
              Redis queue

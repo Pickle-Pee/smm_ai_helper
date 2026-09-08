@@ -100,7 +100,7 @@ PostgreSQL — durable source of truth. Redis — transport и coordination, н�
 
 ### Durable Job persistence boundary
 
-`add-durable-job-persistence` утверждает pre-implementation contract, но ещё не добавляет runtime-модель или миграцию. `Job` — это одна durable execution request будущей асинхронной работы, а не копия workflow state или output:
+`add-durable-job-persistence` реализован: модель, сервис и миграция `20260825_0004` присутствуют. `Job` — это одна durable execution request будущей асинхронной работы, а не копия workflow state или output:
 
 - `MarketingRun` хранит состояние и прогресс multi-step workflow;
 - `MarketingArtifact` хранит именованный reusable output шага;

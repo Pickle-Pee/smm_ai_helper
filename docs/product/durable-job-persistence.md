@@ -1,6 +1,6 @@
 # Durable Job persistence product contract
 
-Status: reconciled pre-implementation design; no runtime Job model, service, migration, queue, or worker exists yet.
+Status: Job model, persistence service and migration `20260825_0004` are implemented. This document describes the foundation boundary; workflow execution is documented separately.
 
 ## Responsibility and retention
 

@@ -13,7 +13,7 @@
 
 - [x] Apply `add-expert-core-foundation` (merged by PR #40).
 - [x] Evaluate CORE behavior across strategy, content, analytics, promo and trends agents.
-- [ ] Review the reconciled pre-implementation `add-durable-job-persistence` contract.
+- [x] Implement durable Job model, service and migration `20260825_0004`.
 
 ## Infrastructure and quality next
 
@@ -39,7 +39,7 @@
 ## Sequencing rules
 
 - One change uses one `agent/<change-name>` branch from current `sale-ready`.
-- OpenSpec is reviewed before runtime implementation.
+- Use task -> implementation -> tests -> code review; existing OpenSpec contracts remain reference material.
 - Runtime implementation is a separate apply step; the roadmap is not an implementation spec.
 - The Orchestrator foundation is planning-only: structured interpretation, exact deterministic scenarios and validated graphs.
 - Execution waits for durable Job/workers and is owned by `MarketingWorkflowService`.
