@@ -87,7 +87,7 @@ def postgres_database():
     engine = create_engine(sync_url(raw_url))
     config = Config("alembic.ini")
     starting_revision = current_revision(engine)
-    known_revisions = {None, "20260801_0001", "20260808_0002", PARENT, REVISION}
+    known_revisions = {None, "20260707_0001", "20260711_0002", PARENT, REVISION}
     if starting_revision not in known_revisions:
         pytest.fail(
             f"unsupported starting revision in disposable database: {starting_revision}"
@@ -146,9 +146,17 @@ def postgres_database():
         yield PostgresEvidenceDatabase(engine=engine, config=config, raw_url=raw_url)
     finally:
         try:
-            if current_revision(engine) != PARENT:
+            if current_revision(engine) == REVISION:
                 command.downgrade(config, PARENT)
             with engine.begin() as connection:
+                connection.execute(text(
+                    "DELETE FROM marketing_runs WHERE run_id LIKE 'durable-job-owner-%' "
+                    "OR run_id LIKE 'durable-job-removal-%'"
+                ))
+                connection.execute(text(
+                    "DELETE FROM users WHERE username IN ('job-owner-evidence', 'job-removal-evidence') "
+                    "AND id BETWEEN :minimum AND :maximum"
+                ), {"minimum": SEED_USER_ID - 300, "maximum": SEED_USER_ID})
                 connection.execute(
                     text("DELETE FROM marketing_runs WHERE run_id = :run_id"),
                     {"run_id": SEED_RUN_ID},
@@ -160,7 +168,9 @@ def postgres_database():
             if starting_revision == REVISION:
                 command.upgrade(config, REVISION)
             elif starting_revision != PARENT:
-                command.downgrade(config, starting_revision or "base")
+                # The merged initial revision deliberately has a no-op downgrade.
+                # Retain its stamp instead of leaving existing tables at "base".
+                command.downgrade(config, starting_revision or "20260707_0001")
         finally:
             engine.dispose()
             settings.DATABASE_URL = previous_settings_url
@@ -351,7 +361,8 @@ def test_each_postgresql_constraint_accepts_and_rejects_independently(
         {"version": -1},
         {"payload_json": json.dumps([])},
         {"result_json": json.dumps([])},
-        {"status": "failed", "error": " \t\r\n"},
+        {"status": "failed", "error": " \t\r\n", "started_at": CREATED,
+         "completed_at": CREATED},
         {"status": "running", "started_at": CREATED - timedelta(seconds=1), "updated_at": CREATED - timedelta(seconds=1)},
     ]
     for ordinal, overrides in enumerate(cases, start=100):
@@ -655,6 +666,9 @@ def test_newly_observed_sequential_versions_and_terminal_repetition(
                         result_json={},
                     )
                 await session.rollback()
+                # Rollback expires ORM state even with expire_on_commit=False.
+                # Reload while the session is live, then inspect the durable outcome.
+                await session.refresh(succeeded)
                 return succeeded
         finally:
             await engine.dispose()
