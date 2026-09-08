@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.security import authorize_legacy_request
 from app.schemas import BrandProfileRead, BrandProfileUpdate
 from app.services.brand_profile_service import BrandProfileService
 from app.services.user_service import UserService
 
 
-router = APIRouter(prefix="/brand-profile", tags=["brand-profile"])
+router = APIRouter(prefix="/brand-profile", tags=["brand-profile"], dependencies=[Depends(authorize_legacy_request)])
 
 
 @router.get("/{telegram_id}", response_model=BrandProfileRead)

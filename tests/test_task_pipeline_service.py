@@ -175,13 +175,14 @@ def test_run_agent_with_qc_revises_result_and_appends_warnings():
     ]
 
 
-def test_finalize_session_deletes_session_and_returns_done_response(monkeypatch):
-    deleted_session_ids = []
+def test_finalize_session_delegates_atomic_completion_and_returns_done_response(monkeypatch):
+    completions = []
 
-    async def fake_delete(_db_session, session_id):
-        deleted_session_ids.append(session_id)
+    async def fake_complete(db, state, response):
+        completions.append((db, state, response))
+        return response
 
-    monkeypatch.setattr(task_pipeline_module.TaskSessionService, "delete", fake_delete)
+    monkeypatch.setattr(task_pipeline_module.TaskCompletionService, "complete", fake_complete)
 
     service = TaskPipelineService()
     image_payload = {"url": "/images/test.png"}
@@ -206,8 +207,8 @@ def test_finalize_session_deletes_session_and_returns_done_response(monkeypatch)
         "result": result,
         "image": image_payload,
     }
-    assert deleted_session_ids == ["session-1"]
-    assert db_session.commits == 1
+    assert completions == [(db_session, session_state, response)]
+    assert db_session.commits == 0
     assert service.task_image_service.calls == [session_state]
 
 

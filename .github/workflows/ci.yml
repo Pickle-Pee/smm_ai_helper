@@ -27,8 +27,9 @@ jobs:
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://smm_user:smm_pass@localhost:5432/durable_job_test_ci
+      DATABASE_URL: postgresql+asyncpg://smm_user:smm_pass@localhost:5432/smm_mvp_test_ci
       DURABLE_JOB_TEST_DATABASE_URL: postgresql+asyncpg://smm_user:smm_pass@localhost:5432/durable_job_test_ci
+      MVP_TEST_DATABASE_URL: postgresql+asyncpg://smm_user:smm_pass@localhost:5432/smm_mvp_test_ci
       TELEGRAM_BOT_TOKEN: test-telegram-token
       API_BASE_URL: http://localhost:8000
       OPENAI_API_KEY: test-openai-key
@@ -52,6 +53,11 @@ jobs:
 
       - name: Compile Python sources
         run: python -m compileall app bot
+
+      - name: Create separate disposable MVP database
+        env:
+          PGPASSWORD: smm_pass
+        run: createdb -h localhost -U smm_user smm_mvp_test_ci
 
       - name: Apply migrations
         run: alembic upgrade head

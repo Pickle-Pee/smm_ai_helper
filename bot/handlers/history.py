@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 import httpx
 
 from app.config import settings
+from bot.backend import actor_headers
 
 router = Router()
 
@@ -45,6 +46,7 @@ async def cmd_history(message: types.Message):
         resp = await client.get(
             f"{settings.API_BASE_URL}/tasks/by_user/{user_id}",
             params={"limit": 10},
+            headers=actor_headers(user_id),
         )
         if resp.status_code >= 400:
             await message.answer("Не удалось получить историю задач 😔")
@@ -73,9 +75,9 @@ async def cmd_history(message: types.Message):
         )
 
 
-async def fetch_task(task_id: int) -> dict | None:
+async def fetch_task(task_id: int, actor_id: int) -> dict | None:
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(f"{settings.API_BASE_URL}/tasks/{task_id}")
+        resp = await client.get(f"{settings.API_BASE_URL}/tasks/{task_id}", headers=actor_headers(actor_id))
         if resp.status_code >= 400:
             return None
         return resp.json()
@@ -100,7 +102,7 @@ async def on_task_show(callback: types.CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
 
-    task = await fetch_task(task_id)
+    task = await fetch_task(task_id, callback.from_user.id)
     if not task:
         await callback.answer("Не удалось получить задачу 😔", show_alert=True)
         return
@@ -144,7 +146,7 @@ async def on_task_repeat(callback: types.CallbackQuery):
     task_id_str, agent_type = rest.split(":", 1)
     task_id = int(task_id_str)
 
-    task = await fetch_task(task_id)
+    task = await fetch_task(task_id, callback.from_user.id)
     if not task:
         await callback.answer("Не удалось получить задачу для повтора 😔", show_alert=True)
         return
@@ -170,6 +172,7 @@ async def on_task_repeat(callback: types.CallbackQuery):
         resp = await client.post(
             f"{settings.API_BASE_URL}/agents/{agent_type}/run",
             json=payload,
+            headers=actor_headers(callback.from_user.id),
         )
         if resp.status_code >= 400:
             await callback.message.answer(

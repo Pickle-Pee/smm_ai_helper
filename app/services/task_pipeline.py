@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.agent_runner import AgentRunner
+from app.services.task_completion_service import TaskCompletionService
 from app.services.clarification_service import ClarificationService
 from app.services.qc_service import QCService
 from app.services.task_image_service import TaskImageService
@@ -59,6 +60,9 @@ class TaskPipelineService:
         session_state = await TaskSessionService.get(db_session, session_id)
         if not session_state:
             raise ValueError("Unknown session")
+
+        if session_state.completed_response is not None:
+            return session_state.completed_response
 
         session_state.answers[key] = value
         await TaskSessionService.save(db_session, session_state)
@@ -182,15 +186,13 @@ class TaskPipelineService:
 
         image_payload = await self.task_image_service.generate_for_task_session(session_state)
 
-        await TaskSessionService.delete(db_session, session_state.session_id)
-        await db_session.commit()
-
-        return {
+        response = {
             "status": "done",
             "session_id": session_state.session_id,
             "result": result,
             "image": image_payload,
         }
+        return await TaskCompletionService.complete(db_session, session_state, response)
 
     @staticmethod
     def _log_task_completed(

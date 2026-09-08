@@ -355,6 +355,8 @@ class Job(Base):
 class TaskSessionRecord(Base):
     __tablename__ = "task_sessions"
 
+    completed_response: Mapped[Any | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+
     session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(128), index=True, default="anonymous")
     agent_type: Mapped[str] = mapped_column(String(50), index=True)

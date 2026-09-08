@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.security import authorize_legacy_request
 from app.schemas import (
     TaskRead,
     TaskShort,
@@ -16,10 +17,9 @@ from app.schemas import (
 from app.services.agent_registry import AgentRegistry
 from app.services.task_history_service import TaskHistoryService
 from app.services.task_pipeline import TaskPipelineService
-from app.services.task_result_service import TaskResultService
 from app.services.user_service import UserService
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(prefix="/tasks", tags=["tasks"], dependencies=[Depends(authorize_legacy_request)])
 task_pipeline = TaskPipelineService()
 
 
@@ -66,16 +66,6 @@ async def start_task(
         user_id=str(payload.user.telegram_id) if payload.user else "anonymous",
     )
 
-    if response["status"] == "done":
-        await TaskResultService.save_done_task(
-            db_session=session,
-            user_id=user.id if user else None,
-            agent_type=payload.agent_type,
-            task_description=payload.task_description,
-            answers=payload.answers,
-            result=response["result"],
-        )
-
     return response
 
 
@@ -94,13 +84,5 @@ async def answer_task(
         key=payload.key,
         value=payload.value,
     )
-
-    if response["status"] == "done":
-        await TaskResultService.save_done_task_from_session(
-            db_session=session,
-            session_state=session_data,
-            result=response["result"],
-            extra_answers={payload.key: payload.value},
-        )
 
     return response

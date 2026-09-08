@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     TELEGRAM_BOT_TOKEN: str
     API_BASE_URL: str = "http://localhost:8000"
+    BOT_BACKEND_TOKEN: str = ""
 
     OPENAI_API_KEY: str = Field(..., min_length=1)
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"

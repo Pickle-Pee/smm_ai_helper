@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.security import authorize_legacy_request
 from app.schemas import AgentRunRequest, AgentRunResponse
 from app.services.agent_registry import AgentRegistry
 from app.services.agent_runner import AgentRunner
@@ -11,7 +12,7 @@ from app.services.task_result_service import TaskResultService
 from app.services.task_router import TaskRouter
 from app.services.user_service import UserService
 
-router = APIRouter(prefix="/agents", tags=["agents"])
+router = APIRouter(prefix="/agents", tags=["agents"], dependencies=[Depends(authorize_legacy_request)])
 agent_runner = AgentRunner()
 task_router = TaskRouter()
 

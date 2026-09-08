@@ -50,7 +50,7 @@ class TaskShort(BaseModel):
     id: int
     agent_type: str
     task_description: str
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

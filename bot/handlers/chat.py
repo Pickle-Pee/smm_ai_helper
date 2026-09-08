@@ -12,6 +12,8 @@ from aiogram.enums import ChatAction, ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
+from bot.backend import actor_headers
+from bot.rendering import send_text
 
 
 router = Router()
@@ -184,7 +186,7 @@ def _extract_images_anywhere(data: Dict[str, Any]) -> List[Dict[str, str]]:
     return []
 
 
-async def _send_images_from_response(message: types.Message, data: Dict[str, Any]) -> None:
+async def _send_images_from_response(message: types.Message, data: Dict[str, Any], *, actor_id: int) -> None:
     """
     Вытаскивает ссылки на картинки из ответа бэка и отправляет до 3 изображений.
     """
@@ -199,7 +201,7 @@ async def _send_images_from_response(message: types.Message, data: Dict[str, Any
                 continue
             full_url = _abs_url(url)
             try:
-                r = await client.get(full_url)
+                r = await client.get(full_url, headers=actor_headers(actor_id))
                 if r.status_code >= 400:
                     continue
                 bio = BytesIO(r.content)
@@ -246,12 +248,12 @@ async def _long_request_indicator(status_msg: types.Message) -> None:
         return
 
 
-async def _send_to_backend(message: types.Message, text: str) -> None:
+async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) -> None:
     wants_image = _wants_image(text)
     prepared_text = _augment_text_for_image_request(text) if wants_image else text
 
     payload = {
-        "user_id": f"tg:{message.from_user.id}",
+        "user_id": f"tg:{actor_id}",
         "text": prepared_text,
         "attachments": [],
     }
@@ -268,6 +270,7 @@ async def _send_to_backend(message: types.Message, text: str) -> None:
             resp = await client.post(
                 f"{settings.API_BASE_URL.rstrip('/')}/chat/message",
                 json=payload,
+                headers=actor_headers(actor_id),
             )
 
         if resp.status_code >= 400:
@@ -291,7 +294,7 @@ async def _send_to_backend(message: types.Message, text: str) -> None:
             pass
 
         try:
-            await _send_images_from_response(message, data)
+            await _send_images_from_response(message, data, actor_id=actor_id)
         except Exception:
             await message.answer(
                 "Картинку не удалось отправить, но генерация могла сохраниться на сервере."
@@ -301,12 +304,8 @@ async def _send_to_backend(message: types.Message, text: str) -> None:
         if not reply:
             reply = "Готово."
 
-        kb = _actions_keyboard(message.from_user.id, actions)
-        try:
-            await message.answer(reply[:4000], parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        except Exception:
-            # если markdown “сломался” — отправим без него
-            await message.answer(reply[:4000], parse_mode=None, reply_markup=kb)
+        kb = _actions_keyboard(actor_id, actions)
+        await send_text(message, reply, reply_markup=kb)
 
         # 4) follow-up
         if isinstance(follow_up, str) and follow_up.strip():
@@ -326,7 +325,7 @@ async def _send_to_backend(message: types.Message, text: str) -> None:
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def chat_message(message: types.Message):
-    await _send_to_backend(message, message.text)
+    await _send_to_backend(message, message.text, actor_id=message.from_user.id)
 
 
 @router.callback_query(F.data.startswith("action:"))
@@ -341,4 +340,4 @@ async def on_action(callback: types.CallbackQuery):
 
     # более UX-но: не спамим “Ок, делаю...” в чат, а показываем toast
     await callback.answer("Ок, выполняю…")
-    await _send_to_backend(callback.message, text)
+    await _send_to_backend(callback.message, text, actor_id=callback.from_user.id)
