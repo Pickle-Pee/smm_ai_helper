@@ -1,6 +1,6 @@
 # MVP verification — 9 September 2026
 
-The fixed Telegram MVP is implemented and verified locally. This report describes the checked code, not a production deployment or a live model-quality acceptance. Runtime/configuration candidate: `38200f40a6857baed7cb1e843ddc8bb14b7c180e`, task branch `codex/telegram-marketing-mvp`. The final documentation commit is integrated locally into `sale-ready`; obtain the final tip with `git rev-parse sale-ready`.
+The fixed Telegram MVP is implemented and verified locally and in GitHub CI. This report describes the checked code, not a production deployment or a live model-quality acceptance. Runtime/configuration candidate: `38200f40a6857baed7cb1e843ddc8bb14b7c180e`; container verification was added in `2806675`, task branch `codex/telegram-marketing-mvp`, [PR #53](https://github.com/Pickle-Pee/smm_ai_helper/pull/53). Obtain the final integration tip with `git rev-parse sale-ready`; the final task response records the merge SHA.
 
 ## Consolidation and commits
 
@@ -17,10 +17,12 @@ The old `agent/add-marketing-workflow-persistence` branch has the same workflow 
 | `10e0012` | Durable fixed workflow, leases/retries, artifact/Job/run/delivery transaction, schema reconciliation |
 | `5a078b0` | Telegram commands, saved continuations, mentor opt-in and provider-protocol tests |
 | `38200f4` | Compose services, persistent media, offline smoke and launch documentation |
+| `13409f4` | Local verification report |
+| `2806675` | Real image build, Compose startup and container/media recovery verification in CI |
 
 Work used `codex/consolidate-durable-jobs`, `codex/harden-existing-flows` and `codex/telegram-marketing-mvp`, with local fast-forward integration into `sale-ready`. The existing IDE stash was preserved: `On agent/add-durable-job-persistence: local IDE metadata before durable job reconciliation`. No resets, forced pushes, branch deletions or credential changes were performed.
 
-At report creation, remote publication had not succeeded: automatic approval review rejected the initial GitHub push, and `gh pr list` returned 401. This local report does not claim a remote merge or successful GitHub CI. The final task response records any later publication outcome.
+GitHub access subsequently recovered. The task branch was published normally to the existing remote and PR #53 was created against `sale-ready`; no alternative account or credentials were used. CI on `13409f4` passed all 679 tests, including real Redis. [CI on `2806675`](https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/34327858045) additionally built and exercised the Docker image and verified container recreation. The target branch is unprotected; integration uses a normal reviewed PR merge, with no force push or protection bypass.
 
 ## Working behavior and changed files
 
@@ -52,12 +54,16 @@ Interpreter: project `.venv/Scripts/python.exe`, Python 3.12.14. Database: real 
 | Migration round trips and data preservation | Passed in real PostgreSQL tests: Durable Job parent → revision → parent → revision; MVP 0005 → head and 0006 → head; legacy rows/backfilled dates retained |
 | Native Uvicorn subprocess, real local HTTP | Startup, `/health` and authenticated PostgreSQL-backed `/workflows` passed; subprocess stopped afterwards |
 | `docker --config .local-test/docker-cli compose --env-file .env.example config --quiet` | Passed |
+| GitHub Ubuntu / Python 3.11 full suite, PostgreSQL 15 and Redis 7 | **679 passed, 0 skipped, 19 warnings**, 19.71 s, run `34327858045` |
+| CI `docker compose up --build --wait ... db redis backend worker` | Passed: actual image build, migrations, health and worker startup; polling bot excluded |
+| Tests inside the built image with real PostgreSQL and Redis | **16 passed, 0 skipped, 5 warnings**, 15.35 s |
+| `check_container_persistence.py seed`, force-recreate backend/worker, `verify` | Passed: changed container IDs, persisted run, identical shared-volume image bytes, foreign-owner 404 |
 
 Regression evidence includes competing starts/claims/completions, process death immediately after claim commit and execution by a replacement process, Redis publication crash recovery, stale attempt rejection, bounded failures/timeouts, delivery outage/backoff/restart, atomic result commit rollback, foreign run/job/artifact/profile/task/image denial, callback actor, missing context, malformed output/evidence/lineage, confidence inheritance, full long-text delivery and banner text fitting in Cyrillic. The protocol smoke uses production UrlAnalyzer, Responses adapter, image-brief adapter, ImageOrchestrator and renderer with a closed fake HTTP transport; no real network provider can be reached in that test.
 
-The **one skip** is `test_real_redis_wakeups_duplicates_and_reconnect`: no local Redis server/`REDIS_TEST_URL` was available. Redis outage handling and DB recovery are covered locally. CI now provisions Redis 7 and supplies this variable, but that CI run has not been observed. Remaining warnings concern pre-existing Pydantic class Config, naive `datetime.utcnow()` and Alembic path separator deprecations.
+The **one local skip** is `test_real_redis_wakeups_duplicates_and_reconnect`: no local Redis server/`REDIS_TEST_URL` was available. It passed in both GitHub CI environments with Redis 7; there are no remaining skipped tests in CI. Redis outage handling and DB recovery are also covered locally. Remaining warnings concern pre-existing Pydantic class Config, naive `datetime.utcnow()` and Alembic path separator deprecations; GitHub also annotates the existing action runtime deprecation.
 
-Docker Engine could not start on this workstation; Docker reported an unavailable daemon and a stale Docker Inference socket. Docker build/container startup, Linux font packaging and container recreation with real named volumes were **not executed**. PostgreSQL checks used official portable PostgreSQL binaries instead. No OpenSpec artifacts were edited for the new workflow, so a separate OpenSpec validation/approval cycle was not run; the user explicitly replaced that process.
+Docker Engine could not start on this workstation; Docker reported an unavailable daemon and a stale Docker Inference socket. Docker build/startup, Linux rendering and container recreation with real named volumes were therefore executed in the disposable GitHub CI project. Its provider endpoint is disabled and all text/image/Telegram integrations are doubled; the project and its test volumes are removed after the job. Local PostgreSQL checks used official portable PostgreSQL binaries. No OpenSpec artifacts were edited for the new workflow, so a separate OpenSpec validation/approval cycle was not run; the user explicitly replaced that process.
 
 ## Migrations and operation
 
@@ -67,6 +73,6 @@ Set `DATABASE_URL`, `REDIS_URL`, `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `BOT_BA
 
 ## Remaining acceptance and limits
 
-Real paid model/image calls, messages to real Telegram users, model-content quality/latency/cost, GitHub CI, and Docker container recreation remain live acceptance checks. No production deployment was performed. Use a dedicated Telegram test bot/private chat and a small known public competitor page for later authorized live acceptance: save a profile, run analysis, generate creative, restart worker/backend, request mentor, retrieve `/result`, and verify delivery and readable banner text.
+Real paid model/image calls, messages to real Telegram users, and model-content quality/latency/cost remain live acceptance checks. Infrastructure and recovery checks passed in CI. No production deployment was performed. Use a dedicated Telegram test bot/private chat and a small known public competitor page for later authorized live acceptance: save a profile, run analysis, generate creative, restart worker/backend, request mentor, retrieve `/result`, and verify delivery and readable banner text.
 
 Only public HTML content from one page is analyzed. Authentication walls, browser-only sites, unsupported compressed responses and non-HTML documents can fail with insufficient source information. Recommendations are hypotheses and require real validation. There is no general 15-module execution framework, final video editing, campaign/CRM integration, production hardening or external exactly-once guarantee. An ambiguous model crash can repeat a charged call; an accepted Telegram send with lost acknowledgement can duplicate a message. Durable completion and retries never discard a committed artifact or regenerate solely because delivery failed.

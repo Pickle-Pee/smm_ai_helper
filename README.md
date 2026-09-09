@@ -67,7 +67,7 @@ REDIS_TEST_URL=redis://localhost:6379/15
 
 Then run `python -m pytest`. The DB and real Redis tests explicitly skip when their variables are absent. Run these suites serially: the disposable MVP fixture clears workflow queues, and migration tests change their schemas. CI provisions PostgreSQL and Redis and enables these suites.
 
-The offline-provider smoke command is `python scripts/smoke_mvp.py` with `MVP_TEST_DATABASE_URL` set. It exercises the HTTP/worker/delivery path, real PostgreSQL, a crashed worker subprocess and replacement, and actual text/image HTTP adapters against closed test doubles. It never calls real OpenAI or Telegram.
+The offline-provider smoke command is `python scripts/smoke_mvp.py` with `MVP_TEST_DATABASE_URL` set. It exercises the HTTP/worker/delivery path, real PostgreSQL, a crashed worker subprocess and replacement, and actual text/image HTTP adapters against closed test doubles. It never calls real OpenAI or Telegram. CI also builds the actual Docker image and verifies run/image persistence and ownership after backend/worker container recreation in an isolated Compose project with external providers disabled.
 
 ## Limits
 
