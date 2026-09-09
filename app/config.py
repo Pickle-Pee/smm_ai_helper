@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     WORKER_CONCURRENCY: int = Field(default=2, ge=1, le=8)
     WORKFLOW_TIMEOUT_SECONDS: int = Field(default=240, ge=5, le=900)
+    TASK_FINALIZATION_TIMEOUT_SECONDS: int = Field(default=240, ge=5, le=900)
 
     OPENAI_API_KEY: str = Field(..., min_length=1)
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"

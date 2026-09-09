@@ -63,6 +63,7 @@ High-level flow:
 Task router endpoint
  -> user / agent validation
  -> TaskPipelineService
+ -> durable standalone claim (or replay of completed_response)
  -> TaskRouter
  -> ClarificationService (if needed)
  -> AgentRunner
@@ -73,7 +74,7 @@ Task router endpoint
 
 Supported standalone agent types currently include strategy, content, analytics, promo, and trends.
 
-Task sessions are temporary durable records while clarification is in progress. Completed results are saved to task history.
+Task sessions retain answers and the canonical `completed_response` after completion. PostgreSQL claims serialize continuation before routing/model/QC/image calls; waiting requests release their transactions between checks. `TaskCompletionService` fences the owner and atomically saves one Task history row, the response and claim release. Later answers replay the response without external work. Failed owners release their claim; crashed owners can be replaced after lease expiry. See the task contract for bounded timeout/recovery and external-provider limitations.
 
 See `docs/task_pipeline.md` for the detailed task architecture.
 
@@ -94,7 +95,7 @@ This boundary is not connected to API or Telegram ingress and does not replace `
 
 ### Internal deterministic Quality Gates foundation
 
-OpenSpec change `add-orchestrator-quality-gates` implements an internal planning-only boundary:
+The implemented deterministic Quality Gates boundary evaluates typed results. Its Registry-derived readiness remains `PLANNING_ONLY`, while the fixed MVP consumes its structural gate outcomes through an explicit adapter:
 
 ```text
 caller-supplied immutable normalized module result
@@ -191,7 +192,9 @@ Redis transports wakeups; PostgreSQL stores canonical state. Workers reclaim exp
 
 ## Specification and agent workflow
 
-- Current observable behavior is documented under `openspec/specs/`.
-- Proposed behavior changes live under `openspec/changes/` until implemented and archived.
+- Current observable behavior and verification are documented in README, this architecture and `docs/development/marketing-mvp.md` / `docs/task_pipeline.md`, alongside code and tests.
+- `openspec/specs/` and `openspec/changes/` preserve useful baseline contracts and design history. Unarchived changes may already be implemented; archival is optional.
 - `AGENTS.md` files contain persistent Codex implementation constraints.
-- Product vision lives under `docs/product/` and does not automatically override current behavioral specs.
+- Product documents distinguish implemented fixed scope from broader vision. Use task -> implementation -> tests -> code review; no separate OpenSpec approval cycle is required.
+
+Generic Orchestrator execution, arbitrary execution of all 15 Registry modules, autonomous replanning and generic synthesis remain future work. Campaign execution, CRM integrations, final video generation/editing and production deployment are outside the implemented MVP. Neither provider calls nor Telegram delivery promise exactly-once external effects.

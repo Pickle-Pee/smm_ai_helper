@@ -1,5 +1,6 @@
 """Shared explicitly disposable MVP database support. No external providers."""
 import os
+from unittest.mock import patch
 
 import pytest
 from alembic import command
@@ -21,7 +22,10 @@ def mvp_database():
     previous = settings.DATABASE_URL
     settings.DATABASE_URL = url
     try:
-        command.upgrade(Config("alembic.ini"), "head")
+        # Migration setup must not disable application loggers or replace pytest's
+        # capture handlers when this fixture precedes logging regression tests.
+        with patch("logging.config.fileConfig"):
+            command.upgrade(Config("alembic.ini"), "head")
     finally:
         settings.DATABASE_URL = previous
     engine = create_async_engine(url, poolclass=NullPool)

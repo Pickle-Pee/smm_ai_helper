@@ -356,8 +356,20 @@ class Job(Base):
 
 class TaskSessionRecord(Base):
     __tablename__ = "task_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "(finalization_token IS NULL) = (finalization_lease_until IS NULL)",
+            name="ck_task_session_claim_pair",
+        ),
+        CheckConstraint(
+            "completed_response IS NULL OR finalization_token IS NULL",
+            name="ck_task_session_completed_unclaimed",
+        ),
+    )
 
     completed_response: Mapped[Any | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    finalization_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    finalization_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(128), index=True, default="anonymous")

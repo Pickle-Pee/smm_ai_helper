@@ -4,7 +4,7 @@ Status: Job model, persistence service and migration `20260825_0004` are impleme
 
 ## Responsibility and retention
 
-A durable Job represents one future asynchronous execution request whose canonical lifecycle record belongs in PostgreSQL. It is intentionally narrower than a workflow:
+A durable Job represents one asynchronous execution request, already used by the fixed MVP, whose canonical lifecycle record belongs in PostgreSQL. It is intentionally narrower than a workflow:
 
 - `MarketingRun` owns multi-step workflow progress and state.
 - `MarketingArtifact` owns named durable workflow outputs.
@@ -23,7 +23,7 @@ Ownership is exclusive:
 | absent | absent | system Job | survives independently |
 | present | present | invalid | rejected |
 
-“Anonymous Job” is not a separate class. Public and user-facing anonymous/system creation is unsupported. Only explicitly reviewed trusted internal application code may create system Jobs. Future workflow/direct-user producers authorize their owner before calling the low-level persistence service; that service verifies owner shape/existence but does not replace caller authorization.
+“Anonymous Job” is not a separate class. Public and user-facing anonymous/system creation is unsupported. Only explicitly reviewed trusted internal application code may create system Jobs. Workflow/direct-user producers must authorize their owner before calling the low-level persistence service; that service verifies owner shape/existence but does not replace caller authorization.
 
 A workflow step is valid only for a run-owned Job. A Job has no direct Module Registry ownership or execution binding. Direct-user/system listing is intentionally absent: an internal creator retains `job_id` and may perform lookup; future query surfaces require a separate reviewed change.
 
@@ -66,18 +66,18 @@ One injected aware UTC clock is called once per creation/legal transition. The s
 
 ## Persistence and transaction boundary
 
-The planned internal service creates, validates lookup identifiers, lists run Jobs deterministically, and performs row-locked legal transitions using exact validation precedence. Every transition requires the caller's exact observed `expected_version`; after locking and reloading, a mismatch raises a typed stale-version error, then a matching maximum version raises the typed exhaustion error, both before lifecycle legality, clock access, mutation, or flush. Thus two commands based on the same observed version cannot both succeed, while a later command based on a newly observed committed version may succeed sequentially. The row lock remains the transaction-serialization mechanism; this design does not replace it with compare-and-swap SQL.
+The implemented internal service creates, validates lookup identifiers, lists run Jobs deterministically, and performs row-locked legal transitions using exact validation precedence. Every transition requires the caller's exact observed `expected_version`; after locking and reloading, a mismatch raises a typed stale-version error, then a matching maximum version raises the typed exhaustion error, both before lifecycle legality, clock access, mutation, or flush. Thus two commands based on the same observed version cannot both succeed, while a later command based on a newly observed committed version may succeed sequentially. The row lock remains the transaction-serialization mechanism; this design does not replace it with compare-and-swap SQL.
 
 Mutations add/flush once and never refresh, commit, or roll back. The caller owns rollback and may atomically combine Job, MarketingRun, and MarketingArtifact changes.
 
-PostgreSQL commit is the durability boundary. A committed Job is not proof that work was published, claimed, or executed. Cross-system publication/recovery and semantic deduplication require later queue/reliability changes; this foundation introduces no outbox.
+PostgreSQL commit is the durability boundary. A committed Job is not proof that work was published, claimed, or executed. The fixed workflow now adds Redis wakeups, PostgreSQL due-scan recovery and request/step deduplication around this foundation. The low-level service itself introduces no outbox or generic queue framework.
 
-The only secondary indexes are run/created/job for run listing and status/created/job as schema preparation for a separately reviewed future bounded scan. There is no user or kind index.
+The only secondary indexes are run/created/job for run listing and status/created/job as foundation-level scan metadata; the current worker due scan instead uses the indexed JobExecution availability/lease records. There is no user or kind index.
 
 ## Compatibility and non-goals
 
-The foundation must not change existing API/Telegram contracts, standalone task execution, MarketingRun/MarketingArtifact behavior, Marketing Orchestrator planning, implemented planning-only Quality Gates, Module Registry metadata, agents/presenters, dependencies, or LLM/QC call counts.
+The foundation must not change existing API/Telegram contracts, standalone task execution, MarketingRun/MarketingArtifact behavior, Marketing Orchestrator planning, the pure Quality Gates evaluator, Module Registry metadata, agents/presenters, dependencies, or LLM/QC call counts.
 
-It introduces no Redis, queue framework, worker, scheduler, polling, delivery, module execution, retry/backoff, idempotency, ordering, concurrency limit, cancellation, timeout, API endpoint, Telegram UX, or OpenAI/QC call.
+These exclusions apply to the low-level persistence service, not the whole current application. The additive fixed workflow implements Redis wakeups, workers, PostgreSQL recovery, bounded retries/leases/fencing in JobExecution, workflow request/step reuse and independent Telegram delivery. It uses three explicit executors and a Quality Gates adapter before artifact persistence, without adding Registry execution bindings or changing generic Orchestrator planning. See [current runtime contracts](../development/marketing-mvp.md). Generic queue/module execution, generalized cancellation and exactly-once external semantics remain outside scope.
 
-The exact schema, predicates, service algorithms, migration parent, security limits, and independently checkable evidence tasks are normative in `openspec/changes/add-durable-job-persistence/`.
+The exact schema, predicates, service algorithms, migration parent, security limits, and independently checkable evidence tasks are preserved in `openspec/changes/add-durable-job-persistence/` as foundation contracts/design history. Current code, tests and the workflow contract describe its implemented integration.

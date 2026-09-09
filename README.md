@@ -76,3 +76,5 @@ Analysis uses the available text of one public HTML page, with bounded time, siz
 The MVP produces an image and a scene script, not an edited video. Provider calls may repeat after an ambiguous crash/timeout. Telegram may deliver a duplicate if it accepts a send immediately before the acknowledgement is lost. Completed artifacts remain recoverable independently of delivery. External costs and real model/Telegram quality require a separate live acceptance run.
 
 See [workflow contracts and recovery](docs/development/marketing-mvp.md) and the [verification report](docs/development/mvp-verification-2026-09-09.md).
+
+Standalone `/tasks` uses PostgreSQL continuation claims and replays a canonical completed response/history. Redis is not required for standalone replay. Before rolling out migration `20260909_0008`, stop/drain old backend requests; mixed versions cannot share the new claim guarantee. See [standalone concurrency, timeout and migration contract](docs/task_pipeline.md).

@@ -1,8 +1,8 @@
 # Orchestrator Quality Gates product contract
 
-## Planned responsibility
+## Implemented responsibility
 
-Quality Gates are a planned pure, deterministic, immutable and `PLANNING_ONLY` internal boundary over caller-supplied typed normalized results. Runtime ownership will be `app/marketing_orchestrator/quality_gates/`. The boundary derives structural validity, gate outcome, readiness, decisions and synthesis eligibility; callers cannot assert those states.
+Quality Gates are an implemented pure, deterministic, immutable internal boundary over caller-supplied typed normalized results. Registry-derived readiness remains `PLANNING_ONLY`. Runtime ownership is `app/marketing_orchestrator/quality_gates/`. The boundary derives structural validity, gate outcome, readiness, decisions and synthesis eligibility; callers cannot assert those states.
 
 It does not execute modules, call an LLM or model-based `QCService`, query/persist context, create Jobs, use Redis/workers, orchestrate workflows, generate/revise plans, expose APIs/Telegram behavior, interpret arbitrary prose or synthesize user-facing text.
 
@@ -53,6 +53,6 @@ Every public caller-owned contract has a controlled construction boundary: missi
 
 ## Compatibility
 
-Registry validates only canonical identity, exact declared-output membership and registered handoffs; it supplies no module-specific required schema or executable adapter. Existing heterogeneous agents, presenters, public DTOs, planner/validator, `AgentRegistry`, `QCService` and `TaskPipelineService` remain unchanged. Future adapters and workflow/synthesis integration require separate changes.
+Registry validates only canonical identity, exact declared-output membership and registered handoffs; it supplies no module-specific required schema or executable adapter. Quality Gates integration does not change heterogeneous standalone agents, presenters, public DTOs, planner/validator, `AgentRegistry`, `QCService` or TaskPipelineService routing semantics. The fixed MVP already uses `app/workflows/quality.py` to normalize its typed artifacts and upstream lineage, evaluate eligibility, and reject invalid results before artifact persistence. Workflow-specific executors own external calls; the evaluator remains pure. This integration does not add Registry bindings or execute generic plans. Arbitrary legacy agent adapters, autonomous replanning and generic synthesis remain future work.
 
 `docs/product/prompts/orchestrator-production.md` remains product source material only and is not loaded or copied into runtime code.

@@ -1,6 +1,6 @@
 # Fixed Telegram marketing workflow
 
-The implementation keeps Registry 1.0.0 metadata-only and the deterministic planner planning-only. Three explicit executors in the workflow layer use ExpertInstructionComposer and structured output schemas. A Quality Gates adapter checks typed claims, evidence and lineage before artifact persistence; it does not establish semantic truth.
+The implementation keeps Registry 1.0.0 metadata-only with zero execution bindings and the generic deterministic planner `PLANNING_ONLY`. Three explicit executors in the workflow layer use ExpertInstructionComposer and structured output schemas. The `app/workflows/quality.py` Quality Gates adapter checks typed claims, evidence and lineage before artifact persistence; it does not establish semantic truth. The evaluator's Registry-derived readiness remains `PLANNING_ONLY`; its structural gate outcomes and eligibility manifest are usable by the explicit fixed workflow without enabling generic execution.
 
 PostgreSQL owns MarketingRun, MarketingArtifact, Job, execution leases and delivery state. A small Redis list carries job ID wakeups. Every worker also scans the indexed durable execution records, so commit/publication crashes, duplicate messages and complete Redis loss cannot lose work. This is deliberately a fixed three-step workflow, not a general queue framework.
 
@@ -10,7 +10,9 @@ Artifact, Job outcome, Run transition and delivery parts commit together. Telegr
 
 Inputs snapshot the brand, requested goal and source evidence. Creative uses the saved analysis; mentor uses the saved analysis and creative only after an explicit user action. Updating BrandProfile does not change an existing run's explanation context. PNGs use a shared durable backend/worker media volume, and artifact payloads retain image IDs scoped to the owner.
 
-The MVP supports private Telegram chats. It does not generate final edited video, execute arbitrary Registry modules, manage campaigns or deploy to production.
+The MVP supports private Telegram chats. It does not implement generic Orchestrator execution, arbitrary 15-module execution, autonomous replanning, generic synthesis, campaign execution, CRM integration, final video generation/editing or production deployment.
+
+Standalone `/tasks/start` and `/tasks/answer` remain in TaskPipelineService. They use a separate PostgreSQL finalization claim and canonical response/history transaction, require no Redis and do not enter this workflow. See [standalone claim and replay contract](../task_pipeline.md).
 
 ## HTTP contract
 
@@ -46,5 +48,6 @@ Each text/image delivery part permits eight attempts with a 90-second lease and 
 - `20260908_0005`: atomic standalone completion response on `task_sessions`.
 - `20260908_0006`: `job_executions` and `workflow_deliveries`, constraints, indexes and Job-owned cascading deletion.
 - `20260909_0007`: reconcile legacy nullable timestamps/status with model contracts. Preserve existing timestamps; fill a missing date from its companion timestamp or migration time in UTC. This fallback is not the actual historical creation time. Missing task status becomes `unknown`. Downgrade restores nullable columns and retains backfilled data.
+- `20260909_0008`: standalone task continuation token/lease and consistency constraints. Existing answers, completed responses and Task history remain intact. Stop/drain backend requests before upgrade or downgrade to avoid mixed old/new claim semantics. Downgrade removes only claim columns/constraints and loses active ownership; see the standalone contract.
 
 Model metadata explicitly retains the original unique constraints on user Telegram ID and BrandProfile owner, alongside their original unique indexes. Already merged migrations are unchanged. The disposable DB tests cover upgrade/downgrade/re-upgrade, full Alembic model comparison and real concurrent claims/transactions. Do not run migration downgrade or the destructive fixtures against shared data.

@@ -1,10 +1,17 @@
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
 import app.services.task_pipeline as task_pipeline_module
 from app.services.task_pipeline import TaskPipelineService
 from app.services.task_session_service import TaskSessionState
+
+
+@pytest.fixture(autouse=True)
+def fake_claim_check(monkeypatch):
+    # Claim/transaction behavior is exercised against PostgreSQL in the integration suite.
+    monkeypatch.setattr(task_pipeline_module.TaskFinalizationService, "check_owned", AsyncMock())
 
 
 class FakeDbSession:
@@ -70,9 +77,10 @@ def test_handle_clarification_returns_need_info_and_persists_state(monkeypatch):
 
     async def fake_save(_db_session, state):
         saved_states.append(state)
+        await _db_session.commit()
         return state
 
-    monkeypatch.setattr(task_pipeline_module.TaskSessionService, "save", fake_save)
+    monkeypatch.setattr(task_pipeline_module.TaskFinalizationService, "finish_clarification", fake_save)
 
     db_session = FakeDbSession()
     session_state = make_session_state()
@@ -125,6 +133,7 @@ def test_run_agent_with_qc_returns_original_result_when_qc_not_needed():
 
     result = asyncio.run(
         service._run_agent_with_qc(
+            db_session=FakeDbSession(),
             session_state=make_session_state(),
             decision={
                 "model": "model-hard",
@@ -151,6 +160,7 @@ def test_run_agent_with_qc_revises_result_and_appends_warnings():
 
     result = asyncio.run(
         service._run_agent_with_qc(
+            db_session=FakeDbSession(),
             session_state=make_session_state(),
             decision={
                 "model": "model-hard",
@@ -213,10 +223,10 @@ def test_finalize_session_delegates_atomic_completion_and_returns_done_response(
 
 
 def test_answer_raises_for_unknown_session(monkeypatch):
-    async def fake_get(_db_session, _session_id):
-        return None
+    async def fake_acquire(*_args):
+        raise ValueError("Unknown session")
 
-    monkeypatch.setattr(task_pipeline_module.TaskSessionService, "get", fake_get)
+    monkeypatch.setattr(task_pipeline_module.TaskFinalizationService, "acquire", fake_acquire)
 
     with pytest.raises(ValueError, match="Unknown session"):
         asyncio.run(
@@ -227,3 +237,17 @@ def test_answer_raises_for_unknown_session(monkeypatch):
                 value="эксперты",
             )
         )
+
+
+def test_busy_claim_wait_is_bounded_and_does_not_execute(monkeypatch):
+    acquire = AsyncMock(return_value=None)
+    clock = iter([0, 276])  # Default wait limit is 240 + 30 + 5 seconds.
+    monkeypatch.setattr(task_pipeline_module.settings, "TASK_FINALIZATION_TIMEOUT_SECONDS", 240)
+    monkeypatch.setattr(task_pipeline_module.TaskFinalizationService, "acquire", acquire)
+    monkeypatch.setattr(task_pipeline_module, "monotonic", lambda: next(clock))
+    pipeline = TaskPipelineService()
+    pipeline._continue_session = AsyncMock()
+    with pytest.raises(task_pipeline_module.TaskFinalizationUnavailable, match="still executing"):
+        asyncio.run(pipeline.answer(FakeDbSession(), "busy", "goal", "sales"))
+    acquire.assert_awaited_once()
+    pipeline._continue_session.assert_not_called()
