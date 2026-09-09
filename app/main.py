@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.logging import setup_logging
+from app.routers.workflows import router as workflow_router, delivery_router
 from app.routers import (
     agents_router,
     brand_profile_router,
@@ -27,6 +28,8 @@ app.include_router(tasks_router)
 app.include_router(images_router)
 app.include_router(chat_router)
 app.include_router(brand_profile_router)
+app.include_router(workflow_router)
+app.include_router(delivery_router)
 
 
 @app.get("/health")

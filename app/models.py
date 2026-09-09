@@ -36,6 +36,7 @@ class JobStatus(str, Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("telegram_id", name="users_telegram_id_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
@@ -81,6 +82,7 @@ class Task(Base):
 
 class BrandProfile(Base):
     __tablename__ = "brand_profiles"
+    __table_args__ = (UniqueConstraint("user_id", name="brand_profiles_user_id_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -406,3 +408,40 @@ class UrlCache(Base):
     summary_json: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class JobExecution(Base):
+    """Lease/retry metadata for the fixed workflow, separate from Job lifecycle."""
+    __tablename__ = "job_executions"
+    __table_args__ = (
+        CheckConstraint("attempts >= 0", name="ck_execution_attempts"),
+        CheckConstraint("(claim_token IS NULL) = (lease_until IS NULL)", name="ck_execution_lease"),
+        Index("ix_execution_due", "available_at", "lease_until"),
+    )
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id", ondelete="CASCADE"), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    claim_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkflowDelivery(Base):
+    __tablename__ = "workflow_deliveries"
+    __table_args__ = (
+        UniqueConstraint("job_id", "part", name="uq_delivery_job_part"),
+        CheckConstraint("status IN ('pending', 'sending', 'delivered', 'failed')", name="ck_delivery_status"),
+        CheckConstraint("attempts >= 0 AND part >= 0", name="ck_delivery_counters"),
+        CheckConstraint("(claim_token IS NULL) = (lease_until IS NULL)", name="ck_delivery_lease"),
+        Index("ix_delivery_due", "status", "available_at"),
+    )
+    delivery_id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id", ondelete="CASCADE"), index=True)
+    part: Mapped[int] = mapped_column(Integer)
+    payload_json: Mapped[Any] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    claim_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(255), nullable=True)

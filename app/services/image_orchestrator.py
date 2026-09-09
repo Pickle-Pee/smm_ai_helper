@@ -147,6 +147,7 @@ class ImageOrchestrator:
         variants: int = 1,
         user_id: str = "anonymous",
         request_id: str | None = None,
+        render_overlay: bool = False,
     ) -> Dict[str, Any]:
         brief = await self.brief_agent.run(
             platform=platform,
@@ -165,6 +166,9 @@ class ImageOrchestrator:
         layout = brief.get("layout") or "center"
         palette = brief.get("palette") or []
         confidence = brief.get("confidence") or "medium"
+        if render_overlay:
+            # Workflow-approved copy is authoritative and rendered locally in full.
+            mode, overlay_data = "template", overlay or {}
 
         style_hint = ",".join(palette) if palette else "neutral"
         prompt = background_prompt

@@ -71,6 +71,14 @@ def test_foreign_profile_task_and_session_are_denied(secured_app):
                    json={"session_id": "foreign", "key": "x", "value": "y"}).status_code == 404
 
 
+def test_malformed_owner_lookups_do_not_reach_postgresql(secured_app):
+    app, db = secured_app
+    assert request(app, "GET", "/tasks/" + "9" * 100, headers=actor_headers(100)).status_code == 422
+    assert request(app, "POST", "/tasks/answer", headers=actor_headers(100), json={"session_id": ["bad"]}).status_code == 422
+    assert request(app, "GET", "/tasks/1", headers={**actor_headers(100), "X-Telegram-User-ID": "9" * 100}).status_code == 401
+    db.scalar.assert_not_called()
+
+
 def test_nonempty_task_history_serializes_datetime_through_http(secured_app, monkeypatch):
     app, _ = secured_app
     task = SimpleNamespace(id=1, agent_type="strategy", task_description="saved", created_at=datetime(2026, 9, 8, 12, 0))
