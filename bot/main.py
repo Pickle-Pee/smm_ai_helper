@@ -2,11 +2,9 @@
 import asyncio
 
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-
 from app.config import settings
-from bot.handlers import menu, agent_flow, history, chat
+from bot.handlers import menu, agent_flow, history, chat, workflow
+from bot.delivery import delivery_loop
 
 
 async def main():
@@ -15,10 +13,16 @@ async def main():
     )
     dp = Dispatcher()
     dp.include_router(menu.router)
+    dp.include_router(workflow.router)
     dp.include_router(agent_flow.router)
     dp.include_router(history.router)   # <- тут
     dp.include_router(chat.router)
-    await dp.start_polling(bot)
+    async with asyncio.TaskGroup() as group:
+        delivery_task = group.create_task(delivery_loop(bot))
+        try:
+            await dp.start_polling(bot)
+        finally:
+            delivery_task.cancel()
 
 
 if __name__ == "__main__":
