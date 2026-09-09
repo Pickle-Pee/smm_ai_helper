@@ -7,6 +7,7 @@ from sqlalchemy import event, func, select
 
 from app.models import Task, TaskSessionRecord, User
 from app.services.task_completion_service import TaskCompletionService
+from app.services.task_finalization_service import TaskFinalizationService
 from app.services.task_pipeline import TaskPipelineService
 from app.services.task_session_service import TaskSessionService, TaskSessionState
 from tests.postgresql_support import mvp_database
@@ -29,6 +30,7 @@ def test_failed_commit_preserves_session_then_replay_avoids_generation(mvp_datab
         owner, state = await seed(mvp_database)
         response = {"status": "done", "session_id": state.session_id, "result": {"content": "saved"}, "image": None}
         async with mvp_database() as session:
+            state = await TaskFinalizationService.acquire(session, state.session_id, 60)
             def fail(_session):
                 raise RuntimeError("injected persistence failure")
             event.listen(session.sync_session, "before_commit", fail, once=True)
@@ -51,6 +53,8 @@ def test_failed_commit_preserves_session_then_replay_avoids_generation(mvp_datab
 def test_competing_completion_returns_one_persisted_outcome(mvp_database):
     async def run():
         owner, state = await seed(mvp_database)
+        async with mvp_database() as session:
+            state = await TaskFinalizationService.acquire(session, state.session_id, 60)
         async def finish(label):
             async with mvp_database() as session:
                 return await TaskCompletionService.complete(session, state, {
