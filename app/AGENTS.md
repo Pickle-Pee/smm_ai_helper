@@ -10,7 +10,8 @@ These rules extend the repository-level `AGENTS.md` for work under `app/`.
 - Keep `AgentRegistry` the source of truth for supported single-task agents.
 - Do not turn `TaskPipelineService` into a multi-workflow engine. Multi-step MVP flows use a separate workflow layer.
 - Preserve the distinction between durable `BrandProfile` context and temporary conversation facts.
-- For future queue work, PostgreSQL owns durable job state; Redis only transports/coordinates work.
+- PostgreSQL owns current Job, JobExecution and delivery state; Redis carries non-authoritative wakeups and workers recover through PostgreSQL due scans.
+- Standalone task claims are independent of workflow workers/Redis. Commit the claim before external work and fence completion; never hold a transaction around model, QC or image calls.
 - Review compatibility and document new public fields or endpoint behavior alongside implementation.
 - Prefer dependency injection for services that need deterministic unit tests.
 - Log identifiers such as request/session/job/run IDs when the relevant domain object exists; do not log secrets or raw credentials.

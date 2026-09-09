@@ -4,7 +4,7 @@
 
 EXPERT CORE задаёт обязательные правила маркетингового мышления для всех специализированных модулей. Он не выбирает workflow и не выполняет module routing.
 
-Канонический prompt: [`prompts/expert-core-production.md`](prompts/expert-core-production.md).
+Канонический runtime prompt: [`app/prompts/expert_core/v1.0.0.md`](../../app/prompts/expert_core/v1.0.0.md), загружаемый через `app.prompts.expert_core.load_expert_core`. [`prompts/expert-core-production.md`](prompts/expert-core-production.md) сохраняет исходный product source/history и не читается приложением. Standalone agents и три fixed MVP executor используют общую ExpertInstructionComposer composition; это не добавляет Registry execution bindings.
 
 ## Required behavior
 

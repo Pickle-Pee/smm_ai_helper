@@ -6,7 +6,7 @@ These rules extend the repository-level `AGENTS.md` for work under `bot/`.
 - Handlers may map Telegram events to backend requests and render backend results, but must not call OpenAI directly.
 - Do not duplicate backend validation or marketing decision logic in handlers.
 - Do not keep durable user/workflow state only in process memory.
-- Existing in-memory conveniences must not be expanded for new durable flows; future job/action state should use approved persistent/Redis-backed infrastructure.
+- Existing in-memory conveniences must not be expanded for durable flows; PostgreSQL owns workflow/job/action and independent delivery state. Redis wakeups are transport only.
 - Keep callback payloads small and deterministic.
 - Make failure messages understandable to the user without exposing stack traces or internal errors.
 - Long-running workflow work belongs in queued workers; handlers acknowledge acceptance quickly.
