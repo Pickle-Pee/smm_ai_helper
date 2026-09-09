@@ -1,6 +1,6 @@
 # Durable Job persistence verification
 
-Status: runtime implementation complete with local/static evidence. Disposable PostgreSQL execution evidence is pending because no safe database target was available.
+Status: historical foundation report. Its pending PostgreSQL evidence was completed during the September 2026 consolidation; see [current MVP verification](mvp-verification-2026-09-09.md) for executed results. The original task accounting below is retained as history, not current blockers.
 
 ## Identification
 
