@@ -74,3 +74,52 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: smm-mvp-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure isolated services with disabled external providers
+        run: |
+          cat > .env <<'ENV'
+          DATABASE_URL=postgresql+asyncpg://smm_user:smm_pass@db:5432/smm_swarm
+          REDIS_URL=redis://redis:6379/0
+          API_BASE_URL=http://backend:8000
+          IMAGE_STORAGE_PATH=/data/images
+          BOT_BACKEND_TOKEN=offline-container-secret
+          TELEGRAM_BOT_TOKEN=123456:offline-container-token
+          OPENAI_API_KEY=offline-container-key
+          OPENAI_BASE_URL=http://127.0.0.1:9
+          ENV
+
+      - name: Build and start backend and worker (no Telegram polling)
+        run: docker compose up --build --wait --wait-timeout 120 -d db redis backend worker
+
+      - name: Exercise the built image with real PostgreSQL and Redis
+        run: |
+          docker compose exec -T db createdb -U smm_user smm_mvp_test_container
+          docker compose run --rm -T --no-deps \
+            -e DATABASE_URL=postgresql+asyncpg://smm_user:smm_pass@db:5432/smm_mvp_test_container \
+            -e MVP_TEST_DATABASE_URL=postgresql+asyncpg://smm_user:smm_pass@db:5432/smm_mvp_test_container \
+            -e REDIS_TEST_URL=redis://redis:6379/15 \
+            -v "$PWD/tests:/app/tests:ro" \
+            backend python -m pytest -q --tb=short tests/test_marketing_mvp_postgresql.py tests/test_workflow_provider_protocols.py tests/test_workflow_redis.py
+
+      - name: Verify persistence after app container recreation
+        run: |
+          python scripts/check_container_persistence.py seed
+          docker compose up --no-build --no-deps --force-recreate --wait --wait-timeout 60 -d backend worker
+          python scripts/check_container_persistence.py verify
+
+      - name: Service diagnostics
+        if: failure()
+        run: docker compose logs --no-color --tail=100 db redis migrate backend worker
+
+      - name: Remove the disposable CI project
+        if: always()
+        run: docker compose down --volumes --remove-orphans
