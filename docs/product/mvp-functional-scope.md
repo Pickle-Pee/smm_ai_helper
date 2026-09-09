@@ -1,6 +1,6 @@
 # Product functional scope and MVP
 
-Status: product vision / planning source, not a description of currently deployed behavior.
+Status: product vision. The three-step MVP below is implemented locally; the broader modules in sections 1–6 remain future scope. This is not a statement of production deployment. See README and docs/development/marketing-mvp.md for runtime contracts and limits.
 
 This document converts the agreed functional draft into repository Markdown so product intent can be reviewed together with OpenSpec changes and code.
 

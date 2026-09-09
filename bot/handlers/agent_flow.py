@@ -8,6 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 import httpx
 
 from app.config import settings
+from bot.backend import actor_headers
 
 router = Router()
 
@@ -210,6 +211,7 @@ async def image_overlay(message: types.Message, state: FSMContext):
         resp = await client.post(
             f"{settings.API_BASE_URL}/images/generate",
             json=payload,
+            headers=actor_headers(message.from_user.id),
         )
     if resp.status_code >= 400:
         await state.clear()
@@ -224,7 +226,10 @@ async def image_overlay(message: types.Message, state: FSMContext):
             continue
         full_url = f"{settings.API_BASE_URL}{url}"
         caption = "Готово!" if idx == 0 else None
-        await message.answer_photo(full_url, caption=caption)
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.get(full_url, headers=actor_headers(message.from_user.id))
+            response.raise_for_status()
+        await message.answer_photo(types.BufferedInputFile(response.content, filename="image.png"), caption=caption)
 
     await state.clear()
 
@@ -254,6 +259,7 @@ async def get_task_description(message: types.Message, state: FSMContext):
             resp = await client.post(
                 f"{settings.API_BASE_URL}/tasks/start",
                 json=payload,
+            headers=actor_headers(message.from_user.id),
             )
         if resp.status_code >= 400:
             raise RuntimeError("Backend error")
@@ -324,6 +330,7 @@ async def ask_details(message: types.Message, state: FSMContext):
         resp = await client.post(
             f"{settings.API_BASE_URL}/tasks/answer",
             json={"session_id": session_id, "key": key, "value": message.text},
+            headers=actor_headers(message.from_user.id),
         )
     if resp.status_code >= 400:
         await message.answer("Ошибка на сервере. Попробуй ещё раз.")
@@ -773,6 +780,7 @@ async def run_agent_and_reply(message: types.Message, state: FSMContext):
         resp = await client.post(
             f"{settings.API_BASE_URL}/agents/{agent_type}/run",
             json=payload,
+            headers=actor_headers(message.from_user.id),
         )
         if resp.status_code >= 400:
             await state.clear()
@@ -829,9 +837,9 @@ async def run_agent_and_reply(message: types.Message, state: FSMContext):
 # Callback’и “Показать подробнее”
 # ===========================
 
-async def fetch_task_result(task_id: int) -> dict | None:
+async def fetch_task_result(task_id: int, actor_id: int) -> dict | None:
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(f"{settings.API_BASE_URL}/tasks/{task_id}")
+        resp = await client.get(f"{settings.API_BASE_URL}/tasks/{task_id}", headers=actor_headers(actor_id))
         if resp.status_code >= 400:
             return None
         data = resp.json()
@@ -842,7 +850,7 @@ async def fetch_task_result(task_id: int) -> dict | None:
 async def on_strategy_full(callback: CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
-    result = await fetch_task_result(task_id)
+    result = await fetch_task_result(task_id, callback.from_user.id)
     if not result:
         await callback.answer("Не удалось получить стратегию 😔", show_alert=True)
         return
@@ -855,7 +863,7 @@ async def on_strategy_full(callback: CallbackQuery):
 async def on_content_more(callback: CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
-    result = await fetch_task_result(task_id)
+    result = await fetch_task_result(task_id, callback.from_user.id)
     if not result:
         await callback.answer("Не удалось получить контент 😔", show_alert=True)
         return
@@ -869,7 +877,7 @@ async def on_content_more(callback: CallbackQuery):
 async def on_analytics_more(callback: CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
-    result = await fetch_task_result(task_id)
+    result = await fetch_task_result(task_id, callback.from_user.id)
     if not result:
         await callback.answer("Не удалось получить аналитику 😔", show_alert=True)
         return
@@ -883,7 +891,7 @@ async def on_analytics_more(callback: CallbackQuery):
 async def on_promo_more(callback: CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
-    result = await fetch_task_result(task_id)
+    result = await fetch_task_result(task_id, callback.from_user.id)
     if not result:
         await callback.answer("Не удалось получить данные по рекламе 😔", show_alert=True)
         return
@@ -897,7 +905,7 @@ async def on_promo_more(callback: CallbackQuery):
 async def on_trends_more(callback: CallbackQuery):
     _, task_id_str = callback.data.split(":", 1)
     task_id = int(task_id_str)
-    result = await fetch_task_result(task_id)
+    result = await fetch_task_result(task_id, callback.from_user.id)
     if not result:
         await callback.answer("Не удалось получить тренды 😔", show_alert=True)
         return

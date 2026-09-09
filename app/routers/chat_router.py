@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.security import authorize_legacy_request
 from app.schemas import ChatMessageRequest, ChatMessageResponse
 from app.services.chat_service import ChatService
 
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(authorize_legacy_request)])
 logger = logging.getLogger(__name__)
 
 

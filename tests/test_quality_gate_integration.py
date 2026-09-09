@@ -15,10 +15,11 @@ def test_package_is_architecturally_isolated_by_import_boundary():
     text="\n".join(p.read_text(encoding="utf-8") for p in root.glob("*.py"))
     forbidden=("app.llm","QCService","TaskPipelineService","sqlalchemy","redis","app.routers","bot.","app.agents","app.presenters","MarketingOrchestrator")
     assert not any(token in text for token in forbidden)
-def test_existing_execution_paths_do_not_import_quality_gates():
+def test_only_explicit_workflow_adapter_imports_quality_gates():
     root=Path(__file__).parents[1]
     paths=[*root.glob("app/**/*.py"),*root.glob("bot/**/*.py")]
-    assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths if "quality_gates" not in p.parts)
+    adapter = root / "app" / "workflows" / "quality.py"
+    assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths if "quality_gates" not in p.parts and p != adapter)
 def test_internal_exports_are_closed():
     import app.marketing_orchestrator.quality_gates as q
     assert "Any" not in q.__all__;assert "dataclass" not in q.__all__;assert "QualityGateEvaluator" in q.__all__

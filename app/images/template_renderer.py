@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from typing import Dict
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 
 class TemplateRenderer:
@@ -23,7 +23,34 @@ class TemplateRenderer:
                 return ImageFont.truetype(path, size=size)
             except OSError:
                 continue
+        # Local Windows development uses the same Cyrillic-capable font contract.
+        try:
+            return ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf", size=size)
+        except OSError:
+            pass
         return ImageFont.load_default()
+
+    @staticmethod
+    def _wrap(draw, text, font, width):
+        lines = []
+        for paragraph in text.splitlines():
+            line = ""
+            for word in paragraph.split():
+                candidate = (line + " " + word).strip()
+                if draw.textlength(candidate, font=font) <= width:
+                    line = candidate
+                    continue
+                if line:
+                    lines.append(line)
+                line = ""
+                for char in word:
+                    if line and draw.textlength(line + char, font=font) > width:
+                        lines.append(line)
+                        line = ""
+                    line += char
+            if line:
+                lines.append(line)
+        return lines
 
     def _draw_text_block(
         self,
@@ -39,29 +66,35 @@ class TemplateRenderer:
         subtitle = overlay.get("subtitle") or ""
         cta = overlay.get("cta") or ""
 
-        headline_font = self._load_font(max(int(height * 0.12), 28), bold=True)
-        subtitle_font = self._load_font(max(int(height * 0.07), 20), bold=False)
-        cta_font = self._load_font(max(int(height * 0.06), 18), bold=True)
-
         text_color = palette[0] if palette else "#FFFFFF"
+        try:
+            ImageColor.getrgb(text_color)
+        except (ValueError, TypeError):
+            text_color = "#FFFFFF"
         shadow_color = "#000000"
-        spacing = int(height * 0.04)
-
-        current_y = y0
-
-        def draw_line(text: str, font: ImageFont.FreeTypeFont) -> None:
-            nonlocal current_y
-            if not text:
-                return
-            text_width = draw.textlength(text, font=font)
-            text_x = x0 + max((width - text_width) / 2, 0)
-            draw.text((text_x + 2, current_y + 2), text, font=font, fill=shadow_color)
-            draw.text((text_x, current_y), text, font=font, fill=text_color)
-            current_y += font.size + spacing
-
-        draw_line(headline, headline_font)
-        draw_line(subtitle, subtitle_font)
-        draw_line(cta, cta_font)
+        for scale in range(100, 9, -5):
+            blocks = []
+            for text, fraction, bold in ((headline, .12, True), (subtitle, .07, False), (cta, .06, True)):
+                if not text:
+                    continue
+                font = self._load_font(max(10, int(height * fraction * scale / 100)), bold=bold)
+                lines = self._wrap(draw, text, font, width - 4)
+                line_height = max(font.size + 4, draw.textbbox((0, 0), "АруЙ", font=font)[3] + 4)
+                blocks.append((font, lines, line_height))
+            spacing = max(6, int(height * .025))
+            needed = sum(len(lines) * line_height for _, lines, line_height in blocks) + spacing * max(0, len(blocks) - 1)
+            if needed <= height:
+                break
+        else:
+            raise ValueError("Overlay cannot fit into the image safely")
+        current_y = y0 + max(0, (height - needed) // 2)
+        for font, lines, line_height in blocks:
+            for line in lines:
+                text_x = x0 + max((width - draw.textlength(line, font=font)) / 2, 0)
+                draw.text((text_x + 2, current_y + 2), line, font=font, fill=shadow_color)
+                draw.text((text_x, current_y), line, font=font, fill=text_color)
+                current_y += line_height
+            current_y += spacing
 
     def render(
         self,

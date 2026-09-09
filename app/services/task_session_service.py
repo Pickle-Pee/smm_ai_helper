@@ -19,6 +19,7 @@ class TaskSessionState:
     questions_asked: int = 0
     request_id: str = "-"
     user_id: str = "anonymous"
+    completed_response: Dict[str, Any] | None = None
 
 
 class TaskSessionService:
@@ -35,6 +36,7 @@ class TaskSessionService:
             questions_asked=record.questions_asked or 0,
             request_id=record.request_id or "-",
             user_id=record.user_id or "anonymous",
+            completed_response=record.completed_response,
         )
 
     @classmethod
