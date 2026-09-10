@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
@@ -77,7 +78,10 @@ class ImageOrchestrator:
         Сохраняет png на диск и возвращает image_id.
         """
         image_id = uuid.uuid4().hex
-        base_path = Path(settings.IMAGE_STORAGE_PATH) / (user_id or "anonymous")
+        owner = user_id.removeprefix("tg:")
+        if not owner.isascii() or not owner.isdecimal():
+            owner = hashlib.sha256(user_id.encode()).hexdigest()
+        base_path = Path(settings.IMAGE_STORAGE_PATH) / owner
         base_path.mkdir(parents=True, exist_ok=True)
 
         image_path = base_path / f"{image_id}.png"
@@ -87,10 +91,22 @@ class ImageOrchestrator:
         self.image_index[image_id] = image_path
         return image_id
 
-    def resolve_image_path(self, image_id: str) -> Optional[Path]:
+    def resolve_image_path(self, image_id: str, *, user_id: str | None = None) -> Optional[Path]:
         """
         Возвращает путь к image_id.png, если файл существует.
         """
+        if not re.fullmatch(r"[0-9a-f]{32}", image_id):
+            return None
+        if user_id is not None:
+            owner = user_id.removeprefix("tg:")
+            if not owner.isascii() or not owner.isdecimal():
+                return None
+            # Numeric directories are portable; tg: folders support existing Linux media.
+            for folder in (owner, f"tg:{owner}"):
+                candidate = Path(settings.IMAGE_STORAGE_PATH) / folder / f"{image_id}.png"
+                if candidate.is_file():
+                    return candidate
+            return None
         p = self.image_index.get(image_id)
         if p and p.exists():
             return p
@@ -131,6 +147,7 @@ class ImageOrchestrator:
         variants: int = 1,
         user_id: str = "anonymous",
         request_id: str | None = None,
+        render_overlay: bool = False,
     ) -> Dict[str, Any]:
         brief = await self.brief_agent.run(
             platform=platform,
@@ -149,6 +166,9 @@ class ImageOrchestrator:
         layout = brief.get("layout") or "center"
         palette = brief.get("palette") or []
         confidence = brief.get("confidence") or "medium"
+        if render_overlay:
+            # Workflow-approved copy is authoritative and rendered locally in full.
+            mode, overlay_data = "template", overlay or {}
 
         style_hint = ",".join(palette) if palette else "neutral"
         prompt = background_prompt

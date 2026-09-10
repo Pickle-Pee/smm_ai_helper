@@ -1,46 +1,20 @@
-## OpenSpec
-
-- Change: `openspec/changes/<change-name>` / `N/A`
-- Specs affected:
-
-## What changed
-
-- 
-
-## What did not change
-
-- 
+## Problem and resulting behavior
 
 ## Persistence / migrations
 
-- [ ] No schema change
-- [ ] New migration added and reviewed
-- Notes:
-
-## Public API / Telegram impact
-
-- 
+## API / Telegram impact
 
 ## Verification actually executed
 
-- [ ] `pytest`
+- [ ] `python -m pytest`
 - [ ] `python -m compileall app bot`
-- [ ] `alembic upgrade head` (when relevant)
-- [ ] `openspec validate --all --strict` (when relevant)
-- Other commands:
+- [ ] `git diff --check`
+- [ ] Disposable PostgreSQL migrations and concurrency (when relevant)
 
-Do not mark a check as complete unless it actually passed.
+Report skips and unexecuted checks explicitly.
 
-## Risks / limitations
+## Risks / limitations and manual verification
 
-- 
+## Review
 
-## Manual verification
-
-- 
-
-## Agent-assisted development
-
-- Coding agent/model used (if any):
-- [ ] Diff reviewed for unrelated changes
-- [ ] Implementation matches the reviewed OpenSpec artifacts
+- [ ] Diff reviewed for correctness, compatibility and unrelated changes

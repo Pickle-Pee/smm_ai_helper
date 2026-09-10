@@ -12,7 +12,10 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 from selectolax.parser import HTMLParser
-from sqlalchemy import delete, select
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from app.db import AsyncSessionLocal
+from app.services.safe_http import fetch_public, validate_url
 
 from app.config import settings
 from app.models import UrlCache
@@ -208,16 +211,6 @@ def _classify(final_url: str) -> str:
     return "website"
 
 
-async def _fetch_json(client: httpx.AsyncClient, url: str) -> Optional[Dict[str, Any]]:
-    try:
-        r = await client.get(url)
-        if r.status_code >= 400:
-            return None
-        return r.json()
-    except Exception:
-        return None
-
-
 class UrlAnalyzer:
     """Fetch and extract lightweight metadata + text snippet from user provided URLs.
 
@@ -226,252 +219,231 @@ class UrlAnalyzer:
     - Avoids heavy scraping for platforms that are frequently blocked.
     """
 
-    def __init__(self, db_session: Any = None) -> None:
-        self._db_session = db_session
+    def __init__(self, db_session: Any = None, *, cache_session_factory=None) -> None:
+        # The legacy db_session argument opts into caching, but its transaction
+        # is never used. Cache transactions have independent short sessions.
+        self._cache_sessions = cache_session_factory or (AsyncSessionLocal if db_session is not None else None)
 
     async def analyze(self, text: str) -> Optional[UrlAnalysisResult]:
         urls = extract_targets(text)
         if not urls:
             return None
-
-        # дополнительно нормализуем (на всякий)
-        urls = [normalize_url(u) for u in urls]
-
-        summaries = await asyncio.gather(*(self._fetch_and_summarize(u) for u in urls))
-        return UrlAnalysisResult(urls=urls, url_summaries=list(summaries))
+        cached = []
+        for url in urls:
+            try:
+                validate_url(url)
+            except ValueError:
+                cached.append({"ok": False, "url": url, "warnings": ["unsafe_url"], "page_type": "unknown"})
+            else:
+                cached.append(await self._get_cached(url))
+        missing = [i for i, value in enumerate(cached) if value is None]
+        fetched = await asyncio.gather(*(self._fetch_and_summarize(urls[i]) for i in missing))
+        for i, summary in zip(missing, fetched):
+            cached[i] = summary
+            await self._set_cache(urls[i], _sha(str(summary)), summary)
+        return UrlAnalysisResult(urls=urls, url_summaries=cached)
 
     async def _get_cached(self, url: str) -> Optional[Dict[str, Any]]:
-        if not self._db_session:
+        if self._cache_sessions is None:
             return None
-
         try:
-            await self._db_session.execute(delete(UrlCache).where(UrlCache.expires_at < _now_utc()))
-            await self._db_session.commit()
-
-            res = await self._db_session.execute(select(UrlCache).where(UrlCache.url == url))
-            row = res.scalar_one_or_none()
-            if not row:
-                return None
-            if row.expires_at and row.expires_at < _now_utc():
-                return None
-            if row.summary_json:
-                data = dict(row.summary_json)
-                data["cache"] = "hit"
-                return data
+            async with self._cache_sessions() as session:
+                result = await session.execute(select(UrlCache).where(
+                    UrlCache.url == url, UrlCache.expires_at > _now_utc(),
+                ))
+                row = result.scalar_one_or_none()
+                # Ignore cache entries created before the public-web boundary.
+                if row and row.summary_json and row.summary_json.get("fetch_policy") == "public_v1":
+                    return {**row.summary_json, "cache": "hit"}
         except Exception:
+            # Cache availability must not abort the caller's business transaction.
             return None
         return None
 
     async def _set_cache(self, url: str, extracted_hash: str, summary: Dict[str, Any]) -> None:
-        if not self._db_session:
+        if self._cache_sessions is None:
             return
+        values = dict(url=url, extracted_text_hash=extracted_hash,
+                      summary_json={**summary, "fetch_policy": "public_v1"},
+                      expires_at=_now_utc() + _ttl_for(summary.get("page_type", "website"), bool(summary.get("ok"))))
         try:
-            expires = _now_utc() + _ttl_for(summary.get("page_type", "website"), bool(summary.get("ok")))
-            obj = UrlCache(
-                url=url,
-                extracted_text_hash=extracted_hash,
-                summary_json=summary,
-                expires_at=expires,
-            )
-            await self._db_session.merge(obj)
-            await self._db_session.commit()
+            async with self._cache_sessions() as session, session.begin():
+                statement = insert(UrlCache).values(**values)
+                await session.execute(statement.on_conflict_do_update(
+                    index_elements=[UrlCache.url], set_={k: v for k, v in values.items() if k != "url"},
+                ))
         except Exception:
-            try:
-                await self._db_session.rollback()
-            except Exception:
-                pass
+            return
 
     async def _fetch_and_summarize(self, url: str) -> Dict[str, Any]:
         url = normalize_url(url)
-
-        cached = await self._get_cached(url)
-        if cached is not None:
-            return cached
-
         started = time.time()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; ChatplaceBot/1.0; +https://chatplace.io)",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        }
+        try:
+            resp = await fetch_public(url)
+        except Exception as exc:
+            return {"ok": False, "url": url, "status_code": None,
+                    "error": f"fetch_error:{type(exc).__name__}",
+                    "warnings": ["fetch_failed"], "page_type": "unknown"}
 
-        timeout = httpx.Timeout(20.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
-            try:
-                resp = await client.get(url)
-            except Exception as e:
-                summary = {
-                    "ok": False,
-                    "url": url,
-                    "status_code": None,
-                    "error": f"fetch_error:{type(e).__name__}",
-                    "warnings": ["fetch_failed"],
-                    "page_type": "unknown",
-                }
-                await self._set_cache(url, _sha(str(summary)), summary)
-                return summary
+        status = resp.status_code
+        final_url = normalize_url(str(resp.url))
+        page_type = _classify(final_url)
+        ctype = (resp.headers.get("content-type") or "").lower()
 
-            status = resp.status_code
-            final_url = normalize_url(str(resp.url))
-            page_type = _classify(final_url)
-            ctype = (resp.headers.get("content-type") or "").lower()
-
-            # Fast-path: PDF / non-html
-            if page_type == "pdf" or ("text/html" not in ctype and "application/xhtml+xml" not in ctype):
-                summary = {
-                    "ok": status < 400,
-                    "url": url,
-                    "final_url": final_url,
-                    "status_code": status,
-                    "content_type": ctype,
-                    "page_type": page_type,
-                    "elapsed_ms": int((time.time() - started) * 1000),
-                    "warnings": ["not_html"],
-                }
-                await self._set_cache(url, _sha(final_url + ctype), summary)
-                return summary
-
-            if status >= 400:
-                summary = {
-                    "ok": False,
-                    "url": url,
-                    "final_url": final_url,
-                    "status_code": status,
-                    "error": f"http_{status}",
-                    "warnings": ["blocked_or_not_found"],
-                    "page_type": page_type,
-                    "elapsed_ms": int((time.time() - started) * 1000),
-                }
-                await self._set_cache(url, _sha(final_url + str(status)), summary)
-                return summary
-
-            html = resp.text or ""
-
-            # Try oEmbed for platforms where it exists
-            oembed: Optional[Dict[str, Any]] = None
-            if page_type == "youtube":
-                oembed = await _fetch_json(client, f"https://www.youtube.com/oembed?format=json&url={final_url}")
-
-            parsed = HTMLParser(html)
-
-            def _meta_name(name: str) -> str:
-                n = parsed.css_first(f'meta[name="{name}"]')
-                if n and n.attributes.get("content"):
-                    return n.attributes["content"].strip()
-                return ""
-
-            def _meta_prop(prop: str) -> str:
-                n = parsed.css_first(f'meta[property="{prop}"]')
-                if n and n.attributes.get("content"):
-                    return n.attributes["content"].strip()
-                return ""
-
-            title = (parsed.css_first("title").text(strip=True) if parsed.css_first("title") else "")
-            meta_desc = _meta_name("description")
-
-            og = {
-                "title": _meta_prop("og:title"),
-                "description": _meta_prop("og:description"),
-                "image": _meta_prop("og:image"),
-                "type": _meta_prop("og:type"),
-                "site_name": _meta_prop("og:site_name"),
-                "url": _meta_prop("og:url"),
-            }
-
-            if oembed:
-                title = title or oembed.get("title") or ""
-                og["image"] = og.get("image") or oembed.get("thumbnail_url") or ""
-
-            h1 = [n.text(strip=True) for n in parsed.css("h1")][:3]
-            headings = [n.text(strip=True) for n in parsed.css("h2")][:10]
-
-            # CTA texts: buttons/links
-            ctas: List[str] = []
-            for n in parsed.css("a,button"):
-                t = (n.text(strip=True) or "").strip()
-                if 0 < len(t) <= 50:
-                    if any(
-                        k in t.lower()
-                        for k in [
-                            "куп", "заказ", "рег", "скач", "подпис", "получ", "начать", "войти", "запис",
-                            "book", "buy", "order", "sign", "download", "get", "start",
-                        ]
-                    ):
-                        ctas.append(t)
-
-            seen = set()
-            cta_texts: List[str] = []
-            for x in ctas:
-                if x not in seen:
-                    seen.add(x)
-                    cta_texts.append(x)
-            cta_texts = cta_texts[:10]
-
-            # Remove noise
-            for bad in parsed.css("script,style,noscript,svg"):
-                bad.decompose()
-
-            # Telegram pages: try extract last post snippets
-            tg_posts: List[str] = []
-            if page_type == "telegram":
-                for n in parsed.css(".tgme_widget_message_text"):
-                    t = (n.text(separator="\n", strip=True) or "").strip()
-                    if t:
-                        tg_posts.append(t[:500])
-                    if len(tg_posts) >= 5:
-                        break
-
-            body = parsed.css_first("body")
-            raw_text = body.text(separator="\n", strip=True) if body else parsed.text(separator="\n", strip=True)
-            lines = [ln.strip() for ln in raw_text.splitlines()]
-            lines = [ln for ln in lines if 30 <= len(ln) <= 500]
-            main_text_excerpt = "\n".join(lines)[:5000]
-
-            warnings: List[str] = []
-            if not main_text_excerpt and not tg_posts:
-                warnings.append("empty_main_text")
-
-            # Common blocked platforms
-            if page_type in {"instagram", "vk", "tiktok"} and ("empty_main_text" in warnings):
-                warnings.append("platform_may_block_scraping")
-
-            elapsed_ms = int((time.time() - started) * 1000)
-
+        # Fast-path: PDF / non-html
+        if page_type == "pdf" or ("text/html" not in ctype and "application/xhtml+xml" not in ctype):
             summary = {
-                "ok": True,
+                "ok": status < 400,
                 "url": url,
                 "final_url": final_url,
                 "status_code": status,
-                "elapsed_ms": elapsed_ms,
                 "content_type": ctype,
                 "page_type": page_type,
-                "title": (title or "")[:500],
-                "meta_description": (meta_desc or "")[:800],
-                "og": {
-                    "title": (og.get("title") or "")[:800],
-                    "description": (og.get("description") or "")[:1200],
-                    "image": (og.get("image") or "")[:1200],
-                    "type": (og.get("type") or "")[:120],
-                    "site_name": (og.get("site_name") or "")[:200],
-                    "url": (og.get("url") or "")[:1200],
-                },
-                "h1": [x[:300] for x in h1],
-                "headings": [x[:300] for x in headings],
-                "cta_texts": cta_texts,
-                "main_text_excerpt": main_text_excerpt,
-                "telegram_last_posts": tg_posts,
-                "warnings": warnings,
+                "elapsed_ms": int((time.time() - started) * 1000),
+                "warnings": ["not_html"],
             }
-
-            extracted_hash = _sha(
-                "\n".join(
-                    [
-                        summary.get("title", ""),
-                        summary.get("meta_description", ""),
-                        summary.get("main_text_excerpt", ""),
-                        "\n".join(summary.get("cta_texts", []) or []),
-                        "\n".join(summary.get("telegram_last_posts", []) or []),
-                    ]
-                )
-            )
-            await self._set_cache(url, extracted_hash, summary)
             return summary
+
+        if status >= 400:
+            summary = {
+                "ok": False,
+                "url": url,
+                "final_url": final_url,
+                "status_code": status,
+                "error": f"http_{status}",
+                "warnings": ["blocked_or_not_found"],
+                "page_type": page_type,
+                "elapsed_ms": int((time.time() - started) * 1000),
+            }
+            return summary
+
+        html = resp.text or ""
+
+        # Try oEmbed for platforms where it exists
+        oembed: Optional[Dict[str, Any]] = None
+        if page_type == "youtube":
+            oembed = None  # Only observed page content is used; no auxiliary unbounded fetch.
+
+        parsed = HTMLParser(html)
+
+        def _meta_name(name: str) -> str:
+            n = parsed.css_first(f'meta[name="{name}"]')
+            if n and n.attributes.get("content"):
+                return n.attributes["content"].strip()
+            return ""
+
+        def _meta_prop(prop: str) -> str:
+            n = parsed.css_first(f'meta[property="{prop}"]')
+            if n and n.attributes.get("content"):
+                return n.attributes["content"].strip()
+            return ""
+
+        title = (parsed.css_first("title").text(strip=True) if parsed.css_first("title") else "")
+        meta_desc = _meta_name("description")
+
+        og = {
+            "title": _meta_prop("og:title"),
+            "description": _meta_prop("og:description"),
+            "image": _meta_prop("og:image"),
+            "type": _meta_prop("og:type"),
+            "site_name": _meta_prop("og:site_name"),
+            "url": _meta_prop("og:url"),
+        }
+
+        if oembed:
+            title = title or oembed.get("title") or ""
+            og["image"] = og.get("image") or oembed.get("thumbnail_url") or ""
+
+        h1 = [n.text(strip=True) for n in parsed.css("h1")][:3]
+        headings = [n.text(strip=True) for n in parsed.css("h2")][:10]
+
+        # CTA texts: buttons/links
+        ctas: List[str] = []
+        for n in parsed.css("a,button"):
+            t = (n.text(strip=True) or "").strip()
+            if 0 < len(t) <= 50:
+                if any(
+                    k in t.lower()
+                    for k in [
+                        "куп", "заказ", "рег", "скач", "подпис", "получ", "начать", "войти", "запис",
+                        "book", "buy", "order", "sign", "download", "get", "start",
+                    ]
+                ):
+                    ctas.append(t)
+
+        seen = set()
+        cta_texts: List[str] = []
+        for x in ctas:
+            if x not in seen:
+                seen.add(x)
+                cta_texts.append(x)
+        cta_texts = cta_texts[:10]
+
+        # Remove noise
+        for bad in parsed.css("script,style,noscript,svg"):
+            bad.decompose()
+
+        # Telegram pages: try extract last post snippets
+        tg_posts: List[str] = []
+        if page_type == "telegram":
+            for n in parsed.css(".tgme_widget_message_text"):
+                t = (n.text(separator="\n", strip=True) or "").strip()
+                if t:
+                    tg_posts.append(t[:500])
+                if len(tg_posts) >= 5:
+                    break
+
+        body = parsed.css_first("body")
+        raw_text = body.text(separator="\n", strip=True) if body else parsed.text(separator="\n", strip=True)
+        lines = [ln.strip() for ln in raw_text.splitlines()]
+        lines = [ln for ln in lines if 30 <= len(ln) <= 500]
+        main_text_excerpt = "\n".join(lines)[:5000]
+
+        warnings: List[str] = []
+        if not main_text_excerpt and not tg_posts:
+            warnings.append("empty_main_text")
+
+        # Common blocked platforms
+        if page_type in {"instagram", "vk", "tiktok"} and ("empty_main_text" in warnings):
+            warnings.append("platform_may_block_scraping")
+
+        elapsed_ms = int((time.time() - started) * 1000)
+
+        summary = {
+            "ok": True,
+            "url": url,
+            "final_url": final_url,
+            "status_code": status,
+            "elapsed_ms": elapsed_ms,
+            "content_type": ctype,
+            "page_type": page_type,
+            "title": (title or "")[:500],
+            "meta_description": (meta_desc or "")[:800],
+            "og": {
+                "title": (og.get("title") or "")[:800],
+                "description": (og.get("description") or "")[:1200],
+                "image": (og.get("image") or "")[:1200],
+                "type": (og.get("type") or "")[:120],
+                "site_name": (og.get("site_name") or "")[:200],
+                "url": (og.get("url") or "")[:1200],
+            },
+            "h1": [x[:300] for x in h1],
+            "headings": [x[:300] for x in headings],
+            "cta_texts": cta_texts,
+            "main_text_excerpt": main_text_excerpt,
+            "telegram_last_posts": tg_posts,
+            "warnings": warnings,
+        }
+
+        extracted_hash = _sha(
+            "\n".join(
+                [
+                    summary.get("title", ""),
+                    summary.get("meta_description", ""),
+                    summary.get("main_text_excerpt", ""),
+                    "\n".join(summary.get("cta_texts", []) or []),
+                    "\n".join(summary.get("telegram_last_posts", []) or []),
+                ]
+            )
+        )
+        return summary

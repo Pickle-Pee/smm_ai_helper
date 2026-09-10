@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
+from time import monotonic
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.services.agent_runner import AgentRunner
+from app.services.task_completion_service import TaskCompletionService
+from app.services.task_finalization_service import TaskFinalizationService, TaskFinalizationUnavailable
 from app.services.clarification_service import ClarificationService
 from app.services.qc_service import QCService
 from app.services.task_image_service import TaskImageService
@@ -47,7 +52,7 @@ class TaskPipelineService:
         )
         await TaskSessionService.save(db_session, session_state)
         await db_session.commit()
-        return await self._continue_session(db_session, session_state)
+        return await self._execute_session(db_session, session_state.session_id)
 
     async def answer(
         self,
@@ -56,14 +61,36 @@ class TaskPipelineService:
         key: str,
         value: str,
     ) -> Dict[str, Any]:
-        session_state = await TaskSessionService.get(db_session, session_id)
-        if not session_state:
-            raise ValueError("Unknown session")
+        return await self._execute_session(db_session, session_id, answer=(key, value))
 
-        session_state.answers[key] = value
-        await TaskSessionService.save(db_session, session_state)
-        await db_session.commit()
-        return await self._continue_session(db_session, session_state)
+    async def _execute_session(self, db_session, session_id, answer=None):
+        timeout = settings.TASK_FINALIZATION_TIMEOUT_SECONDS
+        lease_seconds = timeout + 30  # Cancellation/cleanup margin; no lease renewals.
+        deadline = monotonic() + lease_seconds + 5
+        while True:
+            state = await TaskFinalizationService.acquire(db_session, session_id, lease_seconds, answer)
+            if state is not None:
+                break
+            if monotonic() >= deadline:
+                raise TaskFinalizationUnavailable("Task is still executing; retry this session")
+            await asyncio.sleep(0.1)  # acquire committed; no connection/lock is held while waiting.
+        if state.completed_response is not None:
+            return state.completed_response
+        try:
+            # One execution attempt per request. A retry needs a new claim.
+            async with asyncio.timeout(timeout):
+                return await self._continue_session(db_session, state)
+        except BaseException as exc:
+            try:
+                async with asyncio.timeout(5):
+                    await db_session.rollback()
+                    await TaskFinalizationService.release(db_session, state)
+            except BaseException:
+                # Process death or unavailable DB is recovered by lease expiry.
+                logger.warning("task_claim_cleanup_failed", extra={"session_id": session_id})
+            if isinstance(exc, TimeoutError):
+                raise TaskFinalizationUnavailable("Task execution timed out; retry this session") from exc
+            raise
 
     async def get_session(
         self,
@@ -77,6 +104,7 @@ class TaskPipelineService:
         db_session: AsyncSession,
         session_state: TaskSessionState,
     ) -> Dict[str, Any]:
+        await TaskFinalizationService.check_owned(db_session, session_state)
         decision, usage = await self.task_router.route(
             session_state.agent_type,
             session_state.task_description,
@@ -92,6 +120,7 @@ class TaskPipelineService:
             return clarification_response
 
         result = await self._run_agent_with_qc(
+            db_session=db_session,
             session_state=session_state,
             decision=decision,
         )
@@ -117,15 +146,16 @@ class TaskPipelineService:
 
         remaining = max_questions - session_state.questions_asked
         next_questions = decision.get("next_questions") or []
-        questions = next_questions if next_questions else await self.clarification_service.generate_questions(
-            session_state.task_description,
-            session_state.answers,
-            remaining,
-        )
+        if next_questions:
+            questions = next_questions
+        else:
+            await TaskFinalizationService.check_owned(db_session, session_state)
+            questions = await self.clarification_service.generate_questions(
+                session_state.task_description, session_state.answers, remaining,
+            )
 
         session_state.questions_asked += len(questions)
-        await TaskSessionService.save(db_session, session_state)
-        await db_session.commit()
+        await TaskFinalizationService.finish_clarification(db_session, session_state)
 
         return {
             "status": "need_info",
@@ -135,12 +165,14 @@ class TaskPipelineService:
 
     async def _run_agent_with_qc(
         self,
+        db_session: AsyncSession,
         session_state: TaskSessionState,
         decision: Dict[str, Any],
     ) -> Dict[str, Any]:
         model = decision["model"]
         max_output_tokens = int(decision["max_output_tokens"])
 
+        await TaskFinalizationService.check_owned(db_session, session_state)
         result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
             task_description=session_state.task_description,
@@ -153,6 +185,7 @@ class TaskPipelineService:
         if not needs_qc:
             return result
 
+        await TaskFinalizationService.check_owned(db_session, session_state)
         issues = await self.qc_service.find_issues(
             session_state.task_description,
             result["content"],
@@ -160,6 +193,7 @@ class TaskPipelineService:
         if not issues:
             return result
 
+        await TaskFinalizationService.check_owned(db_session, session_state)
         revised_result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
             task_description=session_state.task_description,
@@ -178,19 +212,18 @@ class TaskPipelineService:
         result: Dict[str, Any],
         usage: Dict[str, Any],
     ) -> Dict[str, Any]:
-        self._log_task_completed(session_state, usage)
-
+        await TaskFinalizationService.check_owned(db_session, session_state)
         image_payload = await self.task_image_service.generate_for_task_session(session_state)
 
-        await TaskSessionService.delete(db_session, session_state.session_id)
-        await db_session.commit()
-
-        return {
+        response = {
             "status": "done",
             "session_id": session_state.session_id,
             "result": result,
             "image": image_payload,
         }
+        completed = await TaskCompletionService.complete(db_session, session_state, response)
+        self._log_task_completed(session_state, usage)
+        return completed
 
     @staticmethod
     def _log_task_completed(

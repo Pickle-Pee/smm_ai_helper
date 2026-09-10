@@ -2,8 +2,8 @@
 
 ## Sources and ownership
 
-- `docs/product/prompts/expert-core-production.md` — shared reasoning policy.
-- `docs/product/prompts/orchestrator-production.md` — orchestration policy.
+- `app/prompts/expert_core/v1.0.0.md` — canonical shared reasoning runtime policy. `docs/product/prompts/expert-core-production.md` is its product source/history, not loaded by the application.
+- `docs/product/prompts/orchestrator-production.md` — broader future orchestration product policy; not a runtime prompt.
 - `app/module_registry/v1.0.0.json` — canonical runtime module descriptors, version `1.0.0`.
 - `docs/product/prompts/module-registry-production.md` — approved initial-import material, not runtime data.
 - Specialized module prompts — task-specific expertise only.
@@ -17,12 +17,16 @@ A rule is written once under its owner. Shared reasoning belongs to Core; planni
 
 For `add-marketing-orchestrator-foundation`, executable planning behavior is typed code plus explicit OpenSpec scenarios and invariants. The foundation must not load `orchestrator-production.md`, copy it into Python, create `app/prompts/orchestrator` or call an LLM. Product source and typed code are not described as two canonical runtime prompts.
 
-A model-driven planner requires a separate OpenSpec change, exactly one versioned runtime prompt, deterministic contract tests, model evals, and token/call-budget and latency review.
+For `add-orchestrator-quality-gates`, `app/marketing_orchestrator/quality_gates/` typed contracts and deterministic OpenSpec rules own only normalized-result structural validation, propagation, contradiction records, explicit next-step/stop decisions and synthesis eligibility. The foundation does not make the broader product-source replanning or synthesis prose executable, and it does not add a prompt or model/QC call.
+
+The fixed MVP composes Expert Core in its three explicit executors and integrates Quality Gates through `app/workflows/quality.py` before persistence. Generic Orchestrator execution, replanning and synthesis remain unimplemented; Registry 1.0.0 still has zero bindings.
+
+A model-driven planner requires a reviewed design, exactly one versioned runtime prompt, deterministic contract tests, model evals, and token/call-budget and latency review.
 
 ## Change process
 
 1. Identify the rule owner and product rationale.
-2. Describe observable/internal contract behavior in OpenSpec.
+2. Describe observable/internal contract behavior alongside code/tests; existing OpenSpec remains useful reference/history without a mandatory approval cycle.
 3. Change the single runtime source, if one exists.
 4. Version runtime prompts when applicable.
 5. Add deterministic tests and stabilized model evals where applicable.

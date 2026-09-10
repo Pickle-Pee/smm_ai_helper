@@ -40,10 +40,10 @@ Structural validity, data sufficiency, planning status and execution readiness a
 
 ## Future lifecycle and constraints
 
-Execution, runtime quality validation, replanning, synthesis, delivery and learning are future concerns. Execution belongs to `MarketingWorkflowService` after durable Job and worker infrastructure exists.
+Generic plan execution, autonomous replanning and generic synthesis remain future concerns. Separately, `MarketingWorkflowService` already executes the fixed competitor -> creative -> opt-in mentor flow, using durable Job/JobExecution, Redis wakeups, PostgreSQL recovery, a Quality Gates adapter and independent Telegram delivery. Those explicit executors do not execute this planner or arbitrary Registry modules. See [fixed MVP contract](../development/marketing-mvp.md).
 
 - Existing API/Telegram traffic and the `TaskRouter` -> `AgentRunner` -> `TaskPipelineService` flow remain unchanged.
 - The foundation calls no modules, agents, models or QC and persists no plan/workflow record.
 - No separate dispatcher service is created.
 - No Orchestrator prompt is copied into Python or added under `app/prompts/orchestrator`.
-- Model-driven planning requires a separate OpenSpec change, versioned runtime prompt, evals and call-budget review.
+- Model-driven planning requires a reviewed design, versioned runtime prompt, evals and call-budget review.

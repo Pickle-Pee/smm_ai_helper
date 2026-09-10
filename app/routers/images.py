@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.schemas import ImageGenerateRequest, ImageGenerateResponse
+from app.security import require_actor
 from app.services.image_orchestrator import ImageOrchestrator
 
 
@@ -14,7 +15,7 @@ image_orchestrator = ImageOrchestrator()
 
 
 @router.post("/generate", response_model=ImageGenerateResponse)
-async def generate_image(payload: ImageGenerateRequest):
+async def generate_image(payload: ImageGenerateRequest, actor: int = Depends(require_actor)):
     result = await image_orchestrator.generate(
         platform=payload.platform,
         use_case=payload.use_case,
@@ -22,7 +23,7 @@ async def generate_image(payload: ImageGenerateRequest):
         brand=payload.brand,
         overlay=payload.overlay,
         variants=payload.variants,
-        user_id="anonymous",
+        user_id=str(actor),
         request_id=uuid.uuid4().hex,
     )
     images = [{"url": f"/images/{image_id}.png"} for image_id in result["image_ids"]]
@@ -35,8 +36,8 @@ async def generate_image(payload: ImageGenerateRequest):
 
 
 @router.get("/{image_id}.png")
-async def get_image(image_id: str):
-    path = image_orchestrator.resolve_image_path(image_id)
+async def get_image(image_id: str, actor: int = Depends(require_actor)):
+    path = image_orchestrator.resolve_image_path(image_id, user_id=str(actor))
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(path)

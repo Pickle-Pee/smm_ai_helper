@@ -1,0 +1,1323 @@
+{
+  "source_version": "1.0.0",
+  "modules": [
+    {
+      "module_id": "VIRTUAL_CMO",
+      "module_types": [
+        "SYNTHESIS",
+        "PRIMARY"
+      ],
+      "purpose": "Принятие верхнеуровневых маркетинговых и коммерческих решений. Определение главного ограничения роста, стратегических приоритетов и распределения ресурсов.",
+      "use_when": [
+        "пользователь просит маркетинговую стратегию",
+        "нужно определить, что делать бизнесу дальше",
+        "проблема комплексная",
+        "неизвестна главная точка роста",
+        "нужно распределить бюджет или ресурсы между направлениями",
+        "нужно выбрать между несколькими стратегическими вариантами",
+        "требуется 30/60/90-day или квартальный roadmap",
+        "требуется связать рынок, клиента, продукт, маркетинг, продажи и экономику."
+      ],
+      "do_not_use_when": [
+        "нужен только конкретный текст",
+        "нужен только рекламный creative",
+        "пользователь просит локальную редактуру",
+        "задача уже чётко диагностирована и требует одного специализированного модуля."
+      ],
+      "inputs": {
+        "required": [
+          "business_goal",
+          "known_business_context."
+        ],
+        "preferred": [
+          "baseline_metrics",
+          "economics",
+          "market_findings",
+          "customer_findings",
+          "funnel_findings",
+          "constraints",
+          "current_channels",
+          "current_strategy."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "отсутствие данных о business goal",
+          "отсутствие понимания, что бизнес считает результатом."
+        ]
+      },
+      "outputs": [
+        "strategic_diagnosis",
+        "main_growth_constraint",
+        "strategic_priorities",
+        "trade_offs",
+        "resource_priorities",
+        "strategic_bets",
+        "roadmap",
+        "risks",
+        "decision_triggers."
+      ],
+      "supported_tools": [
+        "web_access",
+        "file_analysis",
+        "site_fetch",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "определено главное ограничение, а не список всех проблем",
+        "стратегия связана с бизнес-результатом",
+        "экономика не игнорируется",
+        "учтены ресурсы",
+        "обозначены trade-offs",
+        "не более нескольких главных стратегических приоритетов."
+      ],
+      "handoffs": [
+        "EXPERIMENTS",
+        "POSITIONING",
+        "BUSINESS_DIAGNOSTICS",
+        "CREATOR",
+        "CJM"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "BUSINESS_DIAGNOSTICS",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Диагностика бизнеса и маркетинговой экономики. Определение того, где система создаёт или теряет деньги.",
+      "use_when": [
+        "падают продажи",
+        "растёт CAC",
+        "нужно определить допустимый CAC/CPL",
+        "нужно оценить бюджет",
+        "нужно масштабировать рекламу",
+        "неизвестна прибыльность привлечения",
+        "требуется unit economics",
+        "нужно разобраться с LTV",
+        "требуется ROMI / ROAS / contribution analysis",
+        "нужно найти economic bottleneck",
+        "требуется scenario analysis."
+      ],
+      "do_not_use_when": [
+        "пользователь просит только текст или creative",
+        "вопрос не зависит от экономики",
+        "нет никаких экономических данных и пользователь просит только качественную концепцию."
+      ],
+      "inputs": {
+        "required": [
+          "зависят от вопроса.",
+          "Минимум:",
+          "business_model",
+          "business_goal."
+        ],
+        "preferred": [
+          "revenue",
+          "sales",
+          "orders",
+          "margin",
+          "variable_costs",
+          "acquisition_costs",
+          "leads",
+          "customers",
+          "repeat",
+          "retention",
+          "cohort_data",
+          "channel_data."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для точного CAC ceiling:",
+          "contribution / margin.",
+          "Для LTV:",
+          "retention / repeat / monetization evidence.",
+          "Для profitability:",
+          "relevant costs.",
+          "Для scaling:",
+          "current economics + capacity assumptions."
+        ]
+      },
+      "outputs": [
+        "economic_diagnosis",
+        "revenue_tree",
+        "profit_tree",
+        "funnel_economics",
+        "CAC_logic",
+        "LTV_logic",
+        "payback",
+        "break_even_constraints",
+        "bottlenecks",
+        "sensitivity",
+        "scenarios",
+        "scaling_constraints",
+        "economic_growth_levers."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "code_generation",
+        "web_access"
+      ],
+      "quality_gate": [
+        "revenue не перепутана с profit",
+        "CPL не перепутан с CAC",
+        "averages не используются вместо marginal economics без причины",
+        "assumptions явны",
+        "не используются универсальные LTV:CAC нормы как закон",
+        "вывод связан с contribution / profitability, когда это возможно."
+      ],
+      "handoffs": [
+        "VIRTUAL_CMO",
+        "AD_AUDIT",
+        "EXPERIMENTS",
+        "POSITIONING"
+      ],
+      "aliases": [
+        "MARKETING_ECONOMICS"
+      ],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "MARKET_ANALYSIS",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Исследование рынка, структуры спроса, аудитории, сегментов, Jobs, Category Entry Points и привлекательности возможностей.",
+      "use_when": [
+        "нужно понять рынок",
+        "новый продукт",
+        "новый сегмент",
+        "новый регион",
+        "требуется анализ аудитории",
+        "требуется segmentation",
+        "требуется TAM / SAM / SOM",
+        "нужно определить demand situations",
+        "нужно выбрать целевой сегмент",
+        "нужно найти market opportunity",
+        "нужно понять альтернативы и non-consumption."
+      ],
+      "do_not_use_when": [
+        "пользователь просит только execution при уже определённой аудитории",
+        "вопрос локальный и результат market research не изменит решение."
+      ],
+      "inputs": {
+        "required": [
+          "product_or_category",
+          "geographic_scope, если materially important."
+        ],
+        "preferred": [
+          "business_model",
+          "existing_customers",
+          "internal_sales_data",
+          "current_segments",
+          "research",
+          "competitors",
+          "price",
+          "category assumptions."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для market size:",
+          "достаточные source data или прозрачные assumptions.",
+          "Для segment attractiveness:",
+          "хотя бы часть evidence о demand / economics / access.",
+          "Для реального customer behavior:",
+          "first-party или research evidence."
+        ]
+      },
+      "outputs": [
+        "market_definition",
+        "category_structure",
+        "market_size_if_supported",
+        "demand_drivers",
+        "demand_barriers",
+        "segments",
+        "segment_attractiveness",
+        "JTBD",
+        "CEP",
+        "alternatives",
+        "audience_findings",
+        "market_opportunities",
+        "white_spaces",
+        "research_gaps."
+      ],
+      "supported_tools": [
+        "web_access",
+        "file_analysis",
+        "site_fetch",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "рынок определён до оценки размера",
+        "TAM/SAM/SOM не строится как произвольный процент",
+        "search volume не выдаётся за market size",
+        "демография не заменяет behavioral segmentation",
+        "assumptions и current sources видимы",
+        "opportunities не выводятся только из «пустой клетки» карты."
+      ],
+      "handoffs": [
+        "POSITIONING",
+        "VIRTUAL_CMO",
+        "CUSTDEV",
+        "CREATOR",
+        "CJM",
+        "BUSINESS_DIAGNOSTICS"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not invent product economics."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "COMPETITOR_ANALYSIS",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Анализ прямых и непрямых альтернатив, конкурентной структуры, сообщений, предложений, funnel и возможностей для дифференциации.",
+      "use_when": [
+        "нужно разобрать конкурентов",
+        "пользователь прислал ссылки конкурентов",
+        "требуется competitive landscape",
+        "нужно найти differentiation opportunity",
+        "нужно сравнить предложения",
+        "требуется benchmark коммуникации",
+        "нужно восстановить observable positioning."
+      ],
+      "do_not_use_when": [
+        "пользователь хочет узнать закрытые финансовые показатели конкурента",
+        "нет доступных публичных материалов и нельзя получить evidence",
+        "задача не зависит от конкурентов."
+      ],
+      "inputs": {
+        "required": [
+          "минимум одно из:",
+          "competitor_name",
+          "competitor_url",
+          "category + scope для поиска."
+        ],
+        "preferred": [
+          "user_product",
+          "target_segment",
+          "market_context",
+          "decision_criteria."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "отсутствие observable evidence",
+          "отсутствие актуальной информации для dynamic claims."
+        ]
+      },
+      "outputs": [
+        "competitor_set",
+        "direct_competitors",
+        "indirect_competitors",
+        "substitutes",
+        "observable_positioning",
+        "offers",
+        "proof",
+        "strengths",
+        "weaknesses",
+        "patterns",
+        "contradictions",
+        "market_gaps",
+        "differentiation_hypotheses."
+      ],
+      "supported_tools": [
+        "web_access",
+        "site_fetch",
+        "file_analysis",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "закрытые показатели не выдуманы",
+        "наблюдение отделено от inference",
+        "анализ включает substitutes",
+        "competitor success не выводится из активности или числа подписчиков",
+        "white space проверяется на customer relevance",
+        "recommendation не сводится к копированию конкурента."
+      ],
+      "handoffs": [
+        "POSITIONING",
+        "CREATOR",
+        "VIRTUAL_CMO",
+        "MARKET_ANALYSIS"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not determine competitor profit without data."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "POSITIONING",
+      "module_types": [
+        "PRIMARY"
+      ],
+      "purpose": "Разработка category frame, target, value proposition, differentiation, RTB, positioning, USP, offer и message architecture.",
+      "use_when": [
+        "требуется позиционирование",
+        "УТП",
+        "value proposition",
+        "offer",
+        "differentiation",
+        "RTB",
+        "first-screen strategic message",
+        "repositioning",
+        "нужно понять, чем отличаться."
+      ],
+      "do_not_use_when": [
+        "пользователь просит только отредактировать существующий текст без стратегического пересмотра",
+        "неизвестен даже предполагаемый target и пользователь просит только execution."
+      ],
+      "inputs": {
+        "required": [
+          "product",
+          "target_or_target_hypothesis",
+          "customer_job_or_need",
+          "relevant_alternative."
+        ],
+        "preferred": [
+          "MARKET_ANALYSIS",
+          "COMPETITOR_ANALYSIS",
+          "CUSTDEV",
+          "decision_criteria",
+          "product_truth",
+          "economics",
+          "existing_proof."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "отсутствует product truth",
+          "отсутствует реальный или гипотетический target",
+          "значимое отличие выдумывается без evidence",
+          "strong claim не имеет RTB."
+        ]
+      },
+      "outputs": [
+        "category",
+        "frame_of_reference",
+        "target",
+        "demand_context",
+        "JTBD_frame",
+        "value_proposition",
+        "differentiation",
+        "points_of_parity",
+        "points_of_difference",
+        "RTB",
+        "positioning_statement",
+        "USP_directions",
+        "offer",
+        "message_hierarchy",
+        "claim_risks",
+        "validation_plan."
+      ],
+      "supported_tools": [
+        "web_access",
+        "file_analysis",
+        "site_fetch"
+      ],
+      "quality_gate": [
+        "positioning ≠ slogan",
+        "value proposition ≠ USP",
+        "USP ≠ headline",
+        "offer ≠ discount",
+        "differentiation ≠ distinctiveness",
+        "claim соответствует proof",
+        "не выдумана uniqueness",
+        "позиция содержит meaningful choice / trade-off."
+      ],
+      "handoffs": [
+        "CREATOR",
+        "COPY_EDITOR",
+        "LEAD_MAGNET",
+        "VIRTUAL_CMO",
+        "EXPERIMENTS",
+        "CJM"
+      ],
+      "aliases": [
+        "USP_AND_OFFER"
+      ],
+      "authority_limitations": [
+        "Does not invent customer quotes."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "AD_AUDIT",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Диагностика рекламных кампаний по данным, которые предоставил пользователь.",
+      "use_when": [
+        "пользователь предоставил:",
+        "advertising export",
+        "screenshots",
+        "performance report",
+        "creatives",
+        "campaign metrics",
+        "traffic and conversion data.",
+        "И хочет:",
+        "понять падение результатов",
+        "найти аномалии",
+        "оценить кампании",
+        "диагностировать creative fatigue",
+        "найти точки потерь",
+        "сформировать гипотезы оптимизации."
+      ],
+      "do_not_use_when": [
+        "пользователь предполагает, что система имеет прямой доступ к рекламному кабинету",
+        "нет никаких рекламных данных, а требуется фактический audit.",
+        "HARD_LIMITATION:",
+        "Нет прямой интеграции с рекламными кабинетами.",
+        "Никогда не:",
+        "утверждай, что вошёл в кабинет",
+        "меняй кампании",
+        "останавливай объявления",
+        "меняй ставки",
+        "изменяй бюджеты.",
+        "Работай только с предоставленными пользователем материалами и доступными данными."
+      ],
+      "inputs": {
+        "required": [
+          "минимум одно:",
+          "ad_export",
+          "screenshots",
+          "campaign_report",
+          "advertising_metrics."
+        ],
+        "preferred": [
+          "business_goal",
+          "campaign_goal",
+          "sales_data",
+          "CRM",
+          "landing",
+          "creatives",
+          "margin",
+          "lead_quality",
+          "time_series."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для profitability:",
+          "economics.",
+          "Для sales impact:",
+          "sales / CRM data.",
+          "Для causality:",
+          "подходящий дизайн measurement."
+        ]
+      },
+      "outputs": [
+        "data_quality_check",
+        "performance_diagnosis",
+        "anomalies",
+        "trend_changes",
+        "probable_causes",
+        "creative_findings",
+        "audience_findings",
+        "landing_handoff_findings",
+        "lead_quality_findings",
+        "economic_implications",
+        "optimization_hypotheses",
+        "prioritized_tests."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "code_generation",
+        "site_fetch",
+        "web_access"
+      ],
+      "quality_gate": [
+        "проверено качество исходных данных",
+        "процентные изменения рассматриваются вместе с absolute values",
+        "CTR не используется как конечный бизнес-результат",
+        "симптомы не выдаются за причины",
+        "downstream lead/sales quality учитывается при наличии",
+        "recommendations сформулированы как controlled changes."
+      ],
+      "handoffs": [
+        "BUSINESS_DIAGNOSTICS",
+        "CJM",
+        "CREATOR",
+        "EXPERIMENTS",
+        "VIRTUAL_CMO",
+        "COPY_EDITOR"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not determine sales causality from CTR alone."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "CJM",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Исследование реального customer journey, точек контакта, переходов, барьеров, friction и Moments that Matter.",
+      "use_when": [
+        "требуется CJM",
+        "проблема в conversion path",
+        "нужно понять customer journey",
+        "нужно найти friction",
+        "есть разрыв между advertising → landing → lead → sale",
+        "требуется Service Blueprint",
+        "нужно найти customer experience bottleneck."
+      ],
+      "do_not_use_when": [
+        "пользователь просит только creative",
+        "путь клиента не имеет отношения к задаче",
+        "нет behavioral evidence, но пользователь требует представить гипотетическую CJM как факт."
+      ],
+      "inputs": {
+        "required": [
+          "segment_or_segment_hypothesis",
+          "product",
+          "journey_goal."
+        ],
+        "preferred": [
+          "CUSTDEV",
+          "analytics",
+          "CRM",
+          "sales",
+          "reviews",
+          "support",
+          "behavioral_data",
+          "touchpoints."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для factual CJM:",
+          "behavioral/customer evidence.",
+          "Без evidence:",
+          "разрешена HYPOTHETICAL CJM с явной маркировкой."
+        ]
+      },
+      "outputs": [
+        "stages",
+        "customer_goals",
+        "questions_in_mind",
+        "emotions",
+        "barriers",
+        "motivators",
+        "touchpoints",
+        "transitions",
+        "friction",
+        "moments_that_matter",
+        "message_match_gaps",
+        "business_actions",
+        "stage_metrics",
+        "opportunity_map."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "site_fetch",
+        "web_access",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "journey не считается линейным автоматически",
+        "stage отражает customer task, а не только действия бизнеса",
+        "факты отделены от hypothetical journey",
+        "barriers связаны с evidence",
+        "recommendations привязаны к переходу между состояниями."
+      ],
+      "handoffs": [
+        "EXPERIMENTS",
+        "COPY_EDITOR",
+        "CREATOR",
+        "VIRTUAL_CMO",
+        "LEAD_MAGNET"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "CUSTDEV",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Исследование реального поведения клиентов, Jobs, switching, triggers, barriers, alternatives и decision criteria.",
+      "use_when": [
+        "неизвестно, почему клиенты покупают",
+        "неизвестно, почему не покупают",
+        "нужно подготовить интервью",
+        "нужно разобрать transcripts",
+        "требуется JTBD research",
+        "нужно проверить problem hypothesis",
+        "нужно понять switching behavior",
+        "требуется Win/Loss",
+        "требуется Churn research",
+        "требуется Lost Customer research",
+        "нужно протестировать offer concept qualitatively."
+      ],
+      "do_not_use_when": [
+        "требуется количественно измерить market share",
+        "пользователь хочет заменить реальное исследование synthetic personas",
+        "вопрос уже решается объективными behavioral data."
+      ],
+      "inputs": {
+        "required": [
+          "зависит от режима.",
+          "Для research design:",
+          "research_question.",
+          "Для transcript analysis:",
+          "actual transcripts/materials.",
+          "Для interview guide:",
+          "learning_goal."
+        ],
+        "preferred": [
+          "product",
+          "segment",
+          "current_hypotheses",
+          "purchase_context",
+          "existing_research."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для claims о реальных клиентах:",
+          "реальные интервью / customer evidence.",
+          "Synthetic simulation никогда не является подтверждением реального demand."
+        ]
+      },
+      "outputs": [
+        "research_design",
+        "recruitment_logic",
+        "interview_guide",
+        "behavioral_findings",
+        "Jobs",
+        "Forces_of_Progress",
+        "triggers",
+        "alternatives",
+        "anxieties",
+        "habits",
+        "decision_criteria",
+        "customer_language",
+        "patterns",
+        "negative_evidence",
+        "opportunities",
+        "hypotheses",
+        "validation_needs."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "web_access",
+        "site_fetch",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "вопросы не leading",
+        "прошлое поведение приоритетнее hypothetical intent",
+        "quotes не придуманы",
+        "qualitative evidence не превращено в проценты без данных",
+        "synthetic focus group ясно маркируется как simulation",
+        "findings отделены от interpretation."
+      ],
+      "handoffs": [
+        "MARKET_ANALYSIS",
+        "POSITIONING",
+        "CJM",
+        "CREATOR",
+        "LEAD_MAGNET",
+        "VIRTUAL_CMO",
+        "EXPERIMENTS"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not determine market share from a few interviews."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "CREATOR",
+      "module_types": [
+        "PRIMARY"
+      ],
+      "purpose": "Создание маркетинговых creative hypotheses и готовых креативных материалов на основе стратегии.",
+      "use_when": [
+        "banner",
+        "ad creative",
+        "video concept",
+        "script",
+        "UGC concept",
+        "social creative",
+        "hooks",
+        "creative angles",
+        "visual brief",
+        "content creative execution."
+      ],
+      "do_not_use_when": [
+        "проблема ещё не диагностирована и пользователь ожидает, что новые creative автоматически исправят продажи",
+        "отсутствует минимальный смысл предложения",
+        "требуется только редактура готового текста."
+      ],
+      "inputs": {
+        "required": [
+          "objective",
+          "product_or_offer",
+          "target_or_target_hypothesis."
+        ],
+        "preferred": [
+          "situation",
+          "CEP",
+          "awareness",
+          "positioning",
+          "offer",
+          "RTB",
+          "channel",
+          "brand_constraints",
+          "format."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для strong commercial claim:",
+          "proof.",
+          "Для channel-specific final execution:",
+          "current format requirements, если dynamic."
+        ]
+      },
+      "outputs": [
+        "creative_strategy",
+        "distinct_angles",
+        "concepts",
+        "hooks",
+        "scripts",
+        "banner_copy",
+        "visual_briefs",
+        "image_prompts",
+        "CTA",
+        "test_variations",
+        "creative_hypotheses."
+      ],
+      "supported_tools": [
+        "image_generation",
+        "web_access",
+        "site_fetch",
+        "file_analysis"
+      ],
+      "quality_gate": [
+        "варианты отличаются strategic angle, а не только словами",
+        "нет fake pain",
+        "нет fake urgency",
+        "нет fabricated proof",
+        "сообщение связано с audience situation",
+        "claim соответствует RTB",
+        "creative имеет понятный next action",
+        "execution соответствует brand."
+      ],
+      "handoffs": [
+        "EXPERIMENTS",
+        "COPY_EDITOR"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not determine market size."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "COPY_EDITOR",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Редактирование смысла, структуры, аргументации и языка маркетингового текста без потери авторского голоса.",
+      "use_when": [
+        "нужно переписать текст",
+        "улучшить landing copy",
+        "усилить headline",
+        "проверить offer wording",
+        "сократить",
+        "сделать понятнее",
+        "убрать AI-style",
+        "улучшить смысловую иерархию",
+        "адаптировать текст под канал."
+      ],
+      "do_not_use_when": [
+        "ещё не определено позиционирование, а пользователь ожидает, что редактура его создаст автоматически",
+        "требуется полная creative strategy",
+        "требуется customer research."
+      ],
+      "inputs": {
+        "required": [
+          "source_text или message_to_create",
+          "purpose."
+        ],
+        "preferred": [
+          "audience",
+          "positioning",
+          "offer",
+          "RTB",
+          "channel",
+          "tone",
+          "constraints."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": []
+      },
+      "outputs": [
+        "semantic_diagnosis",
+        "edited_text",
+        "central_message",
+        "message_hierarchy",
+        "argument_improvements",
+        "clarity_improvements",
+        "alternative_versions",
+        "explanation_of_material_changes."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "site_fetch",
+        "web_access"
+      ],
+      "quality_gate": [
+        "смысл улучшен раньше стилистики",
+        "авторский voice не уничтожен без запроса",
+        "не добавлены invented claims",
+        "текст не превращён в generic AI copy",
+        "CTA соответствует readiness",
+        "сокращение не уничтожает proof."
+      ],
+      "handoffs": [
+        "CREATOR",
+        "EXPERIMENTS",
+        "LEAD_MAGNET"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "LEAD_MAGNET",
+      "module_types": [
+        "PRIMARY"
+      ],
+      "purpose": "Проектирование lead magnet, value exchange, qualification flow и mini-landing.",
+      "use_when": [
+        "нужен lead magnet",
+        "mini-landing",
+        "quiz",
+        "calculator concept",
+        "diagnostic",
+        "checklist",
+        "guide",
+        "template",
+        "mini-audit",
+        "lead capture",
+        "qualification mechanism."
+      ],
+      "do_not_use_when": [
+        "бизнес не понимает, что происходит после lead capture",
+        "пользователь хочет случайный PDF только «чтобы собирать контакты»",
+        "lead magnet не связан с основным product Job."
+      ],
+      "inputs": {
+        "required": [
+          "target",
+          "relevant_problem_or_job",
+          "core_product",
+          "desired_next_step."
+        ],
+        "preferred": [
+          "awareness",
+          "positioning",
+          "offer",
+          "objections",
+          "qualification_needs",
+          "CRM_flow."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "отсутствует логическая связь magnet → product",
+          "сбор данных предполагается без понятной purpose/consent logic."
+        ]
+      },
+      "outputs": [
+        "lead_magnet_strategy",
+        "format",
+        "promise",
+        "micro_win",
+        "content_structure",
+        "mini_landing",
+        "form_logic",
+        "qualification",
+        "delivery_flow",
+        "bridge_to_product",
+        "CTA",
+        "measurement_plan."
+      ],
+      "supported_tools": [
+        "site_fetch",
+        "code_generation",
+        "file_analysis",
+        "web_access",
+        "image_generation"
+      ],
+      "quality_gate": [
+        "magnet решает small real task",
+        "не является случайным PDF",
+        "даёт Time to Value",
+        "естественно ведёт к следующей задаче",
+        "форма не собирает лишние данные",
+        "contact ≠ automatic marketing consent",
+        "нет dark patterns."
+      ],
+      "handoffs": [
+        "CREATOR",
+        "COPY_EDITOR",
+        "EXPERIMENTS",
+        "CJM"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "TREND_MONITORING",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Поиск, верификация и адаптация текущих трендов, культурных сигналов, форматов и быстрорастущих тем.",
+      "use_when": [
+        "пользователь спрашивает, что сейчас в тренде",
+        "требуется trend monitoring",
+        "trend-jacking",
+        "social listening",
+        "current cultural signals",
+        "emerging content formats",
+        "fast-growing topic",
+        "current hype",
+        "поиск актуальных content opportunities."
+      ],
+      "do_not_use_when": [
+        "web/current data недоступны и пользователь требует утверждать, что происходит «сейчас»",
+        "запрос касается evergreen strategy и тренд не нужен."
+      ],
+      "inputs": {
+        "required": [
+          "topic/category/brand_context",
+          "current timeframe."
+        ],
+        "preferred": [
+          "audience",
+          "positioning",
+          "brand_tone",
+          "channel",
+          "risk_constraints."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для CURRENT TREND:",
+          "fresh external evidence.",
+          "Один viral post не является trend evidence."
+        ]
+      },
+      "outputs": [
+        "signals",
+        "source_provenance",
+        "freshness",
+        "momentum",
+        "trend_type",
+        "lifecycle",
+        "behavioral_meaning",
+        "brand_fit",
+        "opportunity",
+        "saturation_risk",
+        "legal_or_brand_risk",
+        "adaptation_hypotheses."
+      ],
+      "supported_tools": [
+        "web_access",
+        "site_fetch",
+        "file_analysis",
+        "image_generation",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "источник тренда не перепутан с placement channel",
+        "current claim подтверждён свежими evidence",
+        "popularity ≠ brand relevance",
+        "event ≠ structural trend",
+        "мем ≠ durable trend",
+        "нет копирования чужого creative",
+        "brand fit проверен."
+      ],
+      "handoffs": [
+        "CREATOR",
+        "EXPERIMENTS",
+        "VIRTUAL_CMO"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Does not declare one viral post a durable trend."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "EXPERIMENTS",
+      "module_types": [
+        "PRIMARY",
+        "SUPPORTING"
+      ],
+      "purpose": "Превращение uncertainty и рекомендаций в проверяемые hypotheses, experiment design и decision rules.",
+      "use_when": [
+        "нужно проверить hypothesis",
+        "требуется A/B",
+        "нужно приоритизировать идеи",
+        "ICE / RICE / PIE",
+        "нужно определить primary metric",
+        "stop/scale criteria",
+        "smoke test",
+        "fake-door test",
+        "holdout",
+        "incrementality",
+        "experiment backlog",
+        "интерпретация test result."
+      ],
+      "do_not_use_when": [
+        "вопрос можно решить существующими данными",
+        "проблема технически сломана и её нужно просто исправить",
+        "нет meaningful decision, которое зависит от теста",
+        "пользователь хочет A/B «ради A/B»."
+      ],
+      "inputs": {
+        "required": [
+          "decision_or_goal",
+          "hypothesis_or_uncertainty."
+        ],
+        "preferred": [
+          "observation",
+          "evidence",
+          "baseline",
+          "business_metric",
+          "segment",
+          "traffic/sample",
+          "economics",
+          "constraints."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": [
+          "Для formal A/B design:",
+          "baseline",
+          "measurement definition",
+          "relevant population.",
+          "Для causal claim:",
+          "подходящий experiment design."
+        ]
+      },
+      "outputs": [
+        "hypothesis",
+        "evidence_basis",
+        "mechanism",
+        "test_method",
+        "control",
+        "treatment",
+        "population",
+        "primary_metric",
+        "guardrails",
+        "MDE_logic",
+        "sample_logic",
+        "duration_logic",
+        "stop_rule",
+        "scale_rule",
+        "decision_tree",
+        "learning_record."
+      ],
+      "supported_tools": [
+        "code_generation",
+        "file_analysis",
+        "web_access",
+        "site_fetch"
+      ],
+      "quality_gate": [
+        "idea ≠ hypothesis",
+        "hypothesis falsifiable",
+        "primary metric определена заранее",
+        "guardrails есть при риске local optimization",
+        "test chosen because it answers decision",
+        "статистическая значимость не выдаётся за business significance",
+        "inconclusive не превращается в win",
+        "p-hacking / metric switching не допускаются."
+      ],
+      "handoffs": [
+        "VIRTUAL_CMO",
+        "CREATOR",
+        "POSITIONING",
+        "BUSINESS_DIAGNOSTICS"
+      ],
+      "aliases": [
+        "HYPOTHESIS_PRIORITIZATION"
+      ],
+      "authority_limitations": [
+        "Does not replace business strategy."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "PROJECT_DEFENSE",
+      "module_types": [
+        "OVERLAY",
+        "PRIMARY"
+      ],
+      "purpose": "Стресс-тест маркетинговых решений и подготовка пользователя к защите перед руководителем, клиентом, CMO, CFO, CEO или интервьюером.",
+      "use_when": [
+        "пользователь хочет защитить проект",
+        "подготовиться к презентации",
+        "потренироваться перед встречей",
+        "проверить аргументацию",
+        "отработать objections",
+        "пройти simulated defense",
+        "получить red-team critique."
+      ],
+      "do_not_use_when": [
+        "пользователь просто хочет получить готовое решение",
+        "нет объекта, который можно защищать."
+      ],
+      "inputs": {
+        "required": [
+          "project_or_decision_to_defend."
+        ],
+        "preferred": [
+          "evidence",
+          "economics",
+          "assumptions",
+          "presentation",
+          "recommendation",
+          "target_stakeholder."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": []
+      },
+      "outputs": [
+        "challenge_questions",
+        "objections",
+        "weak_points",
+        "scoring_or_assessment",
+        "stronger_arguments",
+        "missing_evidence",
+        "revised_answer",
+        "defense_readiness."
+      ],
+      "supported_tools": [
+        "file_analysis",
+        "web_access",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "вопросы проверяют логику, а не trivia",
+        "критика профессиональная, не унижающая",
+        "пользователь сначала получает возможность ответить в interactive mode",
+        "evidence gaps не маскируются",
+        "«не знаю + как проверю» считается допустимым сильным ответом."
+      ],
+      "handoffs": [
+        "MENTOR",
+        "VIRTUAL_CMO"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    },
+    {
+      "module_id": "MENTOR",
+      "module_types": [
+        "OVERLAY",
+        "PRIMARY"
+      ],
+      "purpose": "Обучение маркетинговому мышлению через объяснение логики, вопросы, critique, teach-back и перенос принципов на новые задачи.",
+      "use_when": [
+        "пользователь просит объяснить",
+        "хочет научиться",
+        "хочет понять reasoning",
+        "просит проверить свою логику",
+        "хочет quiz",
+        "хочет получить mentor feedback",
+        "системно развивается как маркетолог."
+      ],
+      "do_not_use_when": [
+        "пользователь просит просто выполнить рабочую задачу",
+        "обучение не добавляет value",
+        "overlay заметно мешает execution."
+      ],
+      "inputs": {
+        "required": [
+          "learning_goal или конкретная задача/ответ пользователя."
+        ],
+        "preferred": [
+          "skill_level",
+          "previous_learning",
+          "active_marketing_problem."
+        ],
+        "optional": [],
+        "blocking_for_strong_conclusion": []
+      },
+      "outputs": [
+        "explanation",
+        "diagnostic_question",
+        "feedback",
+        "missing_logic",
+        "principle",
+        "example",
+        "transfer_question",
+        "mini_exercise."
+      ],
+      "supported_tools": [
+        "web_access",
+        "file_analysis",
+        "site_fetch",
+        "code_generation"
+      ],
+      "quality_gate": [
+        "работа сначала, теория потом, если пользователь не просил обратного",
+        "не превращать каждый ответ в урок",
+        "вопрос имеет pedagogical purpose",
+        "объясняется principle, а не только правильный ответ",
+        "сложность адаптируется к уровню пользователя."
+      ],
+      "handoffs": [
+        "PROJECT_DEFENSE"
+      ],
+      "aliases": [],
+      "authority_limitations": [
+        "Must not present assumptions outside the declared module scope as confirmed decisions."
+      ],
+      "availability_status": "metadata_only",
+      "execution_binding": null
+    }
+  ]
+}

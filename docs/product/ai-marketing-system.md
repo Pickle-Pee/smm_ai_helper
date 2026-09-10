@@ -4,7 +4,7 @@
 
 `smm_ai_helper` развивается из набора генераторов в Telegram-first AI marketing copilot: систему, которая сохраняет контекст бизнеса, помогает принимать маркетинговые решения, выполняет специализированную работу и объясняет достаточную decision logic без раскрытия скрытой chain-of-thought.
 
-Первый продуктовый вертикальный сценарий:
+Реализованный фиксированный MVP-сценарий:
 
 ```text
 Competitor analysis
@@ -30,7 +30,7 @@ Competitor analysis
 
 ### 2. Marketing Orchestrator
 
-Управляющий слой, который:
+Полный продуктовый замысел управляющего слоя (перечень шире текущей реализации):
 
 - интерпретирует requested output, decision goal и business goal;
 - проверяет root problem и достаточность контекста;
@@ -43,6 +43,10 @@ Competitor analysis
 - прекращает работу при достижении stop condition.
 
 Orchestrator не является универсальным CMO и не подменяет специализированные модули.
+
+Текущий generic Orchestrator реализует только deterministic planning и всегда возвращает `PLANNING_ONLY`. Generic execution, autonomous replanning и synthesis из полного product concept не подключены. Отдельный фиксированный MVP уже исполняется через `MarketingWorkflowService` и три явных workflow-specific executor; это не исполнение произвольного плана Orchestrator.
+
+Quality Gates в `app/marketing_orchestrator/quality_gates/` принимает caller-supplied typed normalized results и возвращает deterministic structural decisions. Confidence использует только `UNKNOWN < LOW < MEDIUM < HIGH`; identities и lineage явные, timestamps caller-supplied и UTC-normalized. `app/workflows/quality.py` уже связывает evaluator с fixed MVP: проверяет claims, evidence и lineage до сохранения MarketingArtifact. Сам evaluator не вызывает LLM/QC/modules, не читает persistence/context и не доказывает semantic truth. Его Registry-derived readiness остаётся `PLANNING_ONLY`; fixed workflow использует gate outcomes и eligibility manifest. Generic user-facing synthesis остаётся будущей работой.
 
 ### 3. Module Registry
 
@@ -58,11 +62,11 @@ Orchestrator не является универсальным CMO и не под
 - common handoffs;
 - aliases.
 
-Registry не исполняет задачи и не содержит бизнес-состояние.
+Registry `1.0.0` содержит только metadata, имеет ноль execution bindings, не исполняет задачи и не содержит бизнес-состояние. Fixed executors используют metadata и Expert Core composition, но не добавляют Registry bindings.
 
 ### 4. Specialized modules
 
-Нормативный набор production registry:
+Нормативный набор metadata Registry (15 описаний, а не 15 работающих исполнителей):
 
 - `VIRTUAL_CMO`;
 - `BUSINESS_DIAGNOSTICS`;
@@ -86,13 +90,35 @@ Registry не исполняет задачи и не содержит бизн�
 Telegram / API
 → MarketingWorkflowService
 → MarketingRun / MarketingArtifact / Job
-→ Redis transport
-→ workers
+→ Redis wakeups + PostgreSQL due scan
+→ fixed workflow workers / JobExecution
 → PostgreSQL
 → Telegram delivery
 ```
 
 PostgreSQL — durable source of truth. Redis — transport и coordination, но не business storage.
+
+### Durable Job persistence boundary
+
+`add-durable-job-persistence` реализован: модель, сервис и миграция `20260825_0004` присутствуют. `Job` — одна durable execution request, уже используемая асинхронным MVP, а не копия workflow state или output:
+
+- `MarketingRun` хранит состояние и прогресс multi-step workflow;
+- `MarketingArtifact` хранит именованный reusable output шага;
+- `Job` хранит request input, immutable через supported persistence service, и lifecycle `pending -> running -> succeeded|failed`.
+
+Job является operational child `MarketingRun`, direct user или trusted-internal system record без owner reference; public anonymous Job creation отсутствует. Удаление run/user каскадно удаляет owned Jobs, а не превращает их в system work; retained audit history не входит в foundation. Commit/rollback принадлежит вызывающему transaction owner; fixed workflow атомарно сохраняет artifact, Job outcome, run transition и delivery parts в PostgreSQL.
+
+Сам persistence service не исполняет Job. Уже реализованный workflow layer публикует Redis wakeups, восстанавливает работу через PostgreSQL due scan и хранит bounded attempts, leases, fencing и retry availability в `JobExecution`, не меняя закрытый lifecycle Job. Независимая durable Telegram delivery имеет собственные claims/retries/acknowledgements и не повторяет генерацию. Потеря Redis не теряет работу; неоднозначный provider timeout или Telegram send до потери acknowledgement может дать повторный внешний эффект.
+
+## Fixed MVP scope implemented now
+
+- Анализ доступного текста одной публичной HTML-страницы конкурента с сохранённым snapshot BrandProfile и текущей цели.
+- Коммерческий пакет на основе сохранённого анализа: offer, headline, CTA, баннер через существующий ImageOrchestrator и сценарий Reels/Shorts.
+- Mentor explanation на основе сохранённых analysis/creative artifacts только после явного действия пользователя.
+- Durable artifacts с evidence, assumptions, limitations и lineage; Quality Gates adapter до записи.
+- Owner-scoped API/workflow/media, background execution/recovery, повторное использование существующей работы и независимая доставка в Telegram.
+
+Контракты и ограничения: [fixed workflow](../development/marketing-mvp.md). Generic Orchestrator execution, arbitrary 15-module execution, autonomous replanning, generic synthesis, campaign execution, CRM, финальная генерация/монтаж видео и production deployment не реализованы. Exactly-once provider/Telegram semantics не обещаются.
 
 ## Runtime boundaries
 
@@ -135,6 +161,9 @@ PostgreSQL — durable source of truth. Redis — transport и coordination, н�
 - Не выдавать synthetic AI personas за customer evidence.
 - Не пытаться детерминированным кодом доказать истинность произвольного маркетингового вывода.
 - Не показывать пользователю внутренний routing trace или hidden chain-of-thought.
+- Не считать contract completeness доказательством истинности claim.
+- Не повышать confidence из-за повторения claim или непроверенной «независимости» нового evidence.
+- Не подключать существующие agent dictionaries к normalized Quality Gates без явного adapter contract.
 
 ## Product success criteria
 

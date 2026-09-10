@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict
@@ -19,6 +20,8 @@ class TaskSessionState:
     questions_asked: int = 0
     request_id: str = "-"
     user_id: str = "anonymous"
+    completed_response: Dict[str, Any] | None = None
+    finalization_token: str | None = None  # Internal ownership, never a public DTO field.
 
 
 class TaskSessionService:
@@ -31,10 +34,12 @@ class TaskSessionService:
             agent_type=record.agent_type,
             task_description=record.task_description,
             mode=record.mode,
-            answers=record.answers or {},
+            answers=deepcopy(record.answers or {}),
             questions_asked=record.questions_asked or 0,
             request_id=record.request_id or "-",
             user_id=record.user_id or "anonymous",
+            completed_response=deepcopy(record.completed_response),
+            finalization_token=record.finalization_token,
         )
 
     @classmethod

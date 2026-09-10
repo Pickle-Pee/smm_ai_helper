@@ -443,6 +443,9 @@ class QCCallFake:
 
 
 def test_content_task_path_keeps_generation_and_qc_call_counts(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services.task_finalization_service import TaskFinalizationService
+    monkeypatch.setattr(TaskFinalizationService, "check_owned", AsyncMock())
     plan = [
         {"date": "2026-08-24", "channel": "Telegram", "format": "пост", "topic": "one"},
         {"date": "2026-08-25", "channel": "Telegram", "format": "пост", "topic": "two"},
@@ -460,6 +463,7 @@ def test_content_task_path_keeps_generation_and_qc_call_counts(monkeypatch):
     )
 
     result = asyncio.run(service._run_agent_with_qc(
+        db_session=None,
         session_state=session,
         decision={"model": "model-light", "max_output_tokens": 2000, "needs_qc": True},
     ))

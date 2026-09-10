@@ -46,4 +46,4 @@ Loading also fails for duplicate/missing/unexpected IDs, invalid counts/fields/e
 
 ## Scope boundary
 
-This foundation does not change `TaskRouter`, `AgentRunner`, `TaskPipelineService`, public APIs, persistence, migrations, Telegram behavior, LLM/QC calls, or execution. Future Marketing Orchestrator work may consume the read-only registry.
+This foundation does not change `TaskRouter`, `AgentRunner`, `TaskPipelineService`, public APIs, persistence, migrations, Telegram behavior, LLM/QC calls, or execution. The existing deterministic Marketing Orchestrator planner and fixed MVP executors/Quality Gates adapter consume the read-only registry. The latter are explicit workflow implementations, not Registry execution bindings or arbitrary 15-module execution.

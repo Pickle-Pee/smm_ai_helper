@@ -4,11 +4,11 @@
 
 `smm_ai_helper` is a Telegram-first AI marketing copilot. The runtime is intentionally split into interface, application/service, persistence, and external-model layers.
 
-The current system supports standalone chat and marketing-agent tasks. The planned MVP adds a durable multi-step workflow:
+The system supports standalone chat/tasks and a durable multi-step MVP workflow:
 
 `competitor analysis -> commercial creative package -> mentor explanation`
 
-Planned components are explicitly marked below and are not current runtime behavior.
+See `docs/development/marketing-mvp.md` for execution, recovery and HTTP contracts.
 
 ## Current runtime
 
@@ -22,6 +22,8 @@ FastAPI backend
   |-- BrandProfileService
   |-- UrlAnalyzer
   |-- ImageOrchestrator
+  |-- MarketingWorkflowService -> PostgreSQL jobs + Redis wakeups -> worker
+  |-- DeliveryService -> bot sender -> Telegram
         |
         +--> PostgreSQL
         +--> OpenAI text/image APIs
@@ -61,6 +63,7 @@ High-level flow:
 Task router endpoint
  -> user / agent validation
  -> TaskPipelineService
+ -> durable standalone claim (or replay of completed_response)
  -> TaskRouter
  -> ClarificationService (if needed)
  -> AgentRunner
@@ -71,7 +74,7 @@ Task router endpoint
 
 Supported standalone agent types currently include strategy, content, analytics, promo, and trends.
 
-Task sessions are temporary durable records while clarification is in progress. Completed results are saved to task history.
+Task sessions retain answers and the canonical `completed_response` after completion. PostgreSQL claims serialize continuation before routing/model/QC/image calls; waiting requests release their transactions between checks. `TaskCompletionService` fences the owner and atomically saves one Task history row, the response and claim release. Later answers replay the response without external work. Failed owners release their claim; crashed owners can be replaced after lease expiry. See the task contract for bounded timeout/recovery and external-provider limitations.
 
 See `docs/task_pipeline.md` for the detailed task architecture.
 
@@ -90,11 +93,26 @@ It supports only `explicit_single_module_v1` and `new_positioning_v1`. The latte
 
 This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
 
+### Internal deterministic Quality Gates foundation
+
+The implemented deterministic Quality Gates boundary evaluates typed results. Its Registry-derived readiness remains `PLANNING_ONLY`, while the fixed MVP consumes its structural gate outcomes through an explicit adapter:
+
+```text
+caller-supplied immutable normalized module result
+ -> exact contract and Registry metadata validation
+ -> RFC-8785 batch fingerprint / selected-evidence contradiction / typed aggregate decisions
+ -> synthesis-eligibility manifest (data only)
+```
+
+The foundation remains pure and non-persistent: it does not call a module, agent, LLM or `QCService`, query context or persistence, create Jobs, use Redis/workers, or synthesize prose. The fixed MVP now calls it through the explicit `app/workflows/quality.py` adapter before saving an artifact. Existing standalone agent results remain unchanged. Registry `1.0.0` validates identities, declared output membership and registered handoffs; workflow-specific schemas are defined separately. The gate verifies structured metadata and provenance relationships, not semantic truth.
+
+Runtime ownership is `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It depends only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
+
 ### URL analysis
 
 `UrlAnalyzer` extracts/normalizes a bounded set of URLs/social targets, fetches lightweight page signals, and stores reusable summaries in `UrlCache` when database access is available.
 
-Upcoming competitor-analysis work should reuse this capability rather than introduce an unrelated scraper without an approved design change.
+The competitor executor reuses this capability. Fetches validate public DNS/IP addresses at connection time, recheck redirects, and bound time and bytes. Cache I/O uses independent short transactions.
 
 ### Image generation
 
@@ -105,7 +123,7 @@ Public endpoints:
 - `POST /images/generate`
 - `GET /images/{image_id}.png`
 
-Upcoming commercial-creative work should reuse this pipeline.
+The creative executor reuses this pipeline and renders the saved headline/CTA locally onto the generated background. A shared persistent volume makes owner-scoped images available after worker/backend recreation.
 
 ## Persistence ownership
 
@@ -116,12 +134,27 @@ PostgreSQL is the current durable source of truth for:
 - conversations and messages;
 - brand profiles;
 - URL cache.
+- marketing workflow runs;
+- named marketing workflow artifacts.
 
-Future durable workflow/job state also belongs in PostgreSQL.
+Durable Job state, execution attempts and delivery state also belong in PostgreSQL.
 
-## Planned MVP workflow architecture
+### Implemented durable Job persistence
 
-The following is planned and requires OpenSpec changes before implementation:
+OpenSpec change `add-durable-job-persistence` defines the `jobs` table and internal persistence service now used by `MarketingWorkflowService`. A Job is one durable execution request; it does not replace `MarketingRun` workflow progress or `MarketingArtifact` output.
+
+- Ownership is exclusive: MarketingRun-owned, direct-user-owned, or trusted-internal system. There is no public anonymous Job class. A workflow step is valid only for a run-owned Job.
+- Run-owned and direct-user-owned Jobs are operational aggregate children deleted with their owner through database/ORM cascade; they are not retained audit history and owner deletion never reclassifies work as system-owned.
+- Request identity/input and ownership are immutable through the supported persistence service. Before transition SQL, tracked target immutable/version/owner-relationship, owner-collection, or deletion history is rejected without clearing caller state; ordinary untracked in-place JSON is replaced by the locked persisted row. The service deep-copies bounded input JSON and accepts only caller-sanitized failure strings. Direct session writes remain unsupported rather than universally blocked.
+- The closed lifecycle is `pending/version=0 -> running/version=1 -> succeeded|failed/version=2`. Every transition requires the caller's exact observed version under the row lock, so only one request based on a given version can succeed. Retry, cancellation, timeout, delivery, and dead-letter states are not part of this foundation.
+- One injected aware UTC clock owns creation/transition instants. Job mutations add/flush without refresh and may participate atomically with MarketingRun/MarketingArtifact changes, but the caller owns commit/rollback.
+- PostgreSQL commit establishes durability. The foundation alone does not execute work; the additive workflow layer owns publication, leases, attempts, execution and delivery.
+
+See `docs/product/durable-job-persistence.md`. The persistence service and migration `20260825_0004` are implemented; execution belongs to the workflow layer.
+
+## Implemented MVP workflow architecture
+
+The workflow extends the implemented persistence foundations:
 
 ```text
 Telegram / API ingress
@@ -131,10 +164,10 @@ MarketingWorkflowService
         |
         +--> MarketingRun / MarketingArtifact (PostgreSQL)
         |
-        +--> JobService (PostgreSQL durable status)
+        +--> JobPersistenceService (implemented PostgreSQL persistence)
                 |
                 v
-             Redis queue
+             Redis wakeups + PostgreSQL due scan
                 |
                 v
              Workers
@@ -149,17 +182,19 @@ MarketingWorkflowService
                 +--> OpenAI APIs
 ```
 
-### Planned queue invariant
+### Queue invariant
 
-Redis will be transport/coordination infrastructure, not the canonical record of job completion. A worker must be able to recover work from durable PostgreSQL job state after restart or Redis loss according to the approved job/queue specifications.
+Redis transports wakeups; PostgreSQL stores canonical state. Workers reclaim expired leases with fencing tokens and bounded retries after restart or Redis loss. Artifact, job completion, run transition and Telegram delivery parts commit atomically. The bot claims and acknowledges deliveries independently of generation.
 
-### Planned workflow invariant
+### Workflow invariant
 
-`TaskPipelineService` remains the single standalone marketing-task pipeline. Multi-step product workflows should be orchestrated by a dedicated workflow layer whose artifacts can feed later steps.
+`TaskPipelineService` remains the standalone pipeline. The dedicated workflow layer snapshots BrandProfile/current business inputs, executes analysis and creative on request, and enables the mentor only after an explicit continuation. Later steps consume saved artifacts. See README for commands and recovery behavior.
 
 ## Specification and agent workflow
 
-- Current observable behavior is documented under `openspec/specs/`.
-- Proposed behavior changes live under `openspec/changes/` until implemented and archived.
+- Current observable behavior and verification are documented in README, this architecture and `docs/development/marketing-mvp.md` / `docs/task_pipeline.md`, alongside code and tests.
+- `openspec/specs/` and `openspec/changes/` preserve useful baseline contracts and design history. Unarchived changes may already be implemented; archival is optional.
 - `AGENTS.md` files contain persistent Codex implementation constraints.
-- Product vision lives under `docs/product/` and does not automatically override current behavioral specs.
+- Product documents distinguish implemented fixed scope from broader vision. Use task -> implementation -> tests -> code review; no separate OpenSpec approval cycle is required.
+
+Generic Orchestrator execution, arbitrary execution of all 15 Registry modules, autonomous replanning and generic synthesis remain future work. Campaign execution, CRM integrations, final video generation/editing and production deployment are outside the implemented MVP. Neither provider calls nor Telegram delivery promise exactly-once external effects.

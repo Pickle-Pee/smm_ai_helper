@@ -1,9 +1,12 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.logging import setup_logging
+from app.services.task_finalization_service import TaskFinalizationUnavailable
+from app.routers.workflows import router as workflow_router, delivery_router
 from app.routers import (
     agents_router,
     brand_profile_router,
@@ -17,6 +20,11 @@ setup_logging()
 app = FastAPI(title="SMM Swarm API")
 
 
+@app.exception_handler(TaskFinalizationUnavailable)
+async def task_finalization_unavailable(_request, exc):
+    return JSONResponse(status_code=503, content={"detail": str(exc)}, headers={"Retry-After": "5"})
+
+
 @app.on_event("startup")
 async def on_startup():
     Path(settings.IMAGE_STORAGE_PATH).mkdir(parents=True, exist_ok=True)
@@ -27,6 +35,8 @@ app.include_router(tasks_router)
 app.include_router(images_router)
 app.include_router(chat_router)
 app.include_router(brand_profile_router)
+app.include_router(workflow_router)
+app.include_router(delivery_router)
 
 
 @app.get("/health")

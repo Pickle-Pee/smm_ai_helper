@@ -229,7 +229,12 @@ def test_invalid_content_is_not_cached_as_valid(monkeypatch):
 def test_expert_core_resource_is_in_current_docker_build_context():
     dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY . ." in dockerfile
-    assert not (REPOSITORY_ROOT / ".dockerignore").exists()
+    from fnmatch import fnmatch
+    patterns = (REPOSITORY_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    resource = "app/prompts/expert_core/v1.0.0.md"
+    prefixes = ["/".join(resource.split("/")[:i]) for i in range(1, 5)]
+    assert not any(fnmatch(prefix, pattern) for prefix in prefixes for pattern in patterns if not pattern.startswith("!"))
+    assert {".env", ".git", ".local-test", ".venv"} <= set(patterns)
     assert (
         REPOSITORY_ROOT / "app" / "prompts" / "expert_core" / "v1.0.0.md"
     ).is_file()

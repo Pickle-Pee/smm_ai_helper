@@ -1,5 +1,7 @@
 # Migration Plan: Contextual Chat Assistant
 
+Historical plan for the original contextual-chat transition. The audit and proposed steps below describe that earlier baseline, not the current backlog. Current chat and fixed marketing MVP behavior is documented in [architecture](../ARCHITECTURE.md) and [workflow contracts](development/marketing-mvp.md).
+
 ## Current flow (audit)
 - **Bot → backend → agents**: the Telegram bot currently guides users through static agent-specific questions, then calls backend agent endpoints to produce results. The backend uses agent classes for strategy/content/analytics/promo/trends and stores results in tasks.
 - **Static questions**: `bot/handlers/agent_flow.py` defines `AGENT_CONFIG` with hardcoded question lists and a step-by-step FSM. The bot collects answers and calls `/agents/{agent_type}/run`.
