@@ -80,6 +80,10 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 ### Internal Marketing Orchestrator planning foundation
 
+The separate `app/marketing_copilot/` foundation prepares semantic intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. It is not connected to API, Telegram, services or workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
+
+Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a future scenario proposal and remains unsupported by the existing planner. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
+
 `app/marketing_orchestrator/` is a deterministic, side-effect-free internal planning boundary:
 
 ```text
