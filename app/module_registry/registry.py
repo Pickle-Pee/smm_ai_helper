@@ -6,8 +6,6 @@ from importlib.resources import files
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from app.services.agent_registry import AgentRegistry
-
 from .types import (
     ExecutionBinding,
     InputRequirement,
@@ -76,9 +74,8 @@ class ModuleRegistry:
             raise ModuleRegistryError(f"invalid canonical ID set; missing={missing}, unexpected={unexpected}")
 
         by_id = {descriptor.module_id: descriptor for descriptor in descriptor_items}
-        known_agents = AgentRegistry.supported_agent_types()
         for descriptor in descriptor_items:
-            self._validate_descriptor(descriptor, expected_ids, known_agents)
+            self._validate_descriptor(descriptor, expected_ids)
         if any(descriptor.execution_binding is not None for descriptor in descriptor_items):
             raise ModuleRegistryError("registry version 1.0.0 must contain zero execution bindings")
 
@@ -151,11 +148,9 @@ class ModuleRegistry:
             if binding_raw is not None:
                 if not isinstance(binding_raw, Mapping):
                     raise ModuleRegistryError(f"{field('execution_binding')} must be an object or null")
-                binding = ExecutionBinding(
-                    agent_id=_require_text(binding_raw.get("agent_id"), field("execution_binding.agent_id")),
-                    compatibility=_require_text(binding_raw.get("compatibility"), field("execution_binding.compatibility")),
-                    evidence=_require_text(binding_raw.get("evidence"), field("execution_binding.evidence")),
-                )
+                if set(binding_raw) != {"executor_key", "contract_version", "compatibility", "evidence"}:
+                    raise ModuleRegistryError("execution binding requires exactly executor_key, contract_version, compatibility, evidence")
+                binding = ExecutionBinding(**binding_raw)
             return ModuleDescriptor(
                 module_id=module_id,
                 module_types=module_types,
@@ -176,7 +171,7 @@ class ModuleRegistry:
             raise ModuleRegistryError(f"invalid enum value in modules[{index}]: {exc}") from exc
 
     @staticmethod
-    def _validate_descriptor(descriptor: ModuleDescriptor, expected_ids: frozenset[ModuleId], known_agents: set[str]) -> None:
+    def _validate_descriptor(descriptor: ModuleDescriptor, expected_ids: frozenset[ModuleId]) -> None:
         if not descriptor.module_types:
             raise ModuleRegistryError(f"{descriptor.module_id.value} has no module type")
         if descriptor.module_id in descriptor.handoffs:
@@ -190,10 +185,8 @@ class ModuleRegistry:
         if descriptor.availability_status is ModuleAvailabilityStatus.EXECUTION_BOUND and binding is None:
             raise ModuleRegistryError("execution-bound module requires an execution binding")
         if binding is not None:
-            if binding.compatibility != "exact":
-                raise ModuleRegistryError("execution binding requires exact compatibility")
-            if binding.agent_id not in known_agents:
-                raise ModuleRegistryError(f"execution binding targets unknown agent: {binding.agent_id}")
+            if type(binding) is not ExecutionBinding:
+                raise ModuleRegistryError("execution binding must be ExecutionBinding")
 
     @property
     def version(self) -> str:

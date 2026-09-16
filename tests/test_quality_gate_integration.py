@@ -1,3 +1,4 @@
+import ast
 import hashlib,json
 from importlib.resources import files
 from pathlib import Path
@@ -15,11 +16,18 @@ def test_package_is_architecturally_isolated_by_import_boundary():
     text="\n".join(p.read_text(encoding="utf-8") for p in root.glob("*.py"))
     forbidden=("app.llm","QCService","TaskPipelineService","sqlalchemy","redis","app.routers","bot.","app.agents","app.presenters","MarketingOrchestrator")
     assert not any(token in text for token in forbidden)
-def test_only_explicit_workflow_adapter_imports_quality_gates():
+def test_only_explicit_workflow_adapter_and_execution_result_contract_import_quality_gates():
     root=Path(__file__).parents[1]
     paths=[*root.glob("app/**/*.py"),*root.glob("bot/**/*.py")]
     adapter = root / "app" / "workflows" / "quality.py"
-    assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths if "quality_gates" not in p.parts and p != adapter)
+    contracts = root / "app" / "module_execution" / "contracts.py"
+    assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths
+                   if "quality_gates" not in p.parts and p not in (adapter, contracts))
+    imports = [node for node in ast.walk(ast.parse(contracts.read_text(encoding="utf-8")))
+               if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or "")]
+    assert [(node.module, [alias.name for alias in node.names]) for node in imports] == [
+        ("app.marketing_orchestrator.quality_gates.contracts", ["NormalizedModuleResult"])
+    ]
 def test_internal_exports_are_closed():
     import app.marketing_orchestrator.quality_gates as q
     assert "Any" not in q.__all__;assert "dataclass" not in q.__all__;assert "QualityGateEvaluator" in q.__all__

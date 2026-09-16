@@ -13,6 +13,7 @@ import pytest
 
 import app.module_registry.registry as registry_module
 from app.module_registry import (
+    ExecutionBinding,
     ModuleActivation,
     ModuleAvailabilityStatus,
     ModuleId,
@@ -200,10 +201,11 @@ def test_ambiguous_aliases_across_descriptors_fail():
 @pytest.mark.parametrize(
     "change",
     [
-        {"availability_status": "metadata_only", "execution_binding": {"agent_id": "strategy", "compatibility": "exact", "evidence": "exact"}},
+        {"availability_status": "metadata_only", "execution_binding": {"executor_key": "test.cmo", "contract_version": "module_executor.v1", "compatibility": "exact", "evidence": "exact"}},
         {"availability_status": "execution_bound", "execution_binding": None},
-        {"availability_status": "execution_bound", "execution_binding": {"agent_id": "unknown", "compatibility": "exact", "evidence": "exact"}},
-        {"availability_status": "execution_bound", "execution_binding": {"agent_id": "strategy", "compatibility": "partial", "evidence": "partial"}},
+        {"availability_status": "execution_bound", "execution_binding": {"executor_key": "test.unknown", "contract_version": "module_executor.v1", "compatibility": "exact", "evidence": "exact"}},
+        {"availability_status": "execution_bound", "execution_binding": {"executor_key": "test.cmo", "contract_version": "module_executor.v1", "compatibility": "partial", "evidence": "partial"}},
+        {"availability_status": "execution_bound", "execution_binding": {"agent_id": "strategy", "compatibility": "exact", "evidence": "legacy shape"}},
     ],
 )
 def test_inconsistent_or_unknown_execution_bindings_fail(change):
@@ -214,12 +216,13 @@ def test_inconsistent_or_unknown_execution_bindings_fail(change):
         ModuleRegistry.from_mapping(raw)
 
 
-def test_v1_rejects_even_an_exact_known_execution_binding():
+def test_v1_rejects_even_a_valid_generic_execution_binding():
     raw = canonical_mapping()
     descriptor(raw, "VIRTUAL_CMO").update(
         availability_status="execution_bound",
         execution_binding={
-            "agent_id": "strategy",
+            "executor_key": "test.cmo",
+            "contract_version": "module_executor.v1",
             "compatibility": "exact",
             "evidence": "hypothetical exact compatibility",
         },
@@ -227,6 +230,16 @@ def test_v1_rejects_even_an_exact_known_execution_binding():
 
     with pytest.raises(ModuleRegistryError, match="zero execution bindings"):
         ModuleRegistry.from_mapping(raw)
+
+
+def test_v1_direct_constructor_rejects_bindings_without_runtime_availability_lookup():
+    from dataclasses import replace
+
+    registry = ModuleRegistry.load()
+    bound = replace(registry.descriptors[0], availability_status=ModuleAvailabilityStatus.EXECUTION_BOUND,
+                    execution_binding=ExecutionBinding("unregistered.cmo", "module_executor.v1", "exact", "test"))
+    with pytest.raises(ModuleRegistryError, match="zero execution bindings"):
+        ModuleRegistry(version="1.0.0", descriptors=(bound, *registry.descriptors[1:]))
 
 
 def test_metadata_registry_is_disjoint_from_execution_registry_and_has_no_side_effects(monkeypatch):
@@ -238,6 +251,8 @@ def test_metadata_registry_is_disjoint_from_execution_registry_and_has_no_side_e
 
     monkeypatch.setattr("app.llm.openai_text.chat", forbidden)
     monkeypatch.setattr("app.services.qc_service.QCService.find_issues", forbidden)
+    monkeypatch.setattr(AgentRegistry, "supported_agent_types", forbidden)
+    monkeypatch.setattr(AgentRegistry, "get_agent_class", forbidden)
     registry = ModuleRegistry.load()
     assert registry.get("creator").module_id is ModuleId.CREATOR
 
