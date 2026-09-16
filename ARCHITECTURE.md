@@ -112,6 +112,22 @@ The foundation remains pure and non-persistent: it does not call a module, agent
 
 Runtime ownership is `app/marketing_orchestrator/quality_gates/` with contracts/errors/evaluation/propagation/contradiction/decision modules and minimal internal exports. It depends only on public read-only Module Registry boundaries. Existing planner and validator remain independent and do not import Quality Gates; no public API or circular dependency is introduced.
 
+### Internal module execution foundation
+
+`app/module_execution/` defines the runtime-neutral `module_executor.v1` boundary:
+
+```text
+ModuleId -> declarative ExecutionBinding (executor_key, contract_version, exact, evidence)
+         -> explicitly injected ModuleExecutorRegistry
+         -> ModuleExecutorDispatcher -> ModuleExecutor.execute(request) -> ModuleExecutionResult
+```
+
+The request reuses the Orchestrator's immutable `ContextPacket`. Complete predecessor results carry a producer node ID, module-specific frozen JSON payload and the existing Quality Gates `NormalizedModuleResult`; there is no parallel claims/evidence model. The dispatcher validates exact key/version/module compatibility, invokes once, checks the result envelope, and propagates executor errors unchanged. It does not evaluate Quality Gates, retry, persist, schedule or own resources.
+
+Python dependencies point from this execution package to declarative `module_registry` types, Orchestrator context contracts and Quality Gates result contracts. Module Registry no longer imports legacy `AgentRegistry` or checks runtime implementation availability. Neither planning nor Quality Gates imports the new execution package.
+
+Production bindings and production registrations remain **zero**. Registry `1.0.0` is unchanged and still rejects every non-null binding; no `1.1.0` resource exists. The dispatcher is used only by tests and is available for future integration. `AgentRegistry`/`AgentRunner` and the fixed `MarketingExecutors` path remain in place, with no ingress or worker changes. The generic Orchestrator stays `PLANNING_ONLY`. The next stage is the first exact module implementations/bindings with separate executable Registry versioning; see [module execution foundation](docs/development/module-execution-foundation.md).
+
 ### URL analysis
 
 `UrlAnalyzer` extracts/normalizes a bounded set of URLs/social targets, fetches lightweight page signals, and stores reusable summaries in `UrlCache` when database access is available.
