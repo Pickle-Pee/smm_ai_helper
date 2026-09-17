@@ -356,10 +356,13 @@ def test_architecture_separates_metadata_from_implementations_and_forbids_revers
                "app.marketing_orchestrator.quality_gates.contracts")
     for path in (ROOT / "app/module_execution").glob("*.py"):
         assert not [name for name in _imports(path) if name.startswith("app.") and not name.startswith(allowed)]
-    # Only the explicit internal graph runtime may consume module execution.
+    # Only explicit internal graph/application boundaries may consume execution.
     for directory in (ROOT / "app", ROOT / "bot"):
         for path in directory.rglob("*.py"):
-            if "module_execution" not in path.parts and "orchestration_runtime" not in path.parts:
+            if not {"module_execution", "orchestration_runtime"}.intersection(path.parts) and path not in {
+                ROOT / "app/marketing_copilot/application_contracts.py", ROOT / "app/marketing_copilot/factory.py",
+                ROOT / "app/marketing_copilot/service.py",
+            }:
                 assert "module_execution" not in path.read_text(encoding="utf-8"), path
 
 

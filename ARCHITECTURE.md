@@ -80,7 +80,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 ### Internal Marketing Orchestrator planning foundation
 
-The separate `app/marketing_copilot/` foundation prepares semantic intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. It is not connected to API, Telegram, services or workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
+The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed internal `MarketingCopilotService` now coordinates these proposals with deterministic tools, synchronous modules and durable graph start. It is not connected to API, Telegram or production workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
 Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a future scenario proposal and remains unsupported by the existing planner. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
@@ -130,7 +130,38 @@ Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-
 
 The separate `app/module_execution/executors/` package supplies three real implementations through an explicit factory requiring injected single-attempt model and site-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
-The executable registry and implementations are internally callable only. No API, Telegram, MarketingCopilot ingress, production worker main or MarketingWorkflowService consumes them. The internal durable module graph runtime below consumes them explicitly. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+The executable registry and implementations are internally callable only. The internal Copilot application service and durable graph runtime consume them explicitly; no API, Telegram, production worker main or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+
+### Internal unified Copilot application
+
+`MarketingCopilotService.execute(CopilotRequest)` interprets once, resolves caller-authorized
+context through `ContextResolver`, applies `ExecutionPolicy`, then dispatches:
+
+```text
+DIRECT_TOOL   -> deterministic tool registry -> Decimal funnel calculator
+SINGLE_MODULE -> scoped planner packet -> shared dispatcher -> Quality Gates
+WORKFLOW      -> planner -> PlanCompiler -> GraphExecutionService.start_compiled_run
+CONVERSATION  -> typed conversation_delegate for future chat ingress
+```
+
+The fast paths create no MarketingRun, Job or JobExecution. Only Registry 1.1.0 bound
+modules execute; no legacy fallback or application-level provider retry exists.
+Workflow start returns a durable identity acknowledgement; `ModuleGraphWorker` owns
+later execution. Actor + request key deterministically identify a run; the existing
+runtime compares the compiled plan and rejects a different plan under the same key.
+`PlanCompiler` and the runtime-owned `EXECUTABLE_SCENARIOS` remain the workflow
+authorization boundary.
+
+Success and upstream reuse require result acceptance **and every current claim** in
+the gate manifest. Partial claim exclusion cannot release an unfiltered payload.
+This invariant applies to synchronous presentation, graph completion and persisted
+artifact reload. Blocking/unsupported outcomes return one typed grouped clarification.
+
+For `competitive_positioning_v1`, an explicit competitor URL plus authorized SITE_FETCH
+makes pre-collected observable evidence optional. The URL remains an unverified fetch
+target; executor fetch failure may block execution. `new_positioning_v1` is unchanged.
+No schema migration or production ingress was added. See
+[unified Copilot execution](docs/development/unified-copilot-execution.md).
 
 ### Internal durable module graph execution
 

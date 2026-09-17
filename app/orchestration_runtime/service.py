@@ -14,6 +14,7 @@ from app.db import AsyncSessionLocal
 from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, User
 from app.services.job_persistence_service import JobPersistenceService
 from app.module_execution import ModuleExecutionRequest, UpstreamExecutionResult
+from app.module_execution.acceptance import fully_accepted
 from app.marketing_orchestrator.quality_gates import QualityGateEvaluator
 from app.marketing_orchestrator.quality_gates.contracts import EvaluationBatch
 from app.module_registry import ModuleResultStatus
@@ -155,7 +156,7 @@ class GraphExecutionService:
                 raise RuntimeContractError("artifact module or dependencies mismatch")
             upstream = self._upstream(plan, node, accepted)
             quality = evaluate_result(job.job_id, result, upstream)
-            if raw["quality"] != quality or result.normalized_result.result_id not in quality["accepted_result_ids"]:
+            if raw["quality"] != quality or not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):
                 raise RuntimeContractError("artifact quality acceptance mismatch")
             accepted[node.node_id] = result
         if by_key:
@@ -278,7 +279,7 @@ class GraphExecutionService:
             node = next(n for n in plan.nodes if n.node_id == item.node_id)
             expected_quality = evaluate_result(item.job_id, result, self._upstream(plan, node, accepted))
             if (result.module_id is not node.module_id or quality != expected_quality
-                    or result.normalized_result.result_id not in quality["accepted_result_ids"]
+                    or not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
                     or result.normalized_result.module_status is ModuleResultStatus.BLOCKED):
                 raise RuntimeContractError("result is not accepted")
             raw = bounded({"schema_version": ARTIFACT_SCHEMA, "run_id": item.run_id, "plan_revision": revision,
