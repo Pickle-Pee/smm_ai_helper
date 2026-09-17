@@ -126,11 +126,30 @@ The request reuses the Orchestrator's immutable `ContextPacket`. Complete predec
 
 Python dependencies point from this execution package to declarative `module_registry` types, Orchestrator context contracts and Quality Gates result contracts. Module Registry no longer imports legacy `AgentRegistry` or checks runtime implementation availability. Neither planning nor Quality Gates imports the new execution package.
 
-Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-only and rejecting every binding. Explicit `ModuleRegistry.load("1.1.0")` provides exactly three approved exact bindings: `COMPETITOR_ANALYSIS -> competitor_analysis.v1`, `POSITIONING -> positioning.v1`, and `CREATOR -> creator.v1`, all using `module_executor.v1`. The other twelve descriptors remain metadata-only. Unknown versions and non-approved binding sets fail closed.
+Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-only and rejecting every binding. Registry resources 1.0.0 and 1.1.0 remain unchanged. Explicit `ModuleRegistry.load("1.1.0")` provides exactly three approved exact bindings: `COMPETITOR_ANALYSIS -> competitor_analysis.v1`, `POSITIONING -> positioning.v1`, and `CREATOR -> creator.v1`, all using `module_executor.v1`. The other twelve descriptors remain metadata-only in 1.1.0. Explicit 1.2.0 adds `MARKET_ANALYSIS -> market_analysis.v1`, `VIRTUAL_CMO -> virtual_cmo.v1`, and `EXPERIMENTS -> experiments.v1`, also exact `module_executor.v1`; nine modules remain metadata-only. Descriptor metadata is identical across all three versions. Unknown versions and non-approved binding sets fail closed.
 
-The separate `app/module_execution/executors/` package supplies three real implementations through an explicit factory requiring injected single-attempt model and site-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
+The separate `app/module_execution/executors/` package supplies three implementations in its unchanged default 1.1 composition, or six when the factory receives `registry_version="1.2.0"`, with injected single-attempt model and source-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
 The executable registry and implementations are internally callable only. The internal Copilot application service and durable graph runtime consume them explicitly; no API, Telegram, production worker main or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+
+### Internal strategy intelligence executors
+
+Registry 1.2.0 extends the same dispatcher/result/Quality Gates boundary. MARKET_ANALYSIS
+uses authorized first-party customer/market facts, explicitly supplied source excerpts,
+accepted predecessor results or explicitly supplied public URLs through an injected
+safe UrlAnalyzer capability. It has no search provider and treats absent sizing data
+as unknown. Supplied primary/secondary provenance is preserved; observed pages are
+primary evidence of their text, not independent verification of their assertions.
+
+VIRTUAL_CMO synthesizes a bounded strategy from an explicit business goal, known
+business/product context and accepted findings. It is an expert, not the Orchestrator
+or MarketingCopilotService. EXPERIMENTS turns accepted strategic/positioning hypotheses
+into structured falsifiable designs with parent lineage. Structured strategy items and
+experiment fields are included in normalized claims and remain behind full-claim acceptance.
+BUSINESS_DIAGNOSTICS remains economics-first and metadata-only; it is not repurposed
+as an own-site/product analyzer. No Strategy Builder graph, production ingress,
+worker wiring, delivery changes or migration is introduced. See
+[strategy intelligence executors](docs/development/strategy-intelligence-executors.md).
 
 ### Internal unified Copilot application
 
@@ -166,12 +185,12 @@ No schema migration or production ingress was added. See
 ### Internal durable module graph execution
 
 `app/orchestration_runtime/` compiles validated planning-only plans using explicit
-Registry 1.1.0 and an injected executor registry. The first executable vertical is
+Registry 1.1.0 or 1.2.0 and an injected executor registry. The immutable approved execution-version set contains exactly these two versions. Compilation persists the exact version; reload loads that version, never upgrades a 1.1 plan. Metadata compatibility still requires exact equality to planning Registry 1.0 after removing availability/bindings. The first executable vertical is
 `competitive_positioning_v1`: COMPETITOR_ANALYSIS -> POSITIONING. The existing
 `new_positioning_v1` is outside the runtime-owned immutable `EXECUTABLE_SCENARIOS`
 allowlist, which contains exactly `explicit_single_module_v1` and
 `competitive_positioning_v1`. Planning support does not grant execution permission;
-MARKET_ANALYSIS is also still unbound.
+MARKET_ANALYSIS is bound only in explicit Registry 1.2.0; binding availability does not authorize new scenarios.
 
 Immutable `compiled_execution_plan.v1` revisions live in `orchestration_plans`,
 owned by MarketingRun (`orchestration_graph.v1`). Ready nodes become distinct

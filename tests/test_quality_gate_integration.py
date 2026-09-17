@@ -22,7 +22,8 @@ def test_only_explicit_adapters_and_execution_contract_builders_import_quality_g
     adapter = root / "app" / "workflows" / "quality.py"
     contracts = root / "app" / "module_execution" / "contracts.py"
     executors = root / "app" / "module_execution" / "executors"
-    builders = {executors / name for name in ("common.py", "competitor_analysis.py", "positioning.py", "creator.py")}
+    builders = {executors / name for name in ("common.py", "competitor_analysis.py", "positioning.py", "creator.py",
+                                             "market_analysis.py", "virtual_cmo.py", "experiments.py")}
     assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths
                    if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders,
                        root / "app/orchestration_runtime/service.py", root / "app/marketing_copilot/service.py",

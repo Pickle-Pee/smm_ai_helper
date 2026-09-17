@@ -137,7 +137,8 @@ def result_to_json(result: ModuleExecutionResult):
 
 def result_from_json(raw) -> ModuleExecutionResult:
     result = _restore(ModuleExecutionResult, raw)
-    if (result.module_id not in {ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING, ModuleId.CREATOR}
+    if (result.module_id not in {ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING, ModuleId.CREATOR,
+                                 ModuleId.MARKET_ANALYSIS, ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS}
             or result.schema_version != result.module_id.value.lower() + ".payload.v1"):
         raise RuntimeContractError("unsupported execution result payload version")
     return result
