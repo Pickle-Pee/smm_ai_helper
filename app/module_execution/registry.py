@@ -49,6 +49,11 @@ class ModuleExecutorRegistry:
             registrations[metadata.executor_key] = (metadata, executor)
         self._registrations = MappingProxyType(registrations)
 
+    @property
+    def executor_keys(self) -> tuple[str, ...]:
+        """Immutable inventory for explicit composition/coherence validation."""
+        return tuple(sorted(self._registrations))
+
     def resolve(self, executor_key: str) -> ModuleExecutor:
         try:
             validate_executor_key(executor_key)

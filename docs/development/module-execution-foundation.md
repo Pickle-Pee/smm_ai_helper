@@ -1,6 +1,6 @@
 # Module execution foundation
 
-The internal `app/module_execution/` foundation exists, but production bindings and registered production implementations are **zero**. It is used only in tests/future integration. The fixed competitor -> creative -> opt-in mentor workflow continues through `app/workflows/executors.py` and its explicit quality adapter. The generic Orchestrator remains `PLANNING_ONLY`.
+The internal `app/module_execution/` foundation now has three explicitly composed implementations in `executors/`, described in [first module executors](first-module-executors.md). Registry `1.0.0` remains the metadata-only default; executable Registry `1.1.0` must be requested explicitly. There are no current ingress/worker consumers. The fixed competitor -> creative -> opt-in mentor workflow continues through `app/workflows/executors.py` and its explicit quality adapter. The generic Orchestrator remains `PLANNING_ONLY`.
 
 ## Contract and ownership
 
@@ -43,17 +43,17 @@ Construct `ModuleExecutorRegistry(executors)` explicitly. The default is empty. 
 
 Construct `ModuleExecutorDispatcher(registry)` and call `await dispatcher.dispatch(binding, request)`. It checks typed envelopes, exact compatibility, availability, both versions against `module_executor.v1`, and request/executor module identity before invoking once. It then requires a `ModuleExecutionResult` with matching module and normalized-result identity. Unknown executors, invalid metadata, version mismatches and module mismatches have separate boundary errors. Executor/provider exceptions and cancellation propagate unchanged; there is no retry, categorization, transaction, Job, Redis wakeup or delivery logic.
 
-The binding declares a syntactically valid version, while the dispatcher owns supported-version checks. This keeps product metadata independent of installed runtimes. The former `agent_id` shape is intentionally removed; this changes no persisted `1.0.0` resource, because it has no bindings. Registry loading and direct construction still reject any binding, including a well-formed generic one pointing to an unavailable implementation.
+The binding declares a syntactically valid version, while the dispatcher owns supported-version checks. This keeps product metadata independent of installed runtimes. The former `agent_id` shape is intentionally removed; this changes no persisted `1.0.0` resource, because it has no bindings. Registry `1.0.0` loading and direct construction still reject any binding. Explicit `1.1.0` validates exactly its three approved bindings; the executor factory additionally validates implementation inventory, keys, module IDs and contract versions. `executor_keys` exposes an immutable inventory for that check.
 
 ## Compatibility and next step
 
-All 15 Registry descriptors remain `metadata_only` with `execution_binding = null`. The tracked `v1.0.0.json` resource is unchanged relative to the merged base. Normalization is UTF-8 `json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":"))`; the SHA-256 remains:
+All 15 Registry `1.0.0` descriptors remain `metadata_only` with `execution_binding = null`. The tracked `v1.0.0.json` resource is unchanged relative to the merged base. Normalization is UTF-8 `json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":"))`; the SHA-256 remains:
 
 `25261485245902066cb6c59ef6cc612b18ab4cdabeebff6768e49816ba716918`
 
-`AgentRegistry`, `AgentRunner`, `TaskPipelineService`, fixed `MarketingExecutors`, `MarketingWorkflowService`, Quality Gates evaluation, the planner, Copilot `ExecutionPolicy`, public DTOs, API/Telegram ingress, workers, persistence, Redis and delivery retain their behavior. No migrations or database schema changes are included. The next stage supplies the first exact production ModuleExecutor implementations/bindings and a separately versioned executable Registry. Generic plan execution is not implemented by this foundation.
+`AgentRegistry`, `AgentRunner`, `TaskPipelineService`, fixed `MarketingExecutors`, `MarketingWorkflowService`, Quality Gates evaluation, the planner, Copilot `ExecutionPolicy`, public DTOs, API/Telegram ingress, workers, persistence, Redis and delivery retain their behavior. No migrations or database schema changes are included. The first implementations and separately versioned executable Registry are now available internally. Next is PlanCompiler / generic graph execution integration; generic plan execution is not implemented here.
 
-## Verification
+## Foundation-stage verification (PR #56)
 
 `tests/test_module_execution.py` covers deep freezing, strict inputs, upstream identity/coherence, key and metadata stability, explicit registration, exact dispatch, single invocation, unchanged exception/cancellation propagation, no repeated quality evaluation, legacy AgentRunner behavior, no production consumers and all 24 fresh import orders for the four boundaries. Existing Registry tests retain the normalized checksum guard and reject both mapping-loaded and directly constructed bindings without consulting legacy agents.
 
