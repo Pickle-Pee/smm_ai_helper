@@ -63,11 +63,12 @@ def test_job_service_imports_only_persistence_dependencies():
     )
 
 
-def test_only_workflow_service_integrates_job_persistence():
+def test_only_explicit_workflow_services_integrate_job_persistence():
     allowed = {
         ROOT / "app" / "models.py",
         SERVICE,
         ROOT / "app" / "workflows" / "service.py",
+        ROOT / "app" / "orchestration_runtime" / "service.py",
     }
     offenders = []
     for path in (ROOT / "app").rglob("*.py"):

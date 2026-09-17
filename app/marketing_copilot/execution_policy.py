@@ -72,10 +72,10 @@ class ExecutionPolicy:
             return decision(ExecutionMode.SINGLE_MODULE, ReasonCode.POSITIONING_CONTEXT_SUFFICIENT,
                             module_id=self._registry.get(ModuleId.POSITIONING).module_id)
         if intent.kind is IntentKind.COMPARATIVE_POSITIONING:
-            for module in (ModuleId.MARKET_ANALYSIS, ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING):
+            for module in (ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING):
                 self._registry.get(module)
             return decision(ExecutionMode.WORKFLOW, ReasonCode.COMPARATIVE_ANALYSES_REQUIRED,
-                            scenario_key="new_positioning_v1")
+                            scenario_key="competitive_positioning_v1")
         if intent.kind is IntentKind.MARKETING_STRATEGY:
             return decision(ExecutionMode.WORKFLOW, ReasonCode.STRATEGY_WORKFLOW_REQUEST,
                             scenario_key="strategy_builder_v1")

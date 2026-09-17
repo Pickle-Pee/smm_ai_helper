@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Iterable
@@ -87,7 +87,7 @@ def _stable_value(value: Any) -> Any:
 
 
 class MarketingOrchestratorPlanner:
-    """Side-effect-free planner for the two approved deterministic scenarios."""
+    """Side-effect-free planner for approved deterministic scenarios."""
 
     supported_scenarios = SUPPORTED_SCENARIOS
 
@@ -109,6 +109,8 @@ class MarketingOrchestratorPlanner:
 
         if interpretation.requested_module is not None:
             plan = self._plan_single_module(interpretation, context)
+        elif interpretation.scenario_key == "competitive_positioning_v1":
+            plan = self._plan_competitive_positioning(interpretation, context)
         elif interpretation.scenario_key == "new_positioning_v1":
             plan = self._plan_new_positioning(interpretation, context)
         else:
@@ -188,6 +190,29 @@ class MarketingOrchestratorPlanner:
             dependencies,
             assumptions=context.assumptions,
         )
+
+    def _plan_competitive_positioning(self, interpretation, context):
+        scenario = "competitive_positioning_v1"
+        nodes = []
+        for node_id, module, refs in (
+            ("competitor_analysis", ModuleId.COMPETITOR_ANALYSIS, ()),
+            ("positioning", ModuleId.POSITIONING, ("competitor_analysis",)),
+        ):
+            descriptor = self._registry.get(module)
+            packet = self._context_packet(context, module, scenario, refs, interpretation.constraints)
+            known = self._known_keys(packet)
+            inputs = tuple(ScopedInput(replace(r, scenario_key=scenario), r.key in known)
+                           for r in _POSITIONING_INPUTS[node_id])
+            nodes.append(PlanNode(
+                node_id=node_id, module_id=module, objective=self._objective_for(module, interpretation),
+                scoped_inputs=inputs, expected_outputs=_POSITIONING_OUTPUTS[module],
+                quality_gate=descriptor.quality_gate, dependency_references=refs,
+                next_if_pass="positioning" if not refs else None,
+                next_if_fail="BLOCKING_INPUT_MISSING", context_packet=packet,
+            ))
+        return self._finalize(interpretation, scenario, tuple(nodes),
+                              (GraphDependency("competitor_analysis", "positioning"),),
+                              assumptions=context.assumptions)
 
     def _unsupported_plan(self, interpretation: RequestInterpretation, context: PlanningContext) -> OrchestrationPlan:
         scenario_key = interpretation.scenario_key or ""

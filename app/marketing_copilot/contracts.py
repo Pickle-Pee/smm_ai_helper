@@ -94,7 +94,7 @@ class MarketingIntent(_StrictContract):
 
 
 ToolKey = Literal["lead_funnel_calculator_v1"]
-ScenarioKey = Literal["new_positioning_v1", "strategy_builder_v1"]
+ScenarioKey = Literal["new_positioning_v1", "competitive_positioning_v1", "strategy_builder_v1"]
 
 
 class ExecutionDecision(_StrictContract):

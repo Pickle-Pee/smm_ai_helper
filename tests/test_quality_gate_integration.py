@@ -24,7 +24,7 @@ def test_only_explicit_adapters_and_execution_contract_builders_import_quality_g
     executors = root / "app" / "module_execution" / "executors"
     builders = {executors / name for name in ("common.py", "competitor_analysis.py", "positioning.py", "creator.py")}
     assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths
-                   if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders})
+                   if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders, root / "app/orchestration_runtime/service.py"})
     for path in builders:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or ""):

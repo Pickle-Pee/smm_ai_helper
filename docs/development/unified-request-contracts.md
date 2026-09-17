@@ -40,13 +40,13 @@ Ambiguous/unsupported intent and confidence below 0.7 choose conversation/clarif
 | Text editing | SINGLE_MODULE / COPY_EDITOR |
 | Competitor analysis | SINGLE_MODULE / COMPETITOR_ANALYSIS |
 | Positioning/USP from sufficient existing context | SINGLE_MODULE / POSITIONING |
-| Comparative positioning requiring multiple analyses | WORKFLOW / new_positioning_v1 |
+| Comparative positioning requiring multiple analyses | WORKFLOW / competitive_positioning_v1 |
 | Marketing strategy | WORKFLOW / strategy_builder_v1 |
 | Conversation, ambiguous/unsupported or insufficient context | CONVERSATION |
 
 For standalone positioning, sufficient means nonempty authorized facts for `product`, `target_or_target_hypothesis`, `customer_job_or_need`, `relevant_alternative`, and `product_truth`, with POSITIONING or explicit_single_module_v1 relevance. Labels, unrelated/unauthorized facts and upstream artifact contents do not satisfy those keys. This is structural completeness, not proof of marketing truth. Missing keys or an explicit need for new external evidence choose conversation/clarification; explicitly comparative work chooses the workflow instead. Other module requests remain preliminary selections; future execution must check their inputs and access separately. External-evidence requirements remain visible in reason codes and adapter constraints.
 
-The generic planner still supports only explicit_single_module_v1 and new_positioning_v1, always PLANNING_ONLY. Adapting strategy_builder_v1 produces a valid request with one scenario selector, but the unchanged planner returns UNSUPPORTED, no nodes, and PLANNING_ONLY. It does not make a strategy workflow executable.
+The generic planner supports explicit_single_module_v1, new_positioning_v1 and competitive_positioning_v1, always PLANNING_ONLY. The comparative proposal selects the bounded competitor-analysis -> positioning scenario; only an explicit external caller may compile it through the separate internal graph runtime. Adapting strategy_builder_v1 produces a valid request with one scenario selector, but the unchanged planner returns UNSUPPORTED, no nodes, and PLANNING_ONLY. It does not make a strategy workflow executable.
 
 ## Context precedence and provenance
 

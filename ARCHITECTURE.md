@@ -93,7 +93,7 @@ typed RequestInterpretation + caller-authorized tagged PlanningContext
  -> validated, blocked, or unsupported planning result
 ```
 
-It supports only `explicit_single_module_v1` and `new_positioning_v1`. The latter plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
+It supports `explicit_single_module_v1`, `new_positioning_v1`, and `competitive_positioning_v1`. `new_positioning_v1` plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
 
 This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
 
@@ -130,7 +130,32 @@ Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-
 
 The separate `app/module_execution/executors/` package supplies three real implementations through an explicit factory requiring injected single-attempt model and site-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
-The executable registry and implementations are internally callable only. No API, Telegram, MarketingCopilot ingress, Job/worker, generic Orchestrator or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. Next: PlanCompiler / generic graph execution integration. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+The executable registry and implementations are internally callable only. No API, Telegram, MarketingCopilot ingress, production worker main or MarketingWorkflowService consumes them. The internal durable module graph runtime below consumes them explicitly. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+
+### Internal durable module graph execution
+
+`app/orchestration_runtime/` compiles validated planning-only plans using explicit
+Registry 1.1.0 and an injected executor registry. The first executable vertical is
+`competitive_positioning_v1`: COMPETITOR_ANALYSIS -> POSITIONING. The existing
+`new_positioning_v1` is outside the runtime-owned immutable `EXECUTABLE_SCENARIOS`
+allowlist, which contains exactly `explicit_single_module_v1` and
+`competitive_positioning_v1`. Planning support does not grant execution permission;
+MARKET_ANALYSIS is also still unbound.
+
+Immutable `compiled_execution_plan.v1` revisions live in `orchestration_plans`,
+owned by MarketingRun (`orchestration_graph.v1`). Ready nodes become distinct
+`orchestration.module` Jobs. JobExecution owns bounded attempts and fenced leases;
+accepted full typed results become revision-scoped `module_artifact.v1` artifacts.
+A run lock serializes advance. Artifact persistence, Job success and dependent
+scheduling commit atomically; Redis is only a best-effort wakeup.
+
+The internal ModuleGraphWorker restores the plan and upstream results from SQL,
+dispatches outside transactions, and evaluates Quality Gates before acceptance.
+BLOCKED results block the run; quality rejection fails it without downstream work.
+Corrupt persisted contracts fail closed. Restart needs no process-local progress.
+No Telegram/API ingress or production worker lane consumes this runtime. See
+[durable module graphs](docs/development/durable-module-graph-runtime.md) for
+contracts, authorization, serialization bounds, lock order and recovery tests.
 
 ### URL analysis
 
@@ -221,4 +246,4 @@ Redis transports wakeups; PostgreSQL stores canonical state. Workers reclaim exp
 - `AGENTS.md` files contain persistent Codex implementation constraints.
 - Product documents distinguish implemented fixed scope from broader vision. Use task -> implementation -> tests -> code review; no separate OpenSpec approval cycle is required.
 
-Generic Orchestrator execution, arbitrary execution of all 15 Registry modules, autonomous replanning and generic synthesis remain future work. Campaign execution, CRM integrations, final video generation/editing and production deployment are outside the implemented MVP. Neither provider calls nor Telegram delivery promise exactly-once external effects.
+Production generic Orchestrator ingress, arbitrary execution of all 15 Registry modules, autonomous replanning and generic synthesis remain future work. Campaign execution, CRM integrations, final video generation/editing and production deployment are outside the implemented MVP. Neither provider calls nor Telegram delivery promise exactly-once external effects.
