@@ -162,7 +162,7 @@ def test_interpreter_validates_request_before_model_call(request_text):
     (IntentKind.TEXT_EDITING, {}, ExecutionMode.SINGLE_MODULE, ModuleId.COPY_EDITOR),
     (IntentKind.COMPETITOR_ANALYSIS, {"external_evidence_required": True}, ExecutionMode.SINGLE_MODULE, ModuleId.COMPETITOR_ANALYSIS),
     (IntentKind.POSITIONING, {}, ExecutionMode.SINGLE_MODULE, ModuleId.POSITIONING),
-    (IntentKind.COMPARATIVE_POSITIONING, {"external_evidence_required": True}, ExecutionMode.WORKFLOW, "new_positioning_v1"),
+    (IntentKind.COMPARATIVE_POSITIONING, {"external_evidence_required": True}, ExecutionMode.WORKFLOW, "competitive_positioning_v1"),
     (IntentKind.MARKETING_STRATEGY, {}, ExecutionMode.WORKFLOW, "strategy_builder_v1"),
 ])
 def test_deterministic_policy_expected_cases(kind, options, mode, selector):
@@ -333,7 +333,7 @@ def test_strategy_adapter_returns_a_proposal_but_existing_planner_stays_unsuppor
 
 
 def test_comparative_adapter_preserves_upstream_scope_and_existing_planning_only_graph():
-    scenario = "new_positioning_v1"
+    scenario = "competitive_positioning_v1"
     facts = tuple(entry(key.value, input_key=key, fact_id=f"fact.{key.value.replace('_', '-')}",
                         modules=(), scenarios=(scenario,)) for key in PlanningInputKey)
     finding = UpstreamFinding("competitor_analysis", "comparison", "Observed alternatives", evidence=("source:one",), confidence=0.5)
@@ -342,10 +342,10 @@ def test_comparative_adapter_preserves_upstream_scope_and_existing_planning_only
     request, resolved = OrchestratorAdapter().adapt(decision, context)
     assert request.requested_module is None and request.scenario_key == scenario
     plan = MarketingOrchestratorPlanner().plan(request, resolved)
-    assert [n.module_id for n in plan.nodes] == [ModuleId.MARKET_ANALYSIS, ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING]
+    assert [n.module_id for n in plan.nodes] == [ModuleId.COMPETITOR_ANALYSIS, ModuleId.POSITIONING]
     assert plan.execution_readiness is ExecutionReadiness.PLANNING_ONLY
-    assert plan.nodes[0].context_packet.upstream_findings == plan.nodes[1].context_packet.upstream_findings == ()
-    assert plan.nodes[2].context_packet.upstream_findings == (finding,)
+    assert plan.nodes[0].context_packet.upstream_findings == ()
+    assert plan.nodes[1].context_packet.upstream_findings == (finding,)
 
 
 def test_foundation_uses_no_runtime_execution_or_implicit_provider(monkeypatch):

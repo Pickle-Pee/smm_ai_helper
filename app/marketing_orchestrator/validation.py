@@ -14,7 +14,7 @@ from .contracts import (
 from .errors import InvalidPlanError
 
 
-SUPPORTED_SCENARIOS = frozenset({"explicit_single_module_v1", "new_positioning_v1"})
+SUPPORTED_SCENARIOS = frozenset({"explicit_single_module_v1", "new_positioning_v1", "competitive_positioning_v1"})
 _POSITIONING_NODE_MODULES = (
     ("market_analysis", ModuleId.MARKET_ANALYSIS),
     ("competitor_analysis", ModuleId.COMPETITOR_ANALYSIS),
@@ -109,6 +109,16 @@ class PlanValidator:
 
         if plan.scenario_key == "explicit_single_module_v1":
             self._validate_single_module(plan)
+        if plan.scenario_key == "competitive_positioning_v1":
+            if tuple((n.node_id, n.module_id) for n in plan.nodes) != _POSITIONING_NODE_MODULES[1:]:
+                raise InvalidPlanError("invalid competitive-positioning nodes")
+            if tuple((e.upstream_node_id, e.downstream_node_id) for e in plan.dependencies) != _POSITIONING_EDGES[:1]:
+                raise InvalidPlanError("invalid competitive-positioning edges")
+            for node in plan.nodes:
+                if node.parallel_group or node.parallelizable:
+                    raise InvalidPlanError("competitive-positioning is sequential")
+                if (node.next_if_pass, node.next_if_fail) != _POSITIONING_TRANSITIONS[node.node_id]:
+                    raise InvalidPlanError("invalid competitive-positioning transitions")
         if plan.scenario_key == "new_positioning_v1":
             self._validate_positioning_topology(plan)
 

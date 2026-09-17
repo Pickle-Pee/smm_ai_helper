@@ -172,6 +172,27 @@ class MarketingArtifact(Base):
     run: Mapped[MarketingRun] = relationship(back_populates="artifacts")
 
 
+class OrchestrationPlanRecord(Base):
+    """Immutable execution document; lifecycle state stays in runs/jobs/artifacts."""
+    __tablename__ = "orchestration_plans"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_orchestration_revision"),
+        CheckConstraint("status IN ('active', 'superseded')", name="ck_orchestration_plan_status"),
+        CheckConstraint("jsonb_typeof(compiled_plan_json) = 'object'", name="ck_orchestration_plan_object"),
+        UniqueConstraint("run_id", "source_plan_id", name="uq_orchestration_source"),
+        UniqueConstraint("run_id", "compiled_plan_fingerprint", name="uq_orchestration_fingerprint"),
+        Index("uq_orchestration_active", "run_id", unique=True, postgresql_where=text("status = 'active'")),
+    )
+    run_id: Mapped[str] = mapped_column(String(64), ForeignKey("marketing_runs.run_id", ondelete="CASCADE"), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_plan_id: Mapped[str] = mapped_column(String(64))
+    compiled_plan_fingerprint: Mapped[str] = mapped_column(String(64))
+    registry_version: Mapped[str] = mapped_column(String(32))
+    compiled_plan_json: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
