@@ -16,8 +16,17 @@ Copilot's comparative positioning policy only proposes this scenario.
 `MARKETING_STRATEGY -> strategy_builder_v1` is unchanged.
 
 `new_positioning_v1` is unchanged: market and competitor analysis both precede
-positioning. MARKET_ANALYSIS has no binding in Registry 1.1.0, so compilation
-rejects the whole plan. No node/dependency is removed or substituted.
+positioning. It is not authorized by the runtime allowlist; MARKET_ANALYSIS also
+has no binding in Registry 1.1.0. No node/dependency is removed or substituted.
+
+Execution authorization belongs to the runtime's immutable `EXECUTABLE_SCENARIOS`
+contract, containing exactly `explicit_single_module_v1` and
+`competitive_positioning_v1`. Both compilation and persisted compiled-plan
+validation reject any other scenario before execution binding checks. Planning's
+`SUPPORTED_SCENARIOS` may expand independently; it grants no execution permission.
+In particular, `new_positioning_v1` is denied by this general allowlist regardless
+of whether MARKET_ANALYSIS gains a binding in the future. Extending the executable
+set requires an intentional runtime change and exact-set regression tests.
 
 The pure `PlanCompiler(ModuleRegistry.load("1.1.0"), executors)` checks source
 validation, exact descriptor compatibility, graph structure, runtime-safe node
@@ -147,9 +156,11 @@ capabilities; no live provider or Telegram polling calls were made.
 
 - Focused planner/compiler/graph/migrations/execution/Registry/Quality Gates/
   Copilot/fixed workflow suite: **780 passed**. Four additional compiler and
-  architecture regression cases were subsequently included in the full suite.
+  architecture regression cases and five execution-authorization regression cases
+  were subsequently included in the full suite. Focused authorization/compiler/
+  planner verification: **141 passed**.
 - Full `python -m pytest -q` in the built Linux Python 3.11 image with separate
-  disposable Job and MVP databases and Redis: **1107 passed, zero skips**.
+  disposable Job and MVP databases and Redis: **1112 passed, zero skips**.
 - Built-image graph/fixed PostgreSQL/provider-protocol/Redis smoke: **46 passed**.
 - `scripts/check_container_persistence.py seed`, backend/worker force-recreation,
   then `verify`: both passed (run, shared image bytes and owner checks).

@@ -15,6 +15,78 @@ from app.orchestration_runtime.serialization import plan_to_json, plan_from_json
 from tests.graph_fakes import compiled, registry, source_plan
 
 
+def test_executable_scenarios_are_an_exact_immutable_runtime_contract():
+    from app.marketing_orchestrator.validation import SUPPORTED_SCENARIOS
+    from app.orchestration_runtime.contracts import EXECUTABLE_SCENARIOS
+
+    assert type(EXECUTABLE_SCENARIOS) is frozenset
+    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
+    assert EXECUTABLE_SCENARIOS is not SUPPORTED_SCENARIOS
+    assert "new_positioning_v1" in SUPPORTED_SCENARIOS
+    assert "new_positioning_v1" not in EXECUTABLE_SCENARIOS
+
+
+def test_new_positioning_is_denied_before_execution_binding_lookup(monkeypatch):
+    from unittest.mock import Mock
+
+    plan = source_plan("new_positioning_v1")
+    metadata = ModuleRegistry.load("1.1.0")
+    lookup = Mock(side_effect=AssertionError("authorization must precede binding lookup"))
+    monkeypatch.setattr(metadata, "get", lookup)
+    with pytest.raises(CompilationError) as caught:
+        PlanCompiler(metadata, registry()).compile(plan)
+    assert str(caught.value.__cause__) == "scenario is not authorized for execution"
+    lookup.assert_not_called()
+
+
+@pytest.mark.parametrize("scenario", ["new_positioning_v1", "future_planning_v1"])
+def test_planning_expansion_does_not_authorize_compilation_or_persisted_plans(monkeypatch, scenario):
+    import app.marketing_orchestrator.validation as planning
+    from app.orchestration_runtime.compiler import validate_compiled_plan
+    from app.orchestration_runtime.contracts import EXECUTABLE_SCENARIOS
+    from app.orchestration_runtime.serialization import bounded, fingerprint
+
+    monkeypatch.setattr(planning, "SUPPORTED_SCENARIOS", planning.SUPPORTED_SCENARIOS | {scenario})
+    # A future planning scenario can have a valid graph with fully bound modules.
+    if scenario == "future_planning_v1":
+        source = source_plan()
+        nodes = tuple(replace(n, scoped_inputs=tuple(
+            replace(i, requirement=replace(i.requirement, scenario_key=scenario)) for i in n.scoped_inputs
+        )) for n in source.nodes)
+        future = replace(source, scenario_key=scenario, nodes=nodes)
+        planning.PlanValidator(ModuleRegistry.load("1.0.0")).validate(future)
+        with pytest.raises(CompilationError) as caught:
+            PlanCompiler(ModuleRegistry.load("1.1.0"), registry()).compile(future)
+        assert str(caught.value.__cause__) == "scenario is not authorized for execution"
+    # The fingerprint is valid and every node is bound: rejection is authorization.
+    candidate = replace(compiled(), scenario_key=scenario)
+    raw = bounded(candidate)
+    raw.pop("execution_fingerprint")
+    candidate = replace(candidate, execution_fingerprint=fingerprint(raw))
+    with pytest.raises(CompilationError, match="scenario is not authorized for execution"):
+        validate_compiled_plan(candidate)
+    with pytest.raises(CompilationError, match="scenario is not authorized for execution"):
+        plan_from_json(bounded(candidate))
+    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
+
+
+def test_compiler_never_imports_or_uses_planning_scenario_allowlist():
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "app/orchestration_runtime/compiler.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.alias):
+            assert node.name.rsplit(".", 1)[-1] != "SUPPORTED_SCENARIOS"
+        if isinstance(node, ast.Name):
+            assert node.id != "SUPPORTED_SCENARIOS"
+        if isinstance(node, ast.Attribute):
+            assert node.attr != "SUPPORTED_SCENARIOS"
+        if isinstance(node, ast.ImportFrom) and node.module == "app.marketing_orchestrator.validation":
+            assert [alias.name for alias in node.names] == ["PlanValidator"]
+
+
 def test_competitive_scenario_is_planning_only_and_compiles_immutably():
     source = source_plan()
     result = compiled()

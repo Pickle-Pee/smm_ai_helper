@@ -5,10 +5,10 @@ import re
 from app.marketing_orchestrator.contracts import (
     OrchestrationPlan, PlanningStatus, PlanningStopCondition, Sensitivity, StructuralValidity,
 )
-from app.marketing_orchestrator.validation import PlanValidator, SUPPORTED_SCENARIOS
+from app.marketing_orchestrator.validation import PlanValidator
 from app.module_registry import ModuleAvailabilityStatus, ModuleId, ModuleRegistry
 from app.module_execution.contracts import MODULE_EXECUTION_CONTRACT_VERSION
-from .contracts import CompiledExecutionNode, CompiledExecutionPlan, PLAN_SCHEMA, validate_identity
+from .contracts import CompiledExecutionNode, CompiledExecutionPlan, EXECUTABLE_SCENARIOS, PLAN_SCHEMA, validate_identity
 from .errors import CompilationError, RuntimeContractError
 from .serialization import bounded, fingerprint
 
@@ -31,7 +31,9 @@ def _binding(node, registry, executors=None):
 def validate_compiled_plan(plan, executors=None):
     if type(plan) is not CompiledExecutionPlan or plan.schema_version != PLAN_SCHEMA or plan.registry_version != "1.1.0":
         raise RuntimeContractError("unsupported compiled plan")
-    if plan.scenario_key not in SUPPORTED_SCENARIOS or not re.fullmatch(r"[0-9a-f]{64}", plan.source_plan_id):
+    if plan.scenario_key not in EXECUTABLE_SCENARIOS:
+        raise CompilationError("scenario is not authorized for execution")
+    if not re.fullmatch(r"[0-9a-f]{64}", plan.source_plan_id):
         raise RuntimeContractError("invalid plan identity")
     if type(plan.nodes) is not tuple or not 1 <= len(plan.nodes) <= 32 or type(plan.dependencies) is not tuple:
         raise RuntimeContractError("invalid bounded graph")
@@ -63,8 +65,6 @@ def validate_compiled_plan(plan, executors=None):
         ] or edges != [("competitor_analysis", "positioning")]
     ):
         raise CompilationError("invalid competitive-positioning topology")
-    if plan.scenario_key == "new_positioning_v1":
-        raise CompilationError("new_positioning_v1 requires unbound MARKET_ANALYSIS")
     if plan.scenario_key == "explicit_single_module_v1" and (len(plan.nodes) != 1 or edges):
         raise CompilationError("invalid single-module topology")
     raw = bounded(plan)
@@ -92,6 +92,8 @@ class PlanCompiler:
             or plan.blocking_questions or plan.stop_condition is not PlanningStopCondition.PLAN_COMPLETE
         ):
             raise CompilationError("source plan is not validated")
+        if plan.scenario_key not in EXECUTABLE_SCENARIOS:
+            raise CompilationError("scenario is not authorized for execution")
         baseline = ModuleRegistry.load("1.0.0")
         PlanValidator(baseline).validate(plan)
         nodes = []

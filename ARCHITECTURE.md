@@ -137,7 +137,10 @@ The executable registry and implementations are internally callable only. No API
 `app/orchestration_runtime/` compiles validated planning-only plans using explicit
 Registry 1.1.0 and an injected executor registry. The first executable vertical is
 `competitive_positioning_v1`: COMPETITOR_ANALYSIS -> POSITIONING. The existing
-`new_positioning_v1` cannot compile because MARKET_ANALYSIS is still unbound.
+`new_positioning_v1` is outside the runtime-owned immutable `EXECUTABLE_SCENARIOS`
+allowlist, which contains exactly `explicit_single_module_v1` and
+`competitive_positioning_v1`. Planning support does not grant execution permission;
+MARKET_ANALYSIS is also still unbound.
 
 Immutable `compiled_execution_plan.v1` revisions live in `orchestration_plans`,
 owned by MarketingRun (`orchestration_graph.v1`). Ready nodes become distinct

@@ -11,6 +11,8 @@ WORKFLOW_TYPE = "orchestration_graph.v1"
 JOB_KIND = "orchestration.module"
 PLAN_SCHEMA = "compiled_execution_plan.v1"
 ARTIFACT_SCHEMA = "module_artifact.v1"
+# Execution permission is owned by the runtime, independently of planning support.
+EXECUTABLE_SCENARIOS = frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
 
 
 @dataclass(frozen=True, slots=True)
