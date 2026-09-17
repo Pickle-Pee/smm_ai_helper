@@ -16,7 +16,14 @@ from .types import (
     ToolCapability,
 )
 
-REGISTRY_VERSION = "1.0.0"
+DEFAULT_REGISTRY_VERSION = "1.0.0"
+EXECUTABLE_REGISTRY_VERSION = "1.1.0"
+REGISTRY_VERSION = DEFAULT_REGISTRY_VERSION  # Backward-compatible public constant.
+APPROVED_EXECUTION_BINDINGS = MappingProxyType({
+    ModuleId.COMPETITOR_ANALYSIS: "competitor_analysis.v1",
+    ModuleId.POSITIONING: "positioning.v1",
+    ModuleId.CREATOR: "creator.v1",
+})
 _SEPARATOR_RE = re.compile(r"[\s_-]+", re.UNICODE)
 
 
@@ -58,7 +65,7 @@ class ModuleRegistry:
         version: str,
         descriptors: Iterable[ModuleDescriptor],
     ) -> None:
-        if version != REGISTRY_VERSION:
+        if version not in (DEFAULT_REGISTRY_VERSION, EXECUTABLE_REGISTRY_VERSION):
             raise ModuleRegistryError(f"unsupported source version: {version!r}")
         descriptor_items = tuple(descriptors)
         expected_ids = frozenset(ModuleId)
@@ -76,8 +83,16 @@ class ModuleRegistry:
         by_id = {descriptor.module_id: descriptor for descriptor in descriptor_items}
         for descriptor in descriptor_items:
             self._validate_descriptor(descriptor, expected_ids)
-        if any(descriptor.execution_binding is not None for descriptor in descriptor_items):
+        bound = {d.module_id: d.execution_binding for d in descriptor_items if d.execution_binding is not None}
+        if version == DEFAULT_REGISTRY_VERSION and bound:
             raise ModuleRegistryError("registry version 1.0.0 must contain zero execution bindings")
+        if version == EXECUTABLE_REGISTRY_VERSION:
+            if set(bound) != set(APPROVED_EXECUTION_BINDINGS) or any(
+                binding.executor_key != APPROVED_EXECUTION_BINDINGS[module]
+                or binding.contract_version != "module_executor.v1" or binding.compatibility != "exact"
+                for module, binding in bound.items()
+            ):
+                raise ModuleRegistryError("registry 1.1.0 requires exactly the three approved exact bindings")
 
         lookup: dict[str, ModuleDescriptor] = {}
         canonical_keys = {normalize_lookup_key(item.value): item for item in expected_ids}
@@ -105,13 +120,15 @@ class ModuleRegistry:
 
     @classmethod
     def load(cls, version: str = REGISTRY_VERSION) -> "ModuleRegistry":
-        if version != REGISTRY_VERSION:
+        if version not in (DEFAULT_REGISTRY_VERSION, EXECUTABLE_REGISTRY_VERSION):
             raise ModuleRegistryError(f"unsupported registry version: {version!r}")
         resource = files("app.module_registry").joinpath(f"v{version}.json")
         try:
             raw = json.loads(resource.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ModuleRegistryError(f"cannot load module registry v{version}") from exc
+        if not isinstance(raw, Mapping) or raw.get("source_version") != version:
+            raise ModuleRegistryError("registry resource version does not match requested version")
         return cls.from_mapping(raw)
 
     @classmethod

@@ -1,4 +1,6 @@
 from .registry import (
+    DEFAULT_REGISTRY_VERSION,
+    EXECUTABLE_REGISTRY_VERSION,
     ModuleRegistry,
     ModuleRegistryError,
     ModuleRegistryNotFoundError,
@@ -18,6 +20,8 @@ from .types import (
 )
 
 __all__ = [
+    "DEFAULT_REGISTRY_VERSION",
+    "EXECUTABLE_REGISTRY_VERSION",
     "ExecutionBinding",
     "InputRequirement",
     "ModuleActivation",

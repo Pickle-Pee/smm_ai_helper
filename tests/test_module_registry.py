@@ -264,3 +264,54 @@ def test_dockerfile_copies_registry_resource_into_repository_deployment():
     assert "COPY . ." in dockerfile
     assert (root / "app/module_registry/v1.0.0.json").is_file()
     assert not any(root.glob("pyproject.toml"))
+
+
+EXECUTABLE_SHA256 = "f6f604db27a123ce66edd61424b1f7f8c4cef68fc6e166ff3723bccb3822029c"
+
+
+def executable_mapping():
+    return json.loads(files("app.module_registry").joinpath("v1.1.0.json").read_text(encoding="utf-8"))
+
+
+def test_executable_registry_is_explicit_and_preserves_all_canonical_metadata():
+    assert ModuleRegistry.load().version == "1.0.0"
+    registry = ModuleRegistry.load("1.1.0")
+    expected = {ModuleId.COMPETITOR_ANALYSIS: "competitor_analysis.v1", ModuleId.POSITIONING: "positioning.v1", ModuleId.CREATOR: "creator.v1"}
+    assert {d.module_id: d.execution_binding.executor_key for d in registry.descriptors if d.execution_binding} == expected
+    assert sum(d.availability_status is ModuleAvailabilityStatus.METADATA_ONLY for d in registry.descriptors) == 12
+    for descriptor in registry.descriptors:
+        if descriptor.module_id in expected:
+            assert descriptor.execution_binding.contract_version == "module_executor.v1"
+            assert descriptor.execution_binding.compatibility == "exact"
+        else:
+            assert descriptor.execution_binding is None
+    before, after = canonical_mapping(), executable_mapping()
+    for old, new in zip(before["modules"], after["modules"]):
+        for key in set(old) - {"availability_status", "execution_binding"}:
+            assert old[key] == new[key]
+    normalized = json.dumps(after, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(normalized).hexdigest() == EXECUTABLE_SHA256
+
+
+@pytest.mark.parametrize("version", ["1.2.0", "2.0.0", "../1.0.0", "", "latest"])
+def test_unapproved_registry_versions_fail_closed(version):
+    with pytest.raises(ModuleRegistryError):
+        ModuleRegistry.load(version)
+    raw = executable_mapping()
+    raw["source_version"] = version
+    with pytest.raises(ModuleRegistryError):
+        ModuleRegistry.from_mapping(raw)
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing", "key", "version"])
+def test_v11_rejects_every_nonapproved_binding_set(mutation):
+    raw = executable_mapping()
+    row = descriptor(raw, "CREATOR")
+    if mutation == "extra":
+        descriptor(raw, "MENTOR").update(availability_status="execution_bound", execution_binding=copy.deepcopy(row["execution_binding"]))
+    elif mutation == "missing":
+        row.update(availability_status="metadata_only", execution_binding=None)
+    else:
+        row["execution_binding"]["executor_key" if mutation == "key" else "contract_version"] = "unapproved.v2"
+    with pytest.raises(ModuleRegistryError, match="approved"):
+        ModuleRegistry.from_mapping(raw)

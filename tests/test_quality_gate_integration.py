@@ -16,13 +16,20 @@ def test_package_is_architecturally_isolated_by_import_boundary():
     text="\n".join(p.read_text(encoding="utf-8") for p in root.glob("*.py"))
     forbidden=("app.llm","QCService","TaskPipelineService","sqlalchemy","redis","app.routers","bot.","app.agents","app.presenters","MarketingOrchestrator")
     assert not any(token in text for token in forbidden)
-def test_only_explicit_workflow_adapter_and_execution_result_contract_import_quality_gates():
+def test_only_explicit_adapters_and_execution_contract_builders_import_quality_gates():
     root=Path(__file__).parents[1]
     paths=[*root.glob("app/**/*.py"),*root.glob("bot/**/*.py")]
     adapter = root / "app" / "workflows" / "quality.py"
     contracts = root / "app" / "module_execution" / "contracts.py"
+    executors = root / "app" / "module_execution" / "executors"
+    builders = {executors / name for name in ("common.py", "competitor_analysis.py", "positioning.py", "creator.py")}
     assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths
-                   if "quality_gates" not in p.parts and p not in (adapter, contracts))
+                   if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders})
+    for path in builders:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or ""):
+                assert node.module == "app.marketing_orchestrator.quality_gates.contracts"
+                assert all(alias.name != "*" and "Evaluator" not in alias.name for alias in node.names)
     imports = [node for node in ast.walk(ast.parse(contracts.read_text(encoding="utf-8")))
                if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or "")]
     assert [(node.module, [alias.name for alias in node.names]) for node in imports] == [
