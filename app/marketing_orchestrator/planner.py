@@ -6,8 +6,9 @@ from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
-from app.module_registry import ModuleId, ModuleRegistry, ModuleRegistryNotFoundError
+from app.module_registry import ModuleId, ModuleRegistry, ModuleRegistryNotFoundError, ToolCapability
 
 from .contracts import (
     AuthorizedContextFact,
@@ -33,6 +34,26 @@ from .validation import PlanValidator, SUPPORTED_SCENARIOS
 
 
 _IMMUTABLE_MAPPING_TYPE = type(MappingProxyType({}))
+
+
+def _has_explicit_fetch_target(packet):
+    """Syntactic source eligibility only; safe fetching remains executor-owned."""
+    if ToolCapability.SITE_FETCH not in packet.available_tools:
+        return False
+    sources = [f for f in (*packet.relevant_project_context, *packet.known_facts)
+               if f.input_key is PlanningInputKey.COMPETITOR_OR_CATEGORY_SCOPE
+               or (f.input_key is None and f.label == "competitor_url")]
+    if len(sources) != 1 or type(sources[0].value) is not str:
+        return False
+    value = sources[0].value
+    try:
+        parsed = urlsplit(value)
+        parsed.port
+        return bool(parsed.scheme in {"http", "https"} and parsed.hostname
+                    and parsed.username is None and parsed.password is None
+                    and not any(c.isspace() or ord(c) < 32 for c in value))
+    except ValueError:
+        return False
 
 
 _POSITIONING_OUTPUTS = {
@@ -201,7 +222,13 @@ class MarketingOrchestratorPlanner:
             descriptor = self._registry.get(module)
             packet = self._context_packet(context, module, scenario, refs, interpretation.constraints)
             known = self._known_keys(packet)
-            inputs = tuple(ScopedInput(replace(r, scenario_key=scenario), r.key in known)
+            # A source is a fetch target, never already collected evidence.
+            fetchable = _has_explicit_fetch_target(packet)
+            inputs = tuple(ScopedInput(replace(r, scenario_key=scenario,
+                               classification=InputClassification.OPTIONAL if (
+                                   fetchable and r.key is PlanningInputKey.OBSERVABLE_EVIDENCE
+                               ) else r.classification), r.key in known or (
+                                   fetchable and r.key is PlanningInputKey.COMPETITOR_OR_CATEGORY_SCOPE))
                            for r in _POSITIONING_INPUTS[node_id])
             nodes.append(PlanNode(
                 node_id=node_id, module_id=module, objective=self._objective_for(module, interpretation),

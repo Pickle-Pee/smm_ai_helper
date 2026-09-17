@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.module_execution import ModuleExecutorDispatcher
+from app.module_execution.acceptance import fully_accepted
 from app.module_registry import ModuleResultStatus
 from .service import evaluate_result
 
@@ -40,7 +41,7 @@ class ModuleGraphWorker:
                 await self.service.fail(item, code="module_blocked", blocking_reasons=result.normalized_result.blocking_reasons)
                 return True
             quality = evaluate_result(item.job_id, result, request.upstream_results)
-            if result.normalized_result.result_id not in quality["accepted_result_ids"]:
+            if not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):
                 await self.service.fail(item, code="quality_rejected")
                 return True
             await self.service.finish(item, result, quality)

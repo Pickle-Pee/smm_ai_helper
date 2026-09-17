@@ -1,4 +1,4 @@
-"""Non-executable copilot foundation; intentionally disconnected from runtime ingress."""
+"""Pure semantic foundation exports; application composition is an explicit import."""
 from .contracts import CopilotContractError, ExecutionDecision, ExecutionMode, IntentKind, MarketingIntent, ReasonCode
 from .context_resolver import ContextEntry, ContextLayer, ContextResolver
 from .execution_policy import ExecutionPolicy
