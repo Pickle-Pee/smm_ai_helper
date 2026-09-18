@@ -37,14 +37,20 @@ class CopilotRequest:
     project_id: str | None = None
     current_run_id: str | None = None
     calculation: FunnelInput | None = None
+    owned_site_url: str | None = None
+    owned_site_context: tuple[ContextEntry, ...] = ()
 
     def __post_init__(self):
         if type(self.actor_id) is not int or self.actor_id <= 0:
             raise CopilotContractError("Positive internal actor identity required")
         text(self.request_id, 128)
         text(self.message, 12000)
-        for name in ("current_request", "project_run", "brand_profile", "conversation"):
+        for name in ("current_request", "owned_site_context", "project_run", "brand_profile", "conversation"):
             records(getattr(self, name), ContextEntry)
+        if self.owned_site_url is not None:
+            text(self.owned_site_url, 2048)
+        elif self.owned_site_context:
+            raise CopilotContractError("Owned-site context requires an explicitly declared owned_site_url")
         records(self.authorized_upstream_findings, UpstreamFinding)
         if type(self.available_tools) is not frozenset or any(type(t) is not ToolCapability for t in self.available_tools):
             raise CopilotContractError("Explicit tool capabilities required")
