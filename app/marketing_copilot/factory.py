@@ -14,10 +14,12 @@ from .service import MarketingCopilotService
 
 
 def build_marketing_copilot_service(*, intent_model, module_model=None, url_analyzer=None,
-                                    executor_registry=None, graph_service=None, tools=None, evaluator=None):
-    metadata = ModuleRegistry.load("1.1.0")
+                                    executor_registry=None, graph_service=None, tools=None, evaluator=None,
+                                    registry_version="1.1.0", market_analyzer=None):
+    metadata = ModuleRegistry.load(registry_version)
     executors = executor_registry if executor_registry is not None else build_module_executor_registry(
-        model_call=module_model, analyzer=url_analyzer)
+        model_call=module_model, analyzer=url_analyzer, registry_version=registry_version,
+        market_analyzer=market_analyzer)
     validate_executor_coherence(metadata, executors)
     if graph_service is not None and graph_service.executors is not executors:
         raise ValueError("Fast and durable paths must share the injected executor registry")

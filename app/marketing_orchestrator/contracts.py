@@ -106,6 +106,7 @@ class InputClassification(str, Enum):
 
 
 class PlanningInputKey(str, Enum):
+    BUSINESS_GOAL = "business_goal"
     PRODUCT_OR_CATEGORY = "product_or_category"
     GEOGRAPHIC_SCOPE = "geographic_scope"
     BUSINESS_MODEL = "business_model"

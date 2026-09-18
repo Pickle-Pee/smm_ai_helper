@@ -321,14 +321,17 @@ def test_adapter_refuses_modes_that_cannot_meet_existing_orchestrator_selector(k
         OrchestratorAdapter().adapt(decision, PlanningContext())
 
 
-def test_strategy_adapter_returns_a_proposal_but_existing_planner_stays_unsupported():
+def test_strategy_adapter_is_planning_only_and_groups_missing_first_party_context():
     context = PlanningContext()
     decision = ExecutionPolicy().decide(intent(IntentKind.MARKETING_STRATEGY, business_goal="Qualified demand"), context)
     request, resolved = OrchestratorAdapter().adapt(decision, context)
     assert request.scenario_key == "strategy_builder_v1" and request.requested_module is None
     assert request.business_goal == "Qualified demand"
     plan = MarketingOrchestratorPlanner().plan(request, resolved)
-    assert plan.planning_status is PlanningStatus.UNSUPPORTED and plan.nodes == ()
+    assert plan.planning_status is PlanningStatus.BLOCKED
+    assert {q.input_key.value for q in plan.blocking_questions} == {
+        "product", "target_or_target_hypothesis", "customer_job_or_need", "relevant_alternative", "product_truth"
+    }
     assert plan.execution_readiness is ExecutionReadiness.PLANNING_ONLY
 
 

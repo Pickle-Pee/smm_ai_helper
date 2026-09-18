@@ -9,6 +9,8 @@ from app.marketing_orchestrator.validation import PlanValidator
 from app.module_registry import EXECUTION_REGISTRY_VERSIONS, ModuleAvailabilityStatus, ModuleId, ModuleRegistry
 from app.module_execution.contracts import MODULE_EXECUTION_CONTRACT_VERSION
 from .contracts import CompiledExecutionNode, CompiledExecutionPlan, EXECUTABLE_SCENARIOS, PLAN_SCHEMA, validate_identity
+from .contracts import (CompiledExecutionPlanV2, CompiledExecutionNodeV2, CompiledDependency,
+                        NodeFailureMode, DependencyMode, PLAN_SCHEMA_V2, optional)
 from .errors import CompilationError, RuntimeContractError
 from .serialization import bounded, fingerprint
 
@@ -29,7 +31,9 @@ def _binding(node, registry, executors=None):
 
 
 def validate_compiled_plan(plan, executors=None):
-    if type(plan) is not CompiledExecutionPlan or plan.schema_version != PLAN_SCHEMA or plan.registry_version not in EXECUTION_REGISTRY_VERSIONS:
+    if type(plan) not in (CompiledExecutionPlan, CompiledExecutionPlanV2):
+        raise RuntimeContractError("unsupported compiled plan")
+    if (type(plan), plan.schema_version) not in {(CompiledExecutionPlan, PLAN_SCHEMA), (CompiledExecutionPlanV2, PLAN_SCHEMA_V2)} or plan.registry_version not in EXECUTION_REGISTRY_VERSIONS:
         raise RuntimeContractError("unsupported compiled plan")
     if plan.scenario_key not in EXECUTABLE_SCENARIOS:
         raise CompilationError("scenario is not authorized for execution")
@@ -67,6 +71,28 @@ def validate_compiled_plan(plan, executors=None):
         raise CompilationError("invalid competitive-positioning topology")
     if plan.scenario_key == "explicit_single_module_v1" and (len(plan.nodes) != 1 or edges):
         raise CompilationError("invalid single-module topology")
+    if plan.scenario_key == "strategy_builder_v1":
+        from app.marketing_orchestrator.strategy import strategy_topology, REQUIRED_KEYS, key, nonempty
+        if type(plan) is not CompiledExecutionPlanV2 or plan.registry_version != "1.2.0":
+            raise CompilationError("strategy requires explicit Registry 1.2 and compiled v2")
+        if not set(plan.limitations) <= {"market_research_not_supplied", "competitor_research_not_supplied", "economics_unavailable"}:
+            raise CompilationError("unknown strategy planning limitation")
+        strategy_topology(plan.nodes, plan.dependencies)
+        for node in plan.nodes:
+            required = node.module_id in {ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO}
+            if optional(node) == required:
+                raise CompilationError("invalid strategy failure policy")
+            expected = REQUIRED_KEYS[1:] if node.module_id is ModuleId.POSITIONING else (
+                ("business_goal", "product") if node.module_id is ModuleId.VIRTUAL_CMO else ())
+            known = {key(f) for f in (*node.context_packet.known_facts, *node.context_packet.relevant_project_context) if nonempty(f.value)}
+            if not set(expected) <= known or node.context_packet.upstream_findings:
+                raise CompilationError("invalid strategy first-party context or upstream findings")
+        for edge in plan.dependencies:
+            expected = DependencyMode.OPTIONAL_CONTRIBUTOR if edge.downstream_node_id == "positioning" else DependencyMode.HARD
+            if edge.mode is not expected:
+                raise CompilationError("invalid strategy dependency policy")
+    elif type(plan) is CompiledExecutionPlanV2:
+        raise CompilationError("v2 policy is not authorized for this scenario")
     raw = bounded(plan)
     claimed = raw.pop("execution_fingerprint")
     if claimed != fingerprint(raw):
@@ -77,7 +103,7 @@ class PlanCompiler:
     def __init__(self, registry: ModuleRegistry, executors):
         self.registry, self.executors = registry, executors
 
-    def compile(self, plan: OrchestrationPlan) -> CompiledExecutionPlan:
+    def compile(self, plan: OrchestrationPlan) -> CompiledExecutionPlan | CompiledExecutionPlanV2:
         try:
             return self._compile(plan)
         except (ValueError, LookupError, TypeError) as exc:
@@ -94,6 +120,8 @@ class PlanCompiler:
             raise CompilationError("source plan is not validated")
         if plan.scenario_key not in EXECUTABLE_SCENARIOS:
             raise CompilationError("scenario is not authorized for execution")
+        if plan.scenario_key == "strategy_builder_v1" and self.registry.version != "1.2.0":
+            raise CompilationError("strategy requires explicit Registry 1.2")
         baseline = ModuleRegistry.load("1.0.0")
         PlanValidator(baseline).validate(plan)
         nodes = []
@@ -106,12 +134,20 @@ class PlanCompiler:
                 raise CompilationError("quality gate metadata mismatch")
             if any(not i.present and i.classification.value in {"REQUIRED", "BLOCKING"} for i in node.scoped_inputs):
                 raise CompilationError("missing blocking input")
-            compiled = CompiledExecutionNode(node.node_id, node.module_id, node.objective, node.expected_outputs,
-                                             node.context_packet, node.dependency_references, descriptor.execution_binding)
+            node_type = CompiledExecutionNodeV2 if plan.scenario_key == "strategy_builder_v1" else CompiledExecutionNode
+            policy = {"failure_mode": NodeFailureMode.REQUIRED if node.module_id in {ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO} else NodeFailureMode.OPTIONAL} if node_type is CompiledExecutionNodeV2 else {}
+            compiled = node_type(node.node_id, node.module_id, node.objective, node.expected_outputs,
+                                             node.context_packet, node.dependency_references, descriptor.execution_binding, **policy)
             _binding(compiled, self.registry, self.executors)
             nodes.append(compiled)
-        compiled = CompiledExecutionPlan(PLAN_SCHEMA, plan.plan_id, plan.scenario_key, self.registry.version,
-                                         tuple(nodes), plan.dependencies, "")
+        if plan.scenario_key == "strategy_builder_v1":
+            compiled = CompiledExecutionPlanV2(PLAN_SCHEMA_V2, plan.plan_id, plan.scenario_key, self.registry.version,
+                tuple(nodes), tuple(CompiledDependency(e.upstream_node_id, e.downstream_node_id,
+                    DependencyMode.OPTIONAL_CONTRIBUTOR if e.downstream_node_id == "positioning" else DependencyMode.HARD)
+                    for e in plan.dependencies), "", plan.limitations)
+        else:
+            compiled = CompiledExecutionPlan(PLAN_SCHEMA, plan.plan_id, plan.scenario_key, self.registry.version,
+                                             tuple(nodes), plan.dependencies, "")
         raw = bounded(compiled)
         raw.pop("execution_fingerprint")
         compiled = replace(compiled, execution_fingerprint=fingerprint(raw))

@@ -8,6 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.marketing_orchestrator import AuthorizedContextFact, PlanningInputKey, PlanningStatus
+from app.marketing_orchestrator.errors import InvalidInterpretationError
 from app.marketing_orchestrator.quality_gates.contracts import EvaluationBatch
 from app.marketing_orchestrator.quality_gates.errors import QualityGateContractError
 from app.marketing_tools import ToolInputNeeded
@@ -95,7 +96,12 @@ class MarketingCopilotService:
             return result(ResultKind.DIRECT_RESULT, direct_result=output)
 
         interpretation, scoped = self.adapter.adapt(decision, context)
-        plan = self.planner.plan(interpretation, scoped)
+        try:
+            plan = self.planner.plan(interpretation, scoped)
+        except InvalidInterpretationError:
+            if interpretation.scenario_key != "strategy_builder_v1":
+                raise
+            return needs("invalid_strategy_research", (("up_to_three_valid_competitor_urls",),))
         if plan.planning_status is not PlanningStatus.VALIDATED:
             questions = tuple(q.input_key.value for q in plan.blocking_questions)
             return needs("planning_" + plan.planning_status.value.lower(), (questions or ("supported_request",),))

@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import hashlib
 import re
+from enum import Enum
 
 from app.marketing_orchestrator.contracts import ContextPacket, GraphDependency
 from app.module_registry import ExecutionBinding, ModuleId
@@ -10,9 +11,10 @@ from .errors import RuntimeContractError
 WORKFLOW_TYPE = "orchestration_graph.v1"
 JOB_KIND = "orchestration.module"
 PLAN_SCHEMA = "compiled_execution_plan.v1"
+PLAN_SCHEMA_V2 = "compiled_execution_plan.v2"
 ARTIFACT_SCHEMA = "module_artifact.v1"
 # Execution permission is owned by the runtime, independently of planning support.
-EXECUTABLE_SCENARIOS = frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
+EXECUTABLE_SCENARIOS = frozenset({"explicit_single_module_v1", "competitive_positioning_v1", "strategy_builder_v1"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,72 @@ class GraphWorkItem:
     plan_revision: int
     node_id: str
     claim_token: str
+
+
+class NodeFailureMode(str, Enum):
+    REQUIRED = "REQUIRED"
+    OPTIONAL = "OPTIONAL"
+
+
+class DependencyMode(str, Enum):
+    HARD = "HARD"
+    OPTIONAL_CONTRIBUTOR = "OPTIONAL_CONTRIBUTOR"
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledExecutionNodeV2(CompiledExecutionNode):
+    failure_mode: NodeFailureMode
+
+    def __post_init__(self):
+        CompiledExecutionNode.__post_init__(self)
+        if type(self.failure_mode) is not NodeFailureMode:
+            raise RuntimeContractError("invalid failure mode")
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledDependency:
+    upstream_node_id: str
+    downstream_node_id: str
+    mode: DependencyMode
+
+    def __post_init__(self):
+        validate_identity("validation", 1, self.upstream_node_id)
+        validate_identity("validation", 1, self.downstream_node_id)
+        if type(self.mode) is not DependencyMode:
+            raise RuntimeContractError("invalid dependency mode")
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledExecutionPlanV2:
+    schema_version: str
+    source_plan_id: str
+    scenario_key: str
+    registry_version: str
+    nodes: tuple[CompiledExecutionNodeV2, ...]
+    dependencies: tuple[CompiledDependency, ...]
+    execution_fingerprint: str
+    limitations: tuple[str, ...]
+
+    def __post_init__(self):
+        if type(self.nodes) is not tuple or any(type(n) is not CompiledExecutionNodeV2 for n in self.nodes):
+            raise RuntimeContractError("invalid v2 nodes")
+        if type(self.dependencies) is not tuple or any(type(e) is not CompiledDependency for e in self.dependencies):
+            raise RuntimeContractError("invalid v2 dependencies")
+        if (type(self.limitations) is not tuple or len(self.limitations) > 32
+                or any(type(v) is not str or not 1 <= len(v) <= 256 for v in self.limitations)):
+            raise RuntimeContractError("invalid bounded planning limitations")
+        if any(type(v) is not str for v in (self.schema_version, self.source_plan_id, self.scenario_key,
+                                          self.registry_version, self.execution_fingerprint)):
+            raise RuntimeContractError("invalid v2 metadata")
+
+
+def optional(node):
+    return isinstance(node, CompiledExecutionNodeV2) and node.failure_mode is NodeFailureMode.OPTIONAL
+
+
+def hard_predecessors(plan, node):
+    return tuple(e.upstream_node_id for e in plan.dependencies if e.downstream_node_id == node.node_id
+                 and (type(e) is GraphDependency or e.mode is DependencyMode.HARD))
 
 
 def validate_identity(run_id, revision, node_id):
