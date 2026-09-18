@@ -82,7 +82,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed internal `MarketingCopilotService` now coordinates these proposals with deterministic tools, synchronous modules and durable graph start. It is not connected to API, Telegram or production workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
-Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a future scenario proposal and remains unsupported by the existing planner. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
+Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
 `app/marketing_orchestrator/` is a deterministic, side-effect-free internal planning boundary:
 
@@ -93,7 +93,7 @@ typed RequestInterpretation + caller-authorized tagged PlanningContext
  -> validated, blocked, or unsupported planning result
 ```
 
-It supports `explicit_single_module_v1`, `new_positioning_v1`, and `competitive_positioning_v1`. `new_positioning_v1` plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
+It supports `explicit_single_module_v1`, `new_positioning_v1`, `competitive_positioning_v1`, and `strategy_builder_v1`. `new_positioning_v1` plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
 
 This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
 
@@ -147,8 +147,8 @@ or MarketingCopilotService. EXPERIMENTS turns accepted strategic/positioning hyp
 into structured falsifiable designs with parent lineage. Structured strategy items and
 experiment fields are included in normalized claims and remain behind full-claim acceptance.
 BUSINESS_DIAGNOSTICS remains economics-first and metadata-only; it is not repurposed
-as an own-site/product analyzer. No Strategy Builder graph, production ingress,
-worker wiring, delivery changes or migration is introduced. See
+as an own-site/product analyzer. The bounded Strategy Builder below composes these
+executors; no production ingress, worker wiring, delivery changes or migration is introduced. See
 [strategy intelligence executors](docs/development/strategy-intelligence-executors.md).
 
 ### Internal unified Copilot application
@@ -164,7 +164,8 @@ CONVERSATION  -> typed conversation_delegate for future chat ingress
 ```
 
 The fast paths create no MarketingRun, Job or JobExecution. Only Registry 1.1.0 bound
-modules execute; no legacy fallback or application-level provider retry exists.
+modules execute in the default composition; explicit Registry 1.2.0 enables six
+executors and Strategy Builder. No legacy fallback or application-level provider retry exists.
 Workflow start returns a durable identity acknowledgement; `ModuleGraphWorker` owns
 later execution. Actor + request key deterministically identify a run; the existing
 runtime compares the compiled plan and rejects a different plan under the same key.
@@ -188,8 +189,8 @@ No schema migration or production ingress was added. See
 Registry 1.1.0 or 1.2.0 and an injected executor registry. The immutable approved execution-version set contains exactly these two versions. Compilation persists the exact version; reload loads that version, never upgrades a 1.1 plan. Metadata compatibility still requires exact equality to planning Registry 1.0 after removing availability/bindings. The first executable vertical is
 `competitive_positioning_v1`: COMPETITOR_ANALYSIS -> POSITIONING. The existing
 `new_positioning_v1` is outside the runtime-owned immutable `EXECUTABLE_SCENARIOS`
-allowlist, which contains exactly `explicit_single_module_v1` and
-`competitive_positioning_v1`. Planning support does not grant execution permission;
+allowlist, which contains exactly `explicit_single_module_v1`,
+`competitive_positioning_v1`, and `strategy_builder_v1`. Planning support does not grant execution permission;
 MARKET_ANALYSIS is bound only in explicit Registry 1.2.0; binding availability does not authorize new scenarios.
 
 Immutable `compiled_execution_plan.v1` revisions live in `orchestration_plans`,
@@ -201,11 +202,39 @@ scheduling commit atomically; Redis is only a best-effort wakeup.
 
 The internal ModuleGraphWorker restores the plan and upstream results from SQL,
 dispatches outside transactions, and evaluates Quality Gates before acceptance.
-BLOCKED results block the run; quality rejection fails it without downstream work.
+REQUIRED BLOCKED results block the run; required quality rejection fails it without downstream work.
+V1 nodes retain this behavior. V2 OPTIONAL failures remain canonical FAILED Jobs,
+close optional-contributor barriers, and add safe coverage limitations while the graph continues.
 Corrupt persisted contracts fail closed. Restart needs no process-local progress.
 No Telegram/API ingress or production worker lane consumes this runtime. See
 [durable module graphs](docs/development/durable-module-graph-runtime.md) for
 contracts, authorization, serialization bounds, lock order and recovery tests.
+
+### Internal bounded Strategy Builder
+
+Explicit Registry 1.2 composition starts `strategy_builder_v1`: optional root
+MARKET_ANALYSIS and zero to three independent COMPETITOR_ANALYSIS nodes run in
+parallel, then required POSITIONING -> required VIRTUAL_CMO -> optional EXPERIMENTS.
+Only explicitly supplied market/competitor sources create research nodes. The
+maximum is seven nodes. Required first-party context is checked before durable
+start with one grouped clarification for every missing key. An own URL alone is
+not product context; raw intent URL order never assigns a source role.
+
+`compiled_execution_plan.v2` persists immutable node failure modes and dependency
+policies. V1 JSON shape, fingerprint and existing 1.1/1.2 recovery remain unchanged.
+Research -> POSITIONING edges wait for terminal optional outcomes; downstream
+receives only accepted artifacts with full ancestor lineage. Hard edges require
+accepted artifacts. Partial Quality Gate acceptance never releases a payload.
+At least one failed optional node with a successful required graph produces terminal
+`completed_with_limitations`, with `run.error=None`. Absent optional research may
+still yield `completed` with planning coverage limitations in bounded `state_json`.
+Coverage reaches executors through ContextPacket open questions, never as evidence.
+
+The existing VIRTUAL_CMO result is the durable strategy; EXPERIMENTS is a separate
+artifact. VIRTUAL_CMO synthesizes strategy as an expert, not as an orchestrator.
+No additional synthesis call, artifact model, migration, production ingress,
+delivery, own-site diagnosis, autonomous search or replanning is introduced.
+See [Strategy Builder contracts and verification](docs/development/strategy-builder-v1.md).
 
 ### URL analysis
 

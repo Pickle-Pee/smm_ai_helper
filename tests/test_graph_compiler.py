@@ -20,7 +20,7 @@ def test_executable_scenarios_are_an_exact_immutable_runtime_contract():
     from app.orchestration_runtime.contracts import EXECUTABLE_SCENARIOS
 
     assert type(EXECUTABLE_SCENARIOS) is frozenset
-    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
+    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1", "strategy_builder_v1"})
     assert EXECUTABLE_SCENARIOS is not SUPPORTED_SCENARIOS
     assert "new_positioning_v1" in SUPPORTED_SCENARIOS
     assert "new_positioning_v1" not in EXECUTABLE_SCENARIOS
@@ -67,7 +67,7 @@ def test_planning_expansion_does_not_authorize_compilation_or_persisted_plans(mo
         validate_compiled_plan(candidate)
     with pytest.raises(CompilationError, match="scenario is not authorized for execution"):
         plan_from_json(bounded(candidate))
-    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1"})
+    assert EXECUTABLE_SCENARIOS == frozenset({"explicit_single_module_v1", "competitive_positioning_v1", "strategy_builder_v1"})
 
 
 def test_compiler_never_imports_or_uses_planning_scenario_allowlist():

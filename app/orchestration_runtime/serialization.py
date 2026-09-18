@@ -12,7 +12,7 @@ from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 from app.marketing_orchestrator.contracts import AuthorizedContextFact, UpstreamFinding
 from app.module_execution.contracts import ModuleExecutionResult
 from app.module_registry import ModuleId
-from .contracts import CompiledExecutionPlan
+from .contracts import CompiledExecutionPlan, CompiledExecutionPlanV2, PLAN_SCHEMA_V2
 from .errors import RuntimeContractError
 
 MAX_BYTES = 1_048_576
@@ -152,6 +152,7 @@ def plan_to_json(plan: CompiledExecutionPlan):
 
 def plan_from_json(raw) -> CompiledExecutionPlan:
     from .compiler import validate_compiled_plan
-    plan = _restore(CompiledExecutionPlan, raw)
+    kind = CompiledExecutionPlanV2 if type(raw) is dict and raw.get("schema_version") == PLAN_SCHEMA_V2 else CompiledExecutionPlan
+    plan = _restore(kind, raw)
     validate_compiled_plan(plan)
     return plan

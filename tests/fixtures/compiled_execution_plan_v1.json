@@ -1,0 +1,499 @@
+{
+  "schema_version": "compiled_execution_plan.v1",
+  "source_plan_id": "00f8ceca30d54c5197f3b29cb97f3413c5369cea6103b1c61cc3e4a38e999984",
+  "scenario_key": "competitive_positioning_v1",
+  "registry_version": "1.1.0",
+  "nodes": [
+    {
+      "node_id": "competitor_analysis",
+      "module_id": "COMPETITOR_ANALYSIS",
+      "objective": "Establish competitor and alternative evidence for differentiate product",
+      "expected_outputs": [
+        "competitor_set",
+        "observable_positioning",
+        "offers",
+        "proof",
+        "patterns",
+        "market_gaps",
+        "differentiation_hypotheses."
+      ],
+      "context_packet": {
+        "relevant_project_context": [],
+        "known_facts": [
+          {
+            "fact_id": "fact.business_model",
+            "label": "business_model",
+            "value": "business_model",
+            "input_key": "business_model",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.competitor_or_category_scope",
+            "label": "competitor_or_category_scope",
+            "value": "https://competitor.example/page",
+            "input_key": "competitor_or_category_scope",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.customer_job_or_need",
+            "label": "customer_job_or_need",
+            "value": "customer_job_or_need",
+            "input_key": "customer_job_or_need",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.existing_proof",
+            "label": "existing_proof",
+            "value": "existing_proof",
+            "input_key": "existing_proof",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.geographic_scope",
+            "label": "geographic_scope",
+            "value": "geographic_scope",
+            "input_key": "geographic_scope",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.observable_evidence",
+            "label": "observable_evidence",
+            "value": "observable_evidence",
+            "input_key": "observable_evidence",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product",
+            "label": "product",
+            "value": "product",
+            "input_key": "product",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_or_category",
+            "label": "product_or_category",
+            "value": "product_or_category",
+            "input_key": "product_or_category",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_truth",
+            "label": "product_truth",
+            "value": "product_truth",
+            "input_key": "product_truth",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.relevant_alternative",
+            "label": "relevant_alternative",
+            "value": "relevant_alternative",
+            "input_key": "relevant_alternative",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_or_target_hypothesis",
+            "label": "target_or_target_hypothesis",
+            "value": "target_or_target_hypothesis",
+            "input_key": "target_or_target_hypothesis",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_segment",
+            "label": "target_segment",
+            "value": "target_segment",
+            "input_key": "target_segment",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          }
+        ],
+        "upstream_findings": [],
+        "evidence": [],
+        "assumptions": [],
+        "confidence": 0.8,
+        "constraints": [],
+        "available_tools": [
+          "site_fetch"
+        ],
+        "open_questions": []
+      },
+      "dependency_node_ids": [],
+      "binding": {
+        "executor_key": "competitor_analysis.v1",
+        "contract_version": "module_executor.v1",
+        "compatibility": "exact",
+        "evidence": "Internal dispatcher tests verify exact ModuleId, declared output names, scoped required-input blocking, strict versioned payloads and existing normalized Quality Gates provenance. Single public-page analysis / first-party positioning / text creative respectively; unsupported inputs or capabilities block. No ingress integration or universal request coverage."
+      }
+    },
+    {
+      "node_id": "positioning",
+      "module_id": "POSITIONING",
+      "objective": "differentiate product",
+      "expected_outputs": [
+        "category",
+        "target",
+        "value_proposition",
+        "differentiation",
+        "RTB",
+        "positioning_statement",
+        "USP_directions",
+        "offer",
+        "message_hierarchy",
+        "claim_risks",
+        "validation_plan."
+      ],
+      "context_packet": {
+        "relevant_project_context": [],
+        "known_facts": [
+          {
+            "fact_id": "fact.business_model",
+            "label": "business_model",
+            "value": "business_model",
+            "input_key": "business_model",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.competitor_or_category_scope",
+            "label": "competitor_or_category_scope",
+            "value": "https://competitor.example/page",
+            "input_key": "competitor_or_category_scope",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.customer_job_or_need",
+            "label": "customer_job_or_need",
+            "value": "customer_job_or_need",
+            "input_key": "customer_job_or_need",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.existing_proof",
+            "label": "existing_proof",
+            "value": "existing_proof",
+            "input_key": "existing_proof",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.geographic_scope",
+            "label": "geographic_scope",
+            "value": "geographic_scope",
+            "input_key": "geographic_scope",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.observable_evidence",
+            "label": "observable_evidence",
+            "value": "observable_evidence",
+            "input_key": "observable_evidence",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product",
+            "label": "product",
+            "value": "product",
+            "input_key": "product",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_or_category",
+            "label": "product_or_category",
+            "value": "product_or_category",
+            "input_key": "product_or_category",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_truth",
+            "label": "product_truth",
+            "value": "product_truth",
+            "input_key": "product_truth",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.relevant_alternative",
+            "label": "relevant_alternative",
+            "value": "relevant_alternative",
+            "input_key": "relevant_alternative",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_or_target_hypothesis",
+            "label": "target_or_target_hypothesis",
+            "value": "target_or_target_hypothesis",
+            "input_key": "target_or_target_hypothesis",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_segment",
+            "label": "target_segment",
+            "value": "target_segment",
+            "input_key": "target_segment",
+            "module_relevance": [
+              "COMPETITOR_ANALYSIS",
+              "MARKET_ANALYSIS",
+              "POSITIONING"
+            ],
+            "scenario_relevance": [],
+            "source": "owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          }
+        ],
+        "upstream_findings": [],
+        "evidence": [],
+        "assumptions": [],
+        "confidence": 0.8,
+        "constraints": [],
+        "available_tools": [
+          "site_fetch"
+        ],
+        "open_questions": []
+      },
+      "dependency_node_ids": [
+        "competitor_analysis"
+      ],
+      "binding": {
+        "executor_key": "positioning.v1",
+        "contract_version": "module_executor.v1",
+        "compatibility": "exact",
+        "evidence": "Internal dispatcher tests verify exact ModuleId, declared output names, scoped required-input blocking, strict versioned payloads and existing normalized Quality Gates provenance. Single public-page analysis / first-party positioning / text creative respectively; unsupported inputs or capabilities block. No ingress integration or universal request coverage."
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "upstream_node_id": "competitor_analysis",
+      "downstream_node_id": "positioning"
+    }
+  ],
+  "execution_fingerprint": "ea813d6c1f266293f938f2022af6209c7cdb08846ecbeed7d3a5cc602bf5def3"
+}

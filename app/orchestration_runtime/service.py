@@ -3,6 +3,9 @@
 No method holds a transaction across executor/provider calls. Completion and
 advance share a transaction so a crash cannot strand a dependency-ready node.
 """
+from dataclasses import replace
+import json
+
 from datetime import datetime, timedelta, timezone
 import logging
 import uuid
@@ -19,12 +22,12 @@ from app.marketing_orchestrator.quality_gates import QualityGateEvaluator
 from app.marketing_orchestrator.quality_gates.contracts import EvaluationBatch
 from app.module_registry import ModuleResultStatus
 from .compiler import validate_compiled_plan
-from .contracts import ARTIFACT_SCHEMA, JOB_KIND, WORKFLOW_TYPE, GraphWorkItem, artifact_key, module_job_id, validate_identity
+from .contracts import ARTIFACT_SCHEMA, JOB_KIND, WORKFLOW_TYPE, GraphWorkItem, artifact_key, module_job_id, validate_identity, optional, hard_predecessors, CompiledExecutionPlanV2
 from .errors import RuntimeContractError, StartIdentityConflict
 from .serialization import bounded, fingerprint, plan_from_json, plan_to_json, result_from_json, result_to_json
 
 log = logging.getLogger(__name__)
-TERMINAL = {"completed", "blocked", "failed"}
+TERMINAL = {"completed", "completed_with_limitations", "blocked", "failed"}
 
 
 def utcnow():
@@ -152,7 +155,7 @@ class GraphExecutionService:
             }:
                 raise RuntimeContractError("artifact has no matching successful Job")
             result = result_from_json(raw["execution_result"])
-            if result.module_id is not node.module_id or not set(node.dependency_node_ids) <= accepted.keys():
+            if result.module_id is not node.module_id or not self._ready(plan, node, jobs, accepted):
                 raise RuntimeContractError("artifact module or dependencies mismatch")
             upstream = self._upstream(plan, node, accepted)
             quality = evaluate_result(job.job_id, result, upstream)
@@ -170,29 +173,64 @@ class GraphExecutionService:
         for candidate in reversed(plan.nodes):
             if candidate.node_id in wanted:
                 wanted.update(candidate.dependency_node_ids)
-        if not wanted <= accepted.keys():
+        required = {ancestor for candidate in plan.nodes if candidate.node_id in wanted | {node.node_id}
+                    for ancestor in hard_predecessors(plan, candidate)}
+        if not required <= accepted.keys():
             raise RuntimeContractError("predecessor has no accepted artifact")
         return tuple(UpstreamExecutionResult(producer_node_id=n.node_id, result=accepted[n.node_id])
-                     for n in plan.nodes if n.node_id in wanted)
+                     for n in plan.nodes if n.node_id in wanted and n.node_id in accepted)
+
+    @staticmethod
+    def _ready(plan, node, jobs, accepted):
+        return set(hard_predecessors(plan, node)) <= accepted.keys() and all(
+            ref in accepted or (ref in jobs and jobs[ref].status is JobStatus.FAILED)
+            for ref in node.dependency_node_ids)
+
+    @staticmethod
+    def _coverage(plan, jobs, accepted):
+        if type(plan) is not CompiledExecutionPlanV2:
+            return None
+        limitations = [{"code": code} for code in plan.limitations]
+        failures = [n for n in plan.nodes if optional(n) and n.node_id in jobs
+                    and jobs[n.node_id].status is JobStatus.FAILED]
+        safe_codes = {"module_blocked", "quality_rejected", "provider_transient", "execution_invalid", "attempts_exhausted"}
+        limitations.extend({"code": "optional_node_failed", "node_id": n.node_id,
+                            "reason": jobs[n.node_id].error if jobs[n.node_id].error in safe_codes else "execution_invalid"}
+                           for n in failures)
+        from app.module_registry import ModuleId
+        competitors = [n for n in plan.nodes if n.module_id is ModuleId.COMPETITOR_ANALYSIS]
+        successful = sum(n.node_id in accepted for n in competitors)
+        if competitors and all(n.node_id in accepted or n in failures for n in competitors) and successful == 1:
+            limitations.append({"code": "only_one_competitor_analyzed"})
+        return {"schema_version": "evidence_coverage.v1", "limitations": limitations,
+                "accepted_node_ids": [n.node_id for n in plan.nodes if n.node_id in accepted],
+                "competitors_supplied": len(competitors), "competitors_accepted": successful}
 
     async def _advance_locked(self, session, run):
         if run.status in TERMINAL:
             return []
         revision, plan = await self._plan(session, run.run_id)
         jobs, accepted = await self._graph_state(session, run.run_id, revision, plan)
-        if any(j.status is JobStatus.FAILED for j in jobs.values()):
+        if any(n.node_id in jobs and jobs[n.node_id].status is JobStatus.FAILED and not optional(n) for n in plan.nodes):
             run.status, run.error = "failed", "node_failed"
             return []
+        coverage = self._coverage(plan, jobs, accepted)
+        if coverage is not None:
+            run.state_json = coverage
         wake = []
         for node in plan.nodes:
-            if node.node_id not in jobs and set(node.dependency_node_ids) <= accepted.keys():
+            if node.node_id not in jobs and self._ready(plan, node, jobs, accepted):
                 job_id = module_job_id(run.run_id, revision, node.node_id)
                 await self.jobs.create_job(session, job_id=job_id, kind=JOB_KIND, marketing_run_id=run.run_id,
                                            workflow_step=node.node_id, payload_json=routing(run.run_id, revision, plan, node))
                 session.add(JobExecution(job_id=job_id, available_at=self.clock()))
                 wake.append(job_id)
-        run.status = "completed" if len(accepted) == len(plan.nodes) else (
+        failed_optional = sum(optional(n) and n.node_id in jobs and jobs[n.node_id].status is JobStatus.FAILED for n in plan.nodes)
+        complete = len(accepted) + failed_optional == len(plan.nodes)
+        run.status = ("completed_with_limitations" if failed_optional else "completed") if complete else (
             "running" if any(j.status is JobStatus.RUNNING for j in jobs.values()) else "queued")
+        if complete:
+            run.error = None
         run.updated_at = self.clock().replace(tzinfo=None)
         return wake
 
@@ -261,10 +299,17 @@ class GraphExecutionService:
             revision, plan = await self._plan(session, item.run_id)
             jobs, accepted = await self._graph_state(session, item.run_id, revision, plan)
             node = next(n for n in plan.nodes if n.node_id == item.node_id)
+            if not self._ready(plan, node, jobs, accepted):
+                raise RuntimeContractError("dependency barrier is not satisfied")
             upstream = self._upstream(plan, node, accepted)
+            packet = node.context_packet
+            coverage = self._coverage(plan, jobs, accepted)
+            if coverage is not None:
+                packet = replace(packet, open_questions=(*packet.open_questions,
+                    "Evidence coverage (limitations, not factual claims): " + json.dumps(coverage, sort_keys=True)))
             request = ModuleExecutionRequest(execution_id=item.job_id, module_id=node.module_id,
                 objective=node.objective, expected_outputs=node.expected_outputs,
-                context_packet=node.context_packet, upstream_results=upstream)
+                context_packet=packet, upstream_results=upstream)
             return node.binding, request
 
     async def finish(self, item, result, quality):
@@ -275,8 +320,10 @@ class GraphExecutionService:
                 return False
             run, job, lease = active
             revision, plan = await self._plan(session, item.run_id)
-            _, accepted = await self._graph_state(session, item.run_id, revision, plan)
+            jobs, accepted = await self._graph_state(session, item.run_id, revision, plan)
             node = next(n for n in plan.nodes if n.node_id == item.node_id)
+            if not self._ready(plan, node, jobs, accepted):
+                raise RuntimeContractError("dependency barrier is not satisfied")
             expected_quality = evaluate_result(item.job_id, result, self._upstream(plan, node, accepted))
             if (result.module_id is not node.module_id or quality != expected_quality
                     or not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
@@ -299,6 +346,18 @@ class GraphExecutionService:
     async def _terminal(self, session, run, job, lease, code, *, blocked=False, reasons=()):
         await self.jobs.transition_job(session, job.job_id, job.version, JobStatus.FAILED, error=code)
         lease.claim_token = lease.lease_until = None
+        try:
+            _, plan = await self._plan(session, run.run_id)
+        except (ValueError, LookupError, TypeError):
+            plan = None  # Corrupt persisted contracts still fail the whole run closed.
+        if plan is not None and optional(next((n for n in plan.nodes if n.node_id == job.workflow_step), None)):
+            await session.flush()
+            try:
+                return await self._advance_locked(session, run)
+            except RuntimeContractError:
+                # Optional provider failure is tolerable; corrupt persisted graph
+                # state is not. Retain the canonical failure and stop the run.
+                code, blocked = "invalid_persisted_graph", False
         run.status, run.error = ("blocked" if blocked else "failed"), code
         run.state_json = {"failure": {"code": code, "node_id": job.workflow_step, "blocking_reasons": list(reasons)}}
         run.updated_at = self.clock().replace(tzinfo=None)
@@ -308,6 +367,7 @@ class GraphExecutionService:
         if code not in {"module_blocked", "quality_rejected", "provider_transient", "execution_invalid"}:
             raise RuntimeContractError("unknown failure code")
         reasons = tuple(sorted(BlockingReason(r).value for r in blocking_reasons))
+        wake = []
         async with self.sessions() as session, session.begin():
             active = await self._active(session, item)
             if active is None:
@@ -318,5 +378,6 @@ class GraphExecutionService:
                 lease.available_at = self.clock() + timedelta(seconds=5 * 2 ** (lease.attempts - 1))
                 run.status = "queued"
             else:
-                await self._terminal(session, run, job, lease, code, blocked=code == "module_blocked", reasons=reasons)
+                wake = await self._terminal(session, run, job, lease, code, blocked=code == "module_blocked", reasons=reasons)
+        await self._wake(wake or [])
         return True

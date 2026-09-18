@@ -132,6 +132,8 @@ class MarketingOrchestratorPlanner:
             plan = self._plan_single_module(interpretation, context)
         elif interpretation.scenario_key == "competitive_positioning_v1":
             plan = self._plan_competitive_positioning(interpretation, context)
+        elif interpretation.scenario_key == "strategy_builder_v1":
+            plan = self._plan_strategy(interpretation, context)
         elif interpretation.scenario_key == "new_positioning_v1":
             plan = self._plan_new_positioning(interpretation, context)
         else:
@@ -241,6 +243,63 @@ class MarketingOrchestratorPlanner:
                               (GraphDependency("competitor_analysis", "positioning"),),
                               assumptions=context.assumptions)
 
+    def _plan_strategy(self, interpretation, context):
+        from .strategy import SCENARIO, REQUIRED_KEYS, MARKET_KEYS, key, nonempty, normalize_competitors, scoped_packet
+        from .contracts import Sensitivity
+        # Interpretations may contain an explicit goal; UNSPECIFIED is never context.
+        all_facts = (*context.project_context, *context.known_facts)
+        if interpretation.business_goal != "UNSPECIFIED" and not any(key(f) == "business_goal" for f in all_facts):
+            context = replace(context, known_facts=(*context.known_facts, AuthorizedContextFact(
+                "strategy.business.goal", "business_goal", interpretation.business_goal,
+                input_key=PlanningInputKey.BUSINESS_GOAL, source="explicit request business goal",
+                scenario_relevance=frozenset({SCENARIO}))))
+        research_facts = tuple(f for f in (*context.project_context, *context.known_facts)
+            if f.authorized and f.sensitivity is not Sensitivity.SECRET and nonempty(f.value)
+            and (SCENARIO in f.scenario_relevance or
+                 (key(f) == "competitor_urls" and ModuleId.COMPETITOR_ANALYSIS in f.module_relevance) or
+                 (key(f) in MARKET_KEYS and ModuleId.MARKET_ANALYSIS in f.module_relevance)))
+        urls = []
+        for fact in research_facts:
+            if key(fact) == "competitor_urls":
+                if type(fact.value) is not tuple:
+                    raise InvalidInterpretationError("competitor_urls must be an explicit list")
+                urls.extend(fact.value)
+        try:
+            competitors = normalize_competitors(urls)
+        except ValueError as exc:
+            raise InvalidInterpretationError("invalid bounded competitor_urls") from exc
+        market = any(key(f) in MARKET_KEYS for f in research_facts)
+        definitions = ([("market_analysis", ModuleId.MARKET_ANALYSIS, None)] if market else [])
+        definitions += [(f"competitor_analysis_{i}", ModuleId.COMPETITOR_ANALYSIS, url)
+                        for i, url in enumerate(competitors, 1)]
+        roots = tuple(d[0] for d in definitions)
+        definitions += [("positioning", ModuleId.POSITIONING, None),
+                        ("virtual_cmo", ModuleId.VIRTUAL_CMO, None), ("experiments", ModuleId.EXPERIMENTS, None)]
+        edges = tuple(GraphDependency(a, b) for a, b in sorted(
+            [(r, "positioning") for r in roots] + [("positioning", "virtual_cmo"), ("virtual_cmo", "experiments")],
+            key=lambda e: (e[1], e[0])))
+        nodes = []
+        for node_id, module, url in definitions:
+            descriptor = self._registry.get(module)
+            packet = scoped_packet(self, context, module, interpretation, competitor=url)
+            known = {key(f) for f in (*packet.known_facts, *packet.relevant_project_context)}
+            required = REQUIRED_KEYS[1:] if module is ModuleId.POSITIONING else (
+                ("business_goal", "product") if module is ModuleId.VIRTUAL_CMO else ())
+            inputs = tuple(ScopedInput(PlanningInputRequirement(PlanningInputKey(k), InputClassification.REQUIRED,
+                i, module, SCENARIO, "Supply " + k), k in known) for i, k in enumerate(required))
+            nodes.append(PlanNode(node_id, module, self._objective_for(module, interpretation), inputs,
+                descriptor.outputs, descriptor.quality_gate,
+                dependency_references=tuple(e.upstream_node_id for e in edges if e.downstream_node_id == node_id),
+                parallel_group="strategy_research" if node_id in roots else None,
+                parallelizable=node_id in roots, context_packet=packet))
+        limitations = (() if market else ("market_research_not_supplied",)) + (
+            () if competitors else ("competitor_research_not_supplied",))
+        if not any(key(f) in {"economics", "unit_economics"} for f in
+                   (*nodes[-2].context_packet.known_facts, *nodes[-2].context_packet.relevant_project_context)):
+            limitations += ("economics_unavailable",)
+        return self._finalize(interpretation, SCENARIO, tuple(nodes), edges,
+                              assumptions=context.assumptions, base_limitations=limitations)
+
     def _unsupported_plan(self, interpretation: RequestInterpretation, context: PlanningContext) -> OrchestrationPlan:
         scenario_key = interpretation.scenario_key or ""
         return OrchestrationPlan(
@@ -275,7 +334,7 @@ class MarketingOrchestratorPlanner:
                     continue
                 if item.classification in {InputClassification.REQUIRED, InputClassification.BLOCKING}:
                     key = item.key.casefold()
-                    if key not in seen_questions and len(questions) < 3:
+                    if key not in seen_questions and len(questions) < (6 if scenario_key == "strategy_builder_v1" else 3):
                         seen_questions.add(key)
                         questions.append(
                             BlockingQuestion(
