@@ -77,10 +77,16 @@ async def chat(
     max_output_tokens: int | None = None,
     response_format: Dict[str, Any] | None = None,
     task: str | None = None,
+    *,
+    single_attempt: bool = False,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Responses API:
       POST /responses { model, input, max_output_tokens, text: { format: ... } }
+
+    single_attempt is for durable graph execution: one bounded request, no
+    schema fallback or token-budget expansion; JobExecution owns retries.
+    Other callers retain the existing transport policy.
     """
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
@@ -120,9 +126,17 @@ async def chat(
     last_error: Exception | None = None
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(settings.HTTP_RETRIES + 1):
+        for attempt in range(1 if single_attempt else settings.HTTP_RETRIES + 1):
             try:
                 resp = await client.post(url, headers=headers, json=payload)
+
+                if single_attempt:
+                    # Never log provider bodies or silently drop the response schema.
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if data.get("status") == "incomplete":
+                        raise ValueError("Incomplete structured model response")
+                    return _extract_output_text(data), data.get("usage", {}) or {}
 
                 if resp.status_code >= 400:
                     body = resp.text
@@ -184,6 +198,8 @@ async def chat(
                 return content.strip(), usage
 
             except httpx.HTTPStatusError as exc:
+                if single_attempt:
+                    raise
                 last_error = exc
                 status = exc.response.status_code if exc.response else None
                 if status not in RETRYABLE_STATUS_CODES:
@@ -193,6 +209,8 @@ async def chat(
                 await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
 
             except (httpx.TimeoutException, httpx.TransportError, ValueError, KeyError, RuntimeError) as exc:
+                if single_attempt:
+                    raise
                 last_error = exc
                 if attempt >= settings.HTTP_RETRIES:
                     break

@@ -8,12 +8,17 @@ from redis.exceptions import RedisError
 from app.config import settings
 
 log = logging.getLogger(__name__)
+FIXED_WAKEUP_KEY = "smm:marketing:wakeups:v1"
+GRAPH_WAKEUP_KEY = "smm:orchestration:wakeups:v1"
 
 
 class RedisWakeups:
-    key = "smm:marketing:wakeups:v1"
+    key = FIXED_WAKEUP_KEY
 
-    def __init__(self, client=None):
+    def __init__(self, client=None, *, key=FIXED_WAKEUP_KEY):
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("A non-empty wakeup key is required")
+        self.key = key
         self.client = client or Redis.from_url(settings.REDIS_URL, decode_responses=True,
                                                socket_connect_timeout=1, socket_timeout=2)
 

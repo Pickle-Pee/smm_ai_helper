@@ -130,7 +130,7 @@ Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-
 
 The separate `app/module_execution/executors/` package supplies three implementations in its unchanged default 1.1 composition, or six when the factory receives `registry_version="1.2.0"`, with injected single-attempt model and source-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
-The executable registry and implementations are internally callable only. The internal Copilot application service and durable graph runtime consume them explicitly; no API, Telegram, production worker main or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+The executable registry and implementations are consumed explicitly by the internal Copilot application service and durable graph runtime, including its production worker lane. No API, Telegram or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
 
 ### Internal strategy intelligence executors
 
@@ -148,7 +148,8 @@ into structured falsifiable designs with parent lineage. Structured strategy ite
 experiment fields are included in normalized claims and remain behind full-claim acceptance.
 BUSINESS_DIAGNOSTICS remains economics-first and metadata-only; it is not repurposed
 as an own-site/product analyzer. The bounded Strategy Builder below composes these
-executors; no production ingress, worker wiring, delivery changes or migration is introduced. See
+executors; the production worker lane below consumes their persisted Jobs. No production
+ingress, delivery changes or migration is introduced. See
 [strategy intelligence executors](docs/development/strategy-intelligence-executors.md).
 
 ### Internal unified Copilot application
@@ -206,9 +207,40 @@ REQUIRED BLOCKED results block the run; required quality rejection fails it with
 V1 nodes retain this behavior. V2 OPTIONAL failures remain canonical FAILED Jobs,
 close optional-contributor barriers, and add safe coverage limitations while the graph continues.
 Corrupt persisted contracts fail closed. Restart needs no process-local progress.
-No Telegram/API ingress or production worker lane consumes this runtime. See
+No Telegram/API ingress starts this runtime; the production worker consumes already persisted graphs. See
 [durable module graphs](docs/development/durable-module-graph-runtime.md) for
 contracts, authorization, serialization bounds, lock order and recovery tests.
+
+### Production worker lanes
+
+`python -m app.worker` runs two independent lane families in one TaskGroup:
+
+```text
+PostgreSQL Job truth
+   ├ marketing.step       → fixed MarketingWorker (WORKER_CONCURRENCY, default 2)
+   └ orchestration.module → ModuleGraphWorker (GRAPH_WORKER_CONCURRENCY, default 1)
+Redis wakeup hints
+   ├ smm:marketing:wakeups:v1     → fixed lanes
+   └ smm:orchestration:wakeups:v1 → graph lanes
+```
+
+The explicit production composition loads Registry 1.2.0 and all six exact
+executors, validates capabilities/coherence before loops, and uses the existing
+safe public URL analyzer for competitor and market sources. Its model adapter
+uses the existing Responses transport with an opt-in bounded single-request
+policy: strict schema, 4000 output tokens, no fallback/repair or inner retries.
+JobExecution allows three attempts, thus at most three model HTTP requests per
+graph Job. Legacy fixed provider retry behavior is unchanged.
+
+Both lanes scan PostgreSQL before waiting on Redis; canonical Job.kind filters
+enforce claim isolation even for wrong hints. Graph provider timeout < execution
+timeout < fenced lease (defaults 60 < 300 < 330 seconds) is validated at startup.
+Iteration failures remain local to their lane. SIGTERM/cancellation closes both
+Redis pools and per-call clients, leaving active leases recoverable, without
+recording shutdown as Job failure. OwnedProductEvidence acquisition remains
+outside the worker; persisted compiled context is the input. No Copilot public
+or Telegram ingress, fixed-flow migration or database migration is introduced.
+See [production graph worker](docs/development/production-graph-worker.md).
 
 ### Internal bounded Strategy Builder
 
