@@ -1,4 +1,4 @@
-"""Internally runnable graph worker; intentionally not wired into app.worker.main."""
+"""Durable graph execution; no ingress or context acquisition."""
 import asyncio
 import logging
 
@@ -7,15 +7,29 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.module_execution import ModuleExecutorDispatcher
 from app.module_execution.acceptance import fully_accepted
+from app.module_execution.errors import ModuleExecutionContractError
+from app.module_execution.executors.common import ExecutorOutputError
 from app.module_registry import ModuleResultStatus
+from .errors import RuntimeContractError
 from .service import evaluate_result
 
 log = logging.getLogger(__name__)
 
 
 def transient(exc):
-    return isinstance(exc, (TimeoutError, httpx.TimeoutException, httpx.NetworkError)) or (
-        isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {408, 429, 500, 502, 503, 504})
+    # Project transports may wrap exhausted transient errors in RuntimeError.
+    # The wrapper alone is not evidence that retrying is safe/useful.
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, (ExecutorOutputError, ModuleExecutionContractError, RuntimeContractError)):
+            return False
+        if isinstance(exc, (TimeoutError, httpx.TimeoutException, httpx.NetworkError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code in {408, 429, 500, 502, 503, 504}
+        exc = exc.__cause__
+    return False
 
 
 class ModuleGraphWorker:
