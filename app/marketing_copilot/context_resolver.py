@@ -12,6 +12,7 @@ from .contracts import CopilotContractError
 
 class ContextLayer(str, Enum):
     CURRENT_REQUEST = "CURRENT_REQUEST"
+    OWNED_SITE = "OWNED_SITE"
     PROJECT_RUN = "PROJECT_RUN"
     BRAND_PROFILE = "BRAND_PROFILE"
     CONVERSATION = "CONVERSATION"
@@ -62,6 +63,7 @@ def _thaw(value):
 class ContextResolver:
     def resolve(
         self, *, current_request: tuple[ContextEntry, ...] = (),
+        owned_site_context: tuple[ContextEntry, ...] = (),
         project_run: tuple[ContextEntry, ...] = (), brand_profile: tuple[ContextEntry, ...] = (),
         conversation: tuple[ContextEntry, ...] = (),
         authorized_upstream_findings: tuple[UpstreamFinding, ...] = (),
@@ -69,7 +71,8 @@ class ContextResolver:
         available_tools: frozenset[ToolCapability] = frozenset(),
     ) -> PlanningContext:
         layers = (
-            (ContextLayer.CURRENT_REQUEST, current_request), (ContextLayer.PROJECT_RUN, project_run),
+            (ContextLayer.CURRENT_REQUEST, current_request), (ContextLayer.OWNED_SITE, owned_site_context),
+            (ContextLayer.PROJECT_RUN, project_run),
             (ContextLayer.BRAND_PROFILE, brand_profile), (ContextLayer.CONVERSATION, conversation),
         )
         selected: dict[str, tuple[ContextLayer, AuthorizedContextFact]] = {}
@@ -80,6 +83,15 @@ class ContextResolver:
             if len(set(keys)) != len(keys):
                 raise CopilotContractError("Duplicate semantic_key within a context layer")
             for entry in entries:
+                if layer is ContextLayer.OWNED_SITE:
+                    # Acquisition is descriptive context, never a shortcut around
+                    # the existing verified product truth / proof input slots.
+                    input_key = entry.fact.input_key.value if entry.fact.input_key else entry.fact.label
+                    if {entry.semantic_key, input_key} & {"product_truth", "existing_proof"} or (
+                        not isinstance(entry.fact.value, MappingProxyType)
+                        or entry.fact.value.get("trust") != "site_claim"
+                    ):
+                        raise CopilotContractError("Owned-site entries must remain marked site claims, not product truth")
                 if entry.fact.authorized:
                     selected.setdefault(entry.semantic_key, (layer, entry.fact))
         project, known = [], []
@@ -94,7 +106,7 @@ class ContextResolver:
                 source=f"{layer.value}:{fact.source}", evidence=fact.evidence, confidence=fact.confidence,
                 sensitivity=fact.sensitivity, authorized=fact.authorized,
             )
-            (project if layer in {ContextLayer.CURRENT_REQUEST, ContextLayer.PROJECT_RUN} else known).append(copied)
+            (project if layer in {ContextLayer.CURRENT_REQUEST, ContextLayer.OWNED_SITE, ContextLayer.PROJECT_RUN} else known).append(copied)
         if (type(authorized_upstream_findings) is not tuple or len(authorized_upstream_findings) > 128
                 or any(type(f) is not UpstreamFinding for f in authorized_upstream_findings)):
             raise CopilotContractError("Upstream inputs must be caller-authorized UpstreamFinding records")

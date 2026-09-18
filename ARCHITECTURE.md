@@ -82,7 +82,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed internal `MarketingCopilotService` now coordinates these proposals with deterministic tools, synchronous modules and durable graph start. It is not connected to API, Telegram or production workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
-Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
+Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > owned-site published observations > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
 `app/marketing_orchestrator/` is a deterministic, side-effect-free internal planning boundary:
 
@@ -235,6 +235,39 @@ artifact. VIRTUAL_CMO synthesizes strategy as an expert, not as an orchestrator.
 No additional synthesis call, artifact model, migration, production ingress,
 delivery, own-site diagnosis, autonomous search or replanning is introduced.
 See [Strategy Builder contracts and verification](docs/development/strategy-builder-v1.md).
+
+### Internal owned-product evidence acquisition
+
+`app/product_context/` is an explicitly injected context-acquisition capability:
+
+```text
+caller-declared owned_site_url
+ -> OwnedProductEvidenceService.acquire / UrlAnalyzer / safe_http
+ -> strict structured extraction / owned_product_snapshot.v1
+ -> existing EvidenceRecord + literal source excerpts
+ -> deterministic projection / CopilotRequest.owned_site_context
+ -> ContextResolver -> existing modules and bounded graphs
+```
+
+The caller explicitly invokes acquisition before Copilot; MarketingCopilotService
+does not fetch an owned page. Raw provided_urls never imply ownership. When an owned
+URL is declared, competitor sources must also be explicitly scoped, so the own URL
+cannot enter the legacy single-URL competitor fallback.
+
+User-declared ownership means authorized source use, not verified contents. Snapshot
+observations are literal published claims with FIRST_PARTY evidence and an explicit
+unverified provenance description. Inferences and unknowns remain separate. Projection
+fills descriptive product/target/job context with site_claim markings, never
+product_truth or existing_proof. A separate caller attestation contract can project
+confirmed_business_fact into explicit current product_truth without modifying the
+snapshot. Existing current facts (including empty masks) retain precedence.
+
+Both strategy_builder_v1 and competitive_positioning_v1 consume this limited context.
+Required POSITIONING inputs, including verified product_truth and relevant_alternative,
+still produce grouped NEEDS_INPUT before durable graph start if missing. No new
+ModuleId, BUSINESS_DIAGNOSTICS change, DB cache/table/migration, competitor executor
+reuse, public API, Telegram or production worker connection is introduced. See
+[owned-product evidence contracts](docs/development/owned-product-evidence.md).
 
 ### URL analysis
 

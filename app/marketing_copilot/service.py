@@ -52,8 +52,13 @@ class MarketingCopilotService:
         entries = list(source_entries(request.current_request))
         # Only literal request references, verified by the interpreter, enter as targets.
         # Existing explicit entries (including empty masks) retain precedence.
+        # An owned-source declaration requires explicitly scoped competitor context;
+        # raw message URLs cannot assign roles in this mixed-source request.
         keys = {entry.semantic_key for entry in entries}
-        if len(intent.provided_urls) == 1 and intent.kind in {IntentKind.COMPETITOR_ANALYSIS, IntentKind.COMPARATIVE_POSITIONING}:
+        legacy_competitor_urls = request.owned_site_url is None and intent.kind in {
+            IntentKind.COMPETITOR_ANALYSIS, IntentKind.COMPARATIVE_POSITIONING,
+        }
+        if legacy_competitor_urls and len(intent.provided_urls) == 1:
             key = PlanningInputKey.COMPETITOR_OR_CATEGORY_SCOPE
             if key.value not in keys:
                 entries.append(ContextEntry(key.value, AuthorizedContextFact(
@@ -63,6 +68,7 @@ class MarketingCopilotService:
                 )))
         context = self.resolver.resolve(
             current_request=tuple(entries), project_run=source_entries(request.project_run),
+            owned_site_context=request.owned_site_context,
             brand_profile=source_entries(request.brand_profile), conversation=source_entries(request.conversation),
             authorized_upstream_findings=request.authorized_upstream_findings,
             available_tools=request.available_tools, assumptions=request.assumptions, constraints=request.constraints,
@@ -77,7 +83,7 @@ class MarketingCopilotService:
         def needs(code, alternatives=(("request_context",),), reasons=()):
             return result(ResultKind.NEEDS_INPUT, clarification=Clarification(code, alternatives, reasons))
 
-        if intent.kind in {IntentKind.COMPETITOR_ANALYSIS, IntentKind.COMPARATIVE_POSITIONING} and len(intent.provided_urls) > 1:
+        if legacy_competitor_urls and len(intent.provided_urls) > 1:
             return needs("single_competitor_required", (("one_competitor_url",),))
 
         if decision.mode is ExecutionMode.CONVERSATION:

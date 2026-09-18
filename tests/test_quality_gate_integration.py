@@ -24,8 +24,9 @@ def test_only_explicit_adapters_and_execution_contract_builders_import_quality_g
     executors = root / "app" / "module_execution" / "executors"
     builders = {executors / name for name in ("common.py", "competitor_analysis.py", "positioning.py", "creator.py",
                                              "market_analysis.py", "virtual_cmo.py", "experiments.py")}
+    acquisition = {root / "app/product_context/contracts.py", root / "app/product_context/service.py"}
     assert not any("quality_gates" in p.read_text(encoding="utf-8") for p in paths
-                   if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders,
+                   if "quality_gates" not in p.parts and p not in {adapter, contracts, *builders, *acquisition,
                        root / "app/orchestration_runtime/service.py", root / "app/marketing_copilot/service.py",
                        root / "app/marketing_copilot/factory.py"})
     for path in builders:
@@ -33,6 +34,12 @@ def test_only_explicit_adapters_and_execution_contract_builders_import_quality_g
             if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or ""):
                 assert node.module == "app.marketing_orchestrator.quality_gates.contracts"
                 assert all(alias.name != "*" and "Evaluator" not in alias.name for alias in node.names)
+    for path in acquisition:
+        imports = [node for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                   if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or "")]
+        assert [(node.module, [alias.name for alias in node.names]) for node in imports] == [
+            ("app.marketing_orchestrator.quality_gates.contracts", ["EvidenceRecord", "EvidenceSourceClass"])
+        ]  # Context acquisition reuses evidence data, never invokes evaluation.
     imports = [node for node in ast.walk(ast.parse(contracts.read_text(encoding="utf-8")))
                if isinstance(node, ast.ImportFrom) and "quality_gates" in (node.module or "")]
     assert [(node.module, [alias.name for alias in node.names]) for node in imports] == [

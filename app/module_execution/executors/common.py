@@ -186,6 +186,10 @@ and uniqueness without independent proof are hypotheses. No claim of competitor
 revenue, profit, conversion, internal strategy, success or customer research without
 specific evidence. Never invent discounts, scarcity, testimonials, awards, social
 proof or guarantees. Missing knowledge stays explicit in limitations, not invented.
+Context marked site_claim contains owned-site published assertions, not confirmed
+business facts. Preserve 'the site states' attribution. Neither its FIRST_PARTY
+source class nor a caller-declared owned URL verifies its contents. Only separately
+supplied product_truth/confirmed_business_fact may support confirmed product claims.
 """
         )
         context = plain(request.context_packet)
