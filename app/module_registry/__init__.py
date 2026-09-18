@@ -1,5 +1,7 @@
 from .registry import (
     DEFAULT_REGISTRY_VERSION,
+    INTELLIGENCE_REGISTRY_VERSION,
+    EXECUTION_REGISTRY_VERSIONS,
     EXECUTABLE_REGISTRY_VERSION,
     ModuleRegistry,
     ModuleRegistryError,
@@ -21,6 +23,8 @@ from .types import (
 
 __all__ = [
     "DEFAULT_REGISTRY_VERSION",
+    "INTELLIGENCE_REGISTRY_VERSION",
+    "EXECUTION_REGISTRY_VERSIONS",
     "EXECUTABLE_REGISTRY_VERSION",
     "ExecutionBinding",
     "InputRequirement",

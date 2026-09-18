@@ -229,6 +229,59 @@ def test_crashes_exhaust_bounded_attempts(mvp_database):
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("version", ["1.1.0", "1.2.0"])
+def test_persisted_registry_version_executes_after_process_recreation(mvp_database, version):
+    import os
+    import subprocess
+    import sys
+    from app.module_execution.executors import build_module_executor_registry
+    from tests.test_module_executors import analyzer
+
+    async def exercise():
+        executors = build_module_executor_registry(model_call=FakeModel(use_parents=True),
+            analyzer=analyzer(), registry_version="1.2.0")
+        plan = PlanCompiler(ModuleRegistry.load(version), executors).compile(source_plan())
+        service = GraphExecutionService(mvp_database, executors=executors)
+        rid = uuid.uuid4().hex
+        async with mvp_database() as session, session.begin():
+            user = User(telegram_id=int(uuid.uuid4().hex[:12], 16))
+            session.add(user)
+            await session.flush()
+            owner = user.id
+        try:
+            await service.start_compiled_run(owner_id=owner, run_id=rid, plan=plan)
+            assert await ModuleGraphWorker(service).once(module_job_id(rid, 1, "competitor_analysis"))
+            script = '''
+import asyncio, os, sys
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from app.module_execution.executors import build_module_executor_registry
+from app.orchestration_runtime.service import GraphExecutionService
+from app.orchestration_runtime.worker import ModuleGraphWorker
+from tests.test_module_executors import FakeModel, analyzer
+async def main():
+    engine = create_async_engine(os.environ["MVP_TEST_DATABASE_URL"])
+    executors = build_module_executor_registry(model_call=FakeModel(use_parents=True), analyzer=analyzer(), registry_version="1.2.0")
+    service = GraphExecutionService(async_sessionmaker(engine, expire_on_commit=False), executors=executors)
+    assert await ModuleGraphWorker(service).once(sys.argv[1])
+    await engine.dispose()
+asyncio.run(main())
+'''
+            process = await asyncio.to_thread(subprocess.run,
+                [sys.executable, "-c", script, module_job_id(rid, 1, "positioning")],
+                capture_output=True, text=True, env=os.environ.copy(), timeout=60)
+            assert process.returncode == 0, process.stderr
+            run, jobs, artifacts = await state(mvp_database, rid)
+            assert run.status == "completed" and len(artifacts) == 2
+            assert all(j.status is JobStatus.SUCCEEDED and j.payload_json["registry_version"] == version for j in jobs)
+            async with mvp_database() as session:
+                saved = await session.scalar(select(OrchestrationPlanRecord).where(OrchestrationPlanRecord.run_id == rid))
+                assert saved.registry_version == version
+                assert saved.compiled_plan_json == plan_to_json(plan)
+        finally:
+            await cleanup(mvp_database, rid, owner)
+    asyncio.run(exercise())
+
+
 def test_concurrent_advance_schedules_missing_ready_node_once(mvp_database):
     async def exercise():
         service, clock, rid, owner = await setup(mvp_database)

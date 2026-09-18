@@ -6,7 +6,7 @@ from app.marketing_orchestrator.contracts import (
     OrchestrationPlan, PlanningStatus, PlanningStopCondition, Sensitivity, StructuralValidity,
 )
 from app.marketing_orchestrator.validation import PlanValidator
-from app.module_registry import ModuleAvailabilityStatus, ModuleId, ModuleRegistry
+from app.module_registry import EXECUTION_REGISTRY_VERSIONS, ModuleAvailabilityStatus, ModuleId, ModuleRegistry
 from app.module_execution.contracts import MODULE_EXECUTION_CONTRACT_VERSION
 from .contracts import CompiledExecutionNode, CompiledExecutionPlan, EXECUTABLE_SCENARIOS, PLAN_SCHEMA, validate_identity
 from .errors import CompilationError, RuntimeContractError
@@ -29,7 +29,7 @@ def _binding(node, registry, executors=None):
 
 
 def validate_compiled_plan(plan, executors=None):
-    if type(plan) is not CompiledExecutionPlan or plan.schema_version != PLAN_SCHEMA or plan.registry_version != "1.1.0":
+    if type(plan) is not CompiledExecutionPlan or plan.schema_version != PLAN_SCHEMA or plan.registry_version not in EXECUTION_REGISTRY_VERSIONS:
         raise RuntimeContractError("unsupported compiled plan")
     if plan.scenario_key not in EXECUTABLE_SCENARIOS:
         raise CompilationError("scenario is not authorized for execution")
@@ -37,7 +37,7 @@ def validate_compiled_plan(plan, executors=None):
         raise RuntimeContractError("invalid plan identity")
     if type(plan.nodes) is not tuple or not 1 <= len(plan.nodes) <= 32 or type(plan.dependencies) is not tuple:
         raise RuntimeContractError("invalid bounded graph")
-    registry = ModuleRegistry.load("1.1.0")
+    registry = ModuleRegistry.load(plan.registry_version)
     ids = [n.node_id for n in plan.nodes]
     if len(set(ids)) != len(ids):
         raise RuntimeContractError("duplicate nodes")
@@ -84,8 +84,8 @@ class PlanCompiler:
             raise CompilationError("plan is not eligible for execution") from exc
 
     def _compile(self, plan):
-        if self.registry.version != "1.1.0":
-            raise CompilationError("explicit Registry 1.1.0 required")
+        if self.registry.version not in EXECUTION_REGISTRY_VERSIONS:
+            raise CompilationError("explicit approved execution Registry required")
         if type(plan) is not OrchestrationPlan or (
             plan.planning_status is not PlanningStatus.VALIDATED
             or plan.structural_validity is not StructuralValidity.VALID

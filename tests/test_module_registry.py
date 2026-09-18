@@ -293,7 +293,7 @@ def test_executable_registry_is_explicit_and_preserves_all_canonical_metadata():
     assert hashlib.sha256(normalized).hexdigest() == EXECUTABLE_SHA256
 
 
-@pytest.mark.parametrize("version", ["1.2.0", "2.0.0", "../1.0.0", "", "latest"])
+@pytest.mark.parametrize("version", ["1.3.0", "2.0.0", "../1.0.0", "", "latest"])
 def test_unapproved_registry_versions_fail_closed(version):
     with pytest.raises(ModuleRegistryError):
         ModuleRegistry.load(version)

@@ -18,11 +18,23 @@ from .types import (
 
 DEFAULT_REGISTRY_VERSION = "1.0.0"
 EXECUTABLE_REGISTRY_VERSION = "1.1.0"
+INTELLIGENCE_REGISTRY_VERSION = "1.2.0"
+EXECUTION_REGISTRY_VERSIONS = frozenset({EXECUTABLE_REGISTRY_VERSION, INTELLIGENCE_REGISTRY_VERSION})
 REGISTRY_VERSION = DEFAULT_REGISTRY_VERSION  # Backward-compatible public constant.
 APPROVED_EXECUTION_BINDINGS = MappingProxyType({
     ModuleId.COMPETITOR_ANALYSIS: "competitor_analysis.v1",
     ModuleId.POSITIONING: "positioning.v1",
     ModuleId.CREATOR: "creator.v1",
+})
+INTELLIGENCE_EXECUTION_BINDINGS = MappingProxyType({
+    **APPROVED_EXECUTION_BINDINGS,
+    ModuleId.MARKET_ANALYSIS: "market_analysis.v1",
+    ModuleId.VIRTUAL_CMO: "virtual_cmo.v1",
+    ModuleId.EXPERIMENTS: "experiments.v1",
+})
+EXECUTION_BINDINGS_BY_VERSION = MappingProxyType({
+    EXECUTABLE_REGISTRY_VERSION: APPROVED_EXECUTION_BINDINGS,
+    INTELLIGENCE_REGISTRY_VERSION: INTELLIGENCE_EXECUTION_BINDINGS,
 })
 _SEPARATOR_RE = re.compile(r"[\s_-]+", re.UNICODE)
 
@@ -65,7 +77,7 @@ class ModuleRegistry:
         version: str,
         descriptors: Iterable[ModuleDescriptor],
     ) -> None:
-        if version not in (DEFAULT_REGISTRY_VERSION, EXECUTABLE_REGISTRY_VERSION):
+        if version not in ({DEFAULT_REGISTRY_VERSION} | EXECUTION_REGISTRY_VERSIONS):
             raise ModuleRegistryError(f"unsupported source version: {version!r}")
         descriptor_items = tuple(descriptors)
         expected_ids = frozenset(ModuleId)
@@ -86,13 +98,14 @@ class ModuleRegistry:
         bound = {d.module_id: d.execution_binding for d in descriptor_items if d.execution_binding is not None}
         if version == DEFAULT_REGISTRY_VERSION and bound:
             raise ModuleRegistryError("registry version 1.0.0 must contain zero execution bindings")
-        if version == EXECUTABLE_REGISTRY_VERSION:
-            if set(bound) != set(APPROVED_EXECUTION_BINDINGS) or any(
-                binding.executor_key != APPROVED_EXECUTION_BINDINGS[module]
+        if version in EXECUTION_REGISTRY_VERSIONS:
+            approved = EXECUTION_BINDINGS_BY_VERSION[version]
+            if set(bound) != set(approved) or any(
+                binding.executor_key != approved[module]
                 or binding.contract_version != "module_executor.v1" or binding.compatibility != "exact"
                 for module, binding in bound.items()
             ):
-                raise ModuleRegistryError("registry 1.1.0 requires exactly the three approved exact bindings")
+                raise ModuleRegistryError(f"registry {version} requires exactly its approved exact bindings")
 
         lookup: dict[str, ModuleDescriptor] = {}
         canonical_keys = {normalize_lookup_key(item.value): item for item in expected_ids}
@@ -120,7 +133,7 @@ class ModuleRegistry:
 
     @classmethod
     def load(cls, version: str = REGISTRY_VERSION) -> "ModuleRegistry":
-        if version not in (DEFAULT_REGISTRY_VERSION, EXECUTABLE_REGISTRY_VERSION):
+        if version not in ({DEFAULT_REGISTRY_VERSION} | EXECUTION_REGISTRY_VERSIONS):
             raise ModuleRegistryError(f"unsupported registry version: {version!r}")
         resource = files("app.module_registry").joinpath(f"v{version}.json")
         try:
