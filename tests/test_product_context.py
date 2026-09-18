@@ -18,7 +18,7 @@ from app.marketing_orchestrator.quality_gates.contracts import EvidenceSourceCla
 from app.module_execution import ModuleExecutionRequest
 from app.module_execution.executors import CompetitorAnalysisExecutor, PositioningExecutor
 from app.module_registry import ModuleId, ToolCapability
-from app.product_context import (AcquisitionResult, ConfirmedBusinessFact, KnowledgeKind,
+from app.product_context import (AcquisitionResult, ConfirmedBusinessFact, ExtractorUnavailableError, KnowledgeKind,
     OwnedProductSnapshot, OwnedProductEvidenceService, OwnedSiteRequest, ProductContextError,
     SnapshotField, SourceOutcome, TrustKind, build_owned_site_analyzer)
 from app.product_context.projection import attach_acquisition, project_confirmation, project_snapshot
@@ -286,6 +286,34 @@ def test_missing_capability_does_no_io(analyzer_present, extractor_present):
     assert result.outcome is SourceOutcome.CAPABILITY_UNAVAILABLE and result.snapshot is None
     site.analyze_url.assert_not_awaited()
     model.assert_not_awaited()
+
+
+def extractor_failure_service(error):
+    site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[
+        {"ok": True, "url": OWN, "main_text_excerpt": PRODUCT},
+    ])))
+    extractor = AsyncMock(side_effect=error)
+    return OwnedProductEvidenceService(analyzer=site, extractor=extractor), extractor
+
+
+def test_typed_extractor_failure_is_unavailable_without_raw_provider_details():
+    svc, extractor = extractor_failure_service(ExtractorUnavailableError("RAW-PROVIDER-SECRET"))
+    result = asyncio.run(svc.acquire(OwnedSiteRequest(owned_site_url=OWN)))
+    extractor.assert_awaited_once()
+    assert result.outcome is SourceOutcome.CAPABILITY_UNAVAILABLE
+    assert result.snapshot is None
+    for serialized in (result.model_dump_json(), str(result), repr(result)):
+        assert "RAW-PROVIDER-SECRET" not in serialized
+        assert "ExtractorUnavailableError" not in serialized
+
+
+def test_extractor_programming_error_propagates_without_masking():
+    defect = AssertionError("extractor programming defect")
+    svc, extractor = extractor_failure_service(defect)
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(svc.acquire(OwnedSiteRequest(owned_site_url=OWN)))
+    assert caught.value is defect
+    extractor.assert_awaited_once()
 
 
 def test_acquisition_has_no_production_ingress_or_module_execution_binding():

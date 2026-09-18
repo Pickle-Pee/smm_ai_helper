@@ -166,6 +166,12 @@ safe_http policy rejections, including oversized responses, map to UNSAFE_SOURCE
 transport errors map to SOURCE_UNAVAILABLE. Caller contract misuse raises validation
 errors. Unexpected programming errors propagate; cancellation is not swallowed.
 
+Injected extractor adapters must translate their expected provider-specific failures
+to `ExtractorUnavailableError`. Acquisition catches this provider-neutral boundary
+alongside expected HTTP/timeout/OS transport errors and returns
+CAPABILITY_UNAVAILABLE with no snapshot or raw exception text. It does not catch
+all exceptions: programming defects such as AssertionError continue to propagate.
+
 V1 uses the bounded UrlAnalyzer text excerpt, metadata, headings and CTA text from
 one HTML page, at most 16000 characters in total. Missing fields are unknown, not
 proof that a feature/price is absent across the whole website. Existing text

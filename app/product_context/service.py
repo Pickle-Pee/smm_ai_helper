@@ -11,11 +11,13 @@ from app.services.expert_instruction_composer import ExpertInstructionComposer
 from app.services.safe_http import UnsafeURL, validate_url
 from .contracts import (AcquisitionResult, Extraction, KnowledgeKind, OwnedProductSnapshot,
                         OwnedSiteRequest, SnapshotField, SnapshotStatement, SourceExcerpt)
-from .errors import SourceOutcome
+from .errors import ExtractorUnavailableError, SourceOutcome
 from .owned_site import OwnedSiteAnalyzer, page_segments
 
 
 class ExtractorModel(Protocol):
+    """Single attempt; adapters map provider-specific failures to ExtractorUnavailableError."""
+
     async def __call__(self, *, instruction: str, text: str, response_schema: dict[str, Any]) -> str: ...
 
 
@@ -95,7 +97,7 @@ class OwnedProductEvidenceService:
             raw = await self.extractor(instruction=instruction,
                 text=json.dumps({"fetched_text": segments}, ensure_ascii=False),
                 response_schema=Extraction.model_json_schema())
-        except (httpx.HTTPError, TimeoutError, OSError):
+        except (ExtractorUnavailableError, httpx.HTTPError, TimeoutError, OSError):
             return failed(SourceOutcome.CAPABILITY_UNAVAILABLE)
         try:
             if type(raw) is not str or len(raw) > 65536:
