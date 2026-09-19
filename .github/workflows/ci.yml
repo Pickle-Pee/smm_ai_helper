@@ -110,7 +110,8 @@ jobs:
             -v "$PWD/tests:/app/tests:ro" \
             backend python -m pytest -q --tb=short \
               tests/test_marketing_mvp_postgresql.py tests/test_workflow_provider_protocols.py tests/test_workflow_redis.py \
-              tests/test_production_graph_worker.py tests/test_graph_model_adapter.py tests/test_production_worker_postgresql.py
+              tests/test_production_graph_worker.py tests/test_graph_model_adapter.py tests/test_production_worker_postgresql.py \
+              tests/test_copilot_api.py tests/test_copilot_api_postgresql.py
 
       - name: Verify persistence after app container recreation
         run: |

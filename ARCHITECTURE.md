@@ -80,7 +80,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 ### Internal Marketing Orchestrator planning foundation
 
-The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed internal `MarketingCopilotService` now coordinates these proposals with deterministic tools, synchronous modules and durable graph start. It is not connected to API, Telegram or production workers. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
+The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed `MarketingCopilotService` coordinates these proposals with deterministic tools, synchronous modules and durable graph start. The dedicated `/copilot` HTTP adapter below connects this service to production graph Jobs; Telegram remains disconnected. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
 Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > owned-site published observations > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
@@ -130,7 +130,7 @@ Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-
 
 The separate `app/module_execution/executors/` package supplies three implementations in its unchanged default 1.1 composition, or six when the factory receives `registry_version="1.2.0"`, with injected single-attempt model and source-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
-The executable registry and implementations are consumed explicitly by the internal Copilot application service and durable graph runtime, including its production worker lane. No API, Telegram or MarketingWorkflowService consumes them. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
+The executable registry and implementations are consumed explicitly by the Copilot application service and durable graph runtime, including its production worker lane. The dedicated Copilot API uses this application composition; Telegram and MarketingWorkflowService do not consume the registry. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
 
 ### Internal strategy intelligence executors
 
@@ -148,8 +148,8 @@ into structured falsifiable designs with parent lineage. Structured strategy ite
 experiment fields are included in normalized claims and remain behind full-claim acceptance.
 BUSINESS_DIAGNOSTICS remains economics-first and metadata-only; it is not repurposed
 as an own-site/product analyzer. The bounded Strategy Builder below composes these
-executors; the production worker lane below consumes their persisted Jobs. No production
-ingress, delivery changes or migration is introduced. See
+executors; the production worker lane below consumes their persisted Jobs. The dedicated
+Copilot API composes these capabilities without changing delivery or storage. See
 [strategy intelligence executors](docs/development/strategy-intelligence-executors.md).
 
 ### Internal unified Copilot application
@@ -181,7 +181,7 @@ artifact reload. Blocking/unsupported outcomes return one typed grouped clarific
 For `competitive_positioning_v1`, an explicit competitor URL plus authorized SITE_FETCH
 makes pre-collected observable evidence optional. The URL remains an unverified fetch
 target; executor fetch failure may block execution. `new_positioning_v1` is unchanged.
-No schema migration or production ingress was added. See
+The production HTTP adapter below adds ingress without a schema migration. See
 [unified Copilot execution](docs/development/unified-copilot-execution.md).
 
 ### Internal durable module graph execution
@@ -207,7 +207,7 @@ REQUIRED BLOCKED results block the run; required quality rejection fails it with
 V1 nodes retain this behavior. V2 OPTIONAL failures remain canonical FAILED Jobs,
 close optional-contributor barriers, and add safe coverage limitations while the graph continues.
 Corrupt persisted contracts fail closed. Restart needs no process-local progress.
-No Telegram/API ingress starts this runtime; the production worker consumes already persisted graphs. See
+The Copilot API persists approved compiled graphs; the production worker consumes their Jobs. Telegram has no graph ingress. See
 [durable module graphs](docs/development/durable-module-graph-runtime.md) for
 contracts, authorization, serialization bounds, lock order and recovery tests.
 
@@ -238,8 +238,8 @@ timeout < fenced lease (defaults 60 < 300 < 330 seconds) is validated at startup
 Iteration failures remain local to their lane. SIGTERM/cancellation closes both
 Redis pools and per-call clients, leaving active leases recoverable, without
 recording shutdown as Job failure. OwnedProductEvidence acquisition remains
-outside the worker; persisted compiled context is the input. No Copilot public
-or Telegram ingress, fixed-flow migration or database migration is introduced.
+outside the worker; persisted compiled context is the input. The Copilot API below
+starts graphs without changing fixed flows or database schema. Telegram remains disconnected.
 See [production graph worker](docs/development/production-graph-worker.md).
 
 ### Internal bounded Strategy Builder
@@ -264,8 +264,8 @@ Coverage reaches executors through ContextPacket open questions, never as eviden
 
 The existing VIRTUAL_CMO result is the durable strategy; EXPERIMENTS is a separate
 artifact. VIRTUAL_CMO synthesizes strategy as an expert, not as an orchestrator.
-No additional synthesis call, artifact model, migration, production ingress,
-delivery, own-site diagnosis, autonomous search or replanning is introduced.
+The dedicated Copilot API exposes deterministic strategy presentation. No additional
+synthesis call, artifact model, migration, delivery, own-site diagnosis, autonomous search or replanning is introduced.
 See [Strategy Builder contracts and verification](docs/development/strategy-builder-v1.md).
 
 ### Internal owned-product evidence acquisition
@@ -281,7 +281,7 @@ caller-declared owned_site_url
  -> ContextResolver -> existing modules and bounded graphs
 ```
 
-The caller explicitly invokes acquisition before Copilot; MarketingCopilotService
+The HTTP application adapter (or an internal caller) invokes acquisition before Copilot; MarketingCopilotService
 does not fetch an owned page. Raw provided_urls never imply ownership. When an owned
 URL is declared, competitor sources must also be explicitly scoped, so the own URL
 cannot enter the legacy single-URL competitor fallback.
@@ -292,14 +292,59 @@ unverified provenance description. Inferences and unknowns remain separate. Proj
 fills descriptive product/target/job context with site_claim markings, never
 product_truth or existing_proof. A separate caller attestation contract can project
 confirmed_business_fact into explicit current product_truth without modifying the
-snapshot. Existing current facts (including empty masks) retain precedence.
+snapshot. Only observed product/service, capabilities and value propositions can be
+confirmed this way; audience, job, pricing, positioning and proof cannot. Existing
+current facts (including empty masks) retain precedence.
 
 Both strategy_builder_v1 and competitive_positioning_v1 consume this limited context.
 Required POSITIONING inputs, including verified product_truth and relevant_alternative,
 still produce grouped NEEDS_INPUT before durable graph start if missing. No new
-ModuleId, BUSINESS_DIAGNOSTICS change, DB cache/table/migration, competitor executor
-reuse, public API, Telegram or production worker connection is introduced. See
+ModuleId, BUSINESS_DIAGNOSTICS change, DB cache/table/migration or competitor executor
+reuse is introduced. Acquisition is exposed through the dedicated API below and remains
+outside Telegram and workers. See
 [owned-product evidence contracts](docs/development/owned-product-evidence.md).
+
+### Production Copilot HTTP API
+
+`POST /copilot/execute` and `GET /copilot/runs/{run_id}` use the existing backend bearer
+secret and Telegram actor header. The server resolves the actor to internal `User.id`
+and reads that user's BrandProfile before provider work. Strict bounded `copilot_api.v1`
+DTOs expose business inputs and explicit source roles, never execution bindings or
+caller-selected evidence authority. Existing `/chat`, `/tasks`, `/workflows`, brand and
+image routes retain their behavior; `bot/**` does not call this API yet.
+
+```text
+HTTP caller -> auth -> internal User -> BrandProfile / owned-page acquisition
+ -> MarketingCopilotService
+    +-> DIRECT: deterministic calculation, 200
+    +-> SINGLE: module + full Quality Gates acceptance -> presentation, 200
+    +-> CONVERSATION: typed legacy_chat delegation, 200
+    +-> WORKFLOW: compiled plan -> PostgreSQL Jobs + graph wakeup, 202
+         -> production graph worker -> accepted artifacts
+GET run -> owner/type check -> read-only accepted-artifact validation -> presentation
+```
+
+API construction uses Registry 1.2.0 and the same six executors/graph queue as the
+worker, performs no provider I/O and starts no worker. Intent and owned extraction
+reuse the existing bounded single-attempt Responses transport. Provider failures before
+durable start are safe 503 errors (owned extraction instead returns a typed source
+outcome); graph attempts remain owned by the worker.
+
+Owned acquisition returns literal `site_claim` candidates. Confirmation names the
+snapshot and selected statements; the API re-fetches/re-extracts the same URL and
+requires an exact snapshot match. Changed snapshots return 409 with fresh candidates;
+unknown/ineligible statement IDs return 422. Authenticated `User.id` supplies the
+attester identity. No snapshot table or cache is added.
+
+Polling runs a repeatable-read, read-only transaction scoped to the owner and
+`orchestration_graph.v1`. It reuses runtime plan/artifact validation without claiming,
+waking or executing Jobs. Only fully accepted artifacts are projected: all nine strategy
+sections, separate experiment designs, bounded research details, evidence coverage and
+limitations. Error reasons are allowlisted; raw provider envelopes and internal claim,
+fact, executor and result identities do not cross the public presentation boundary.
+Same actor/key/effective plan replays the same durable run; changed plans return 409.
+See [production Copilot API](docs/development/production-copilot-api.md) for DTOs,
+confirmation semantics, transaction ownership and verification.
 
 ### URL analysis
 

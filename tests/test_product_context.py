@@ -316,12 +316,14 @@ def test_extractor_programming_error_propagates_without_masking():
     extractor.assert_awaited_once()
 
 
-def test_acquisition_has_no_production_ingress_or_module_execution_binding():
+def test_acquisition_only_connects_to_copilot_application_not_legacy_ingress():
     root = Path(__file__).resolve().parents[1]
     for directory in (root / "app", root / "bot"):
         consumers = [p for p in directory.rglob("*.py") if "product_context" not in p.parts
                      and "product_context" in p.read_text(encoding="utf-8")]
-        assert consumers == []
+        allowed = {root / "app/marketing_copilot" / name for name in (
+            "api_service.py", "production.py", "presentation.py", "provider_adapters.py")}
+        assert set(consumers) <= allowed
     for path in (root / "app/product_context").glob("*.py"):
         source = path.read_text(encoding="utf-8")
         assert "app.module_execution" not in source

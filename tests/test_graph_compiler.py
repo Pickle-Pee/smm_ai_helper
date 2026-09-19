@@ -193,6 +193,8 @@ def test_no_production_ingress_imports_graph_runtime():
             if "orchestration_runtime" not in path.parts and path not in {
                 root / "app/marketing_copilot/factory.py", root / "app/marketing_copilot/service.py",
                 root / "app/worker.py",  # Worker consumes persisted graphs; never public ingress.
+                root / "app/marketing_copilot/api_service.py", root / "app/marketing_copilot/production.py",
+                root / "app/marketing_copilot/run_reader.py", root / "app/marketing_copilot/provider_adapters.py",
             }:
                 assert "orchestration_runtime" not in path.read_text(encoding="utf-8"), path
 

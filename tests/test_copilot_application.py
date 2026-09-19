@@ -229,10 +229,12 @@ def test_competitive_fetch_replaces_evidence_requirement_only_for_new_scenario(s
                for f in (*n.context_packet.known_facts, *n.context_packet.relevant_project_context))
 
 
-def test_architecture_production_ingress_stays_disconnected():
+def test_architecture_only_explicit_copilot_router_connects_new_ingress():
     root = Path(__file__).resolve().parents[1]
     for folder in ("app/routers", "bot", "app/services", "app/workflows"):
         for path in (root / folder).rglob("*.py"):
+            if path == root / "app/routers/copilot.py":
+                continue
             assert "marketing_copilot" not in path.read_text(encoding="utf-8")
     assert "marketing_copilot" not in (root / "app/worker.py").read_text(encoding="utf-8")
     for path in (root / "app/marketing_tools").glob("*.py"):

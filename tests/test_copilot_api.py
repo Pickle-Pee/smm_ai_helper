@@ -1,0 +1,154 @@
+"""Public contract and capability boundaries, without network or persistence."""
+import asyncio
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from pydantic import ValidationError
+
+from app.config import settings
+from app.marketing_copilot.api_contracts import ExecuteRequest
+from app.marketing_copilot.api_errors import ProviderUnavailable
+from app.marketing_copilot.production import build_production_copilot_api
+from app.marketing_copilot import provider_adapters as adapters
+from app.marketing_copilot.contracts import MarketingIntent
+from app.product_context import ExtractorUnavailableError, ProductContextError, ConfirmedBusinessFact
+from app.product_context.projection import project_confirmation, PRODUCT_TRUTH_FIELDS
+from app.routers.copilot import router
+from app.workflows.queue import GRAPH_WAKEUP_KEY
+from tests.test_module_executors import FakeModel, analyzer
+from tests.test_product_context import acquisition
+
+
+def application(api):
+    app = FastAPI()
+    app.include_router(router)
+    app.state.copilot_api = api
+    return app
+
+
+def headers(actor=1234):
+    return {"authorization": "Bearer api-test", "x-telegram-user-id": str(actor)}
+
+
+def queue():
+    return SimpleNamespace(key=GRAPH_WAKEUP_KEY, wake=AsyncMock(), close=AsyncMock())
+
+
+@pytest.mark.parametrize("authorization,actor", [(None, "123"), ("bad", "123"),
+    ("Bearer api-test", None), ("Bearer api-test", "0"), ("Bearer api-test", "1e3"),
+    ("Bearer api-test", str(2**63))])
+def test_auth_rejects_before_application(monkeypatch, authorization, actor):
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    api = SimpleNamespace(execute=AsyncMock(), reader=SimpleNamespace(get=AsyncMock()))
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+            supplied = {k: v for k, v in {"authorization": authorization, "x-telegram-user-id": actor}.items() if v is not None}
+            for method, url, kwargs in [("POST", "/copilot/execute", {"json": {"message": "hello", "request_key": "a"}}),
+                                        ("GET", "/copilot/runs/" + "a" * 64, {})]:
+                assert (await client.request(method, url, headers=supplied, **kwargs)).status_code == 401
+        api.execute.assert_not_awaited()
+        api.reader.get.assert_not_awaited()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("extra", [
+    {"actor_id": 1}, {"module_id": "CREATOR"}, {"executor_key": "creator.v1"},
+    {"scenario_key": "strategy_builder_v1"}, {"registry_version": "1.2.0"}, {"mode": "WORKFLOW"},
+    {"message": "x" * 12001}, {"message": "  "}, {"message": "bad\x00"}, {"message": "bad\ud800"},
+    {"request_key": "unsafe\nkey"}, {"context": {"product": {"nested": "forbidden"}}},
+    {"context": {"source_class": "EXTERNAL_PRIMARY"}}, {"context": {"product": "x" * 4001}},
+    {"competitor_urls": ["https://example.org/"] * 4}, {"market_source_urls": ["https://example.org/"] * 4},
+    {"market_sources": [{"title": "s", "excerpt": "x", "provenance": "forged"}]},
+    {"confirmation": {"snapshot_id": "snapshot.test", "statement_ids": ["statement.test"], "confirmed": True, "reference": "yes"}},
+    {"owned_site_url": "https://example.org", "confirmation": {"snapshot_id": "snapshot.test", "statement_ids": ["statement.test"], "confirmed": 1, "reference": "yes"}},
+])
+def test_strict_request_contract(extra):
+    with pytest.raises(ValidationError):
+        ExecuteRequest.model_validate({"request_key": "request1", "message": "hello", **extra})
+
+
+def test_validation_never_echoes_input(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    api = SimpleNamespace(execute=AsyncMock())
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+            result = await client.post("/copilot/execute", headers=headers(), json={
+                "request_key": "r", "message": "secret business data", "unknown": "provider secret"})
+            assert result.status_code == 422 and result.json()["code"] == "invalid_request"
+            assert "secret" not in result.text
+        api.execute.assert_not_awaited()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("exc", [httpx.ReadTimeout("secret"), httpx.ConnectError("secret"),
+    httpx.HTTPStatusError("secret", request=httpx.Request("POST", "https://example.org"), response=httpx.Response(503))])
+def test_expected_provider_failures_have_specific_boundaries(monkeypatch, exc):
+    monkeypatch.setattr(adapters, "production_model_call", AsyncMock(side_effect=exc))
+    kwargs = {"instruction": "i", "text": "t", "response_schema": {"type": "object", "properties": {}}}
+    with pytest.raises(ProviderUnavailable):
+        asyncio.run(adapters.application_model_call(**kwargs))
+    with pytest.raises(ExtractorUnavailableError):
+        asyncio.run(adapters.owned_site_extractor(**kwargs))
+
+
+@pytest.mark.parametrize("exc", [ValueError("programming defect"), AssertionError("programming defect")])
+def test_programming_defects_are_not_provider_outcomes(monkeypatch, exc):
+    monkeypatch.setattr(adapters, "production_model_call", AsyncMock(side_effect=exc))
+    for call in (adapters.application_model_call, adapters.owned_site_extractor):
+        with pytest.raises(type(exc), match="programming defect"):
+            asyncio.run(call(instruction="i", text="t", response_schema={}))
+
+
+def test_provider_intent_schema_requires_nullable_business_goal_without_mutating_contract(monkeypatch):
+    model = AsyncMock(return_value="{}")
+    monkeypatch.setattr(adapters, "production_model_call", model)
+    schema = MarketingIntent.model_json_schema()
+    before = json.dumps(schema)
+    asyncio.run(adapters.application_model_call(instruction="i", text="t", response_schema=schema))
+    wire = model.call_args.kwargs["response_schema"]
+    assert set(wire["required"]) == set(wire["properties"])
+    assert {"type": "null"} in wire["properties"]["business_goal"]["anyOf"]
+    assert json.dumps(schema) == before
+
+
+def test_production_composition_is_lazy_and_coherent(monkeypatch):
+    from app.module_registry import ModuleId
+    from app.orchestration_runtime.composition import ProductionGraphRuntime
+    monkeypatch.setattr(ProductionGraphRuntime, "create_worker", lambda *_: pytest.fail("API cannot start worker"))
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "offline-key")
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("No provider call during construction"))
+    api = build_production_copilot_api(queue=queue())
+    assert api.queue.key == GRAPH_WAKEUP_KEY
+    assert api.copilot.metadata.version == "1.2.0"
+    assert len(api.copilot.graph_service.executors.executor_keys) == 6
+    assert {m for m in ModuleId} >= {ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS}
+
+
+def test_confirmation_allowlist_rejects_audience_pricing_and_positioning():
+    acquired, _, _ = acquisition()
+    for statement in acquired.snapshot.statements:
+        confirmation = ConfirmedBusinessFact(snapshot_id=acquired.snapshot.snapshot_id,
+            statement_ids=(statement.statement_id,), confirmed_by="user:1", confirmation_reference="checked")
+        if statement.field in PRODUCT_TRUTH_FIELDS:
+            assert project_confirmation(acquired.snapshot, confirmation).semantic_key == "product_truth"
+        else:
+            with pytest.raises(ProductContextError):
+                project_confirmation(acquired.snapshot, confirmation)
+
+
+@pytest.mark.parametrize("envelope", [[], {"output": ["bad"]}, {"output": [{"type": "message", "role": "assistant",
+    "content": [{"type": "refusal", "refusal": "SECRET"}]}]}, {"status": "incomplete", "output_text": "{}"}])
+def test_malformed_provider_envelopes_are_expected_safe_failures(monkeypatch, envelope):
+    from tests.test_graph_model_adapter import install_transport
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json=envelope)
+    clients = install_transport(monkeypatch, respond)
+    with pytest.raises(ProviderUnavailable):
+        asyncio.run(adapters.application_model_call(instruction="i", text="t", response_schema={}))
+    assert len(calls) == 1 and all(c.is_closed for c in clients)
