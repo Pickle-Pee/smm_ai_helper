@@ -9,11 +9,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from aiogram import F, Router, types
 from aiogram.enums import ChatAction, ParseMode
+from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
 from bot.backend import actor_headers
 from bot.rendering import send_text
+from bot.copilot_flow import CopilotStates, receive
 
 
 router = Router()
@@ -323,9 +326,9 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
         long_task.cancel()
 
 
-@router.message(F.text & ~F.text.startswith("/"))
-async def chat_message(message: types.Message):
-    await _send_to_backend(message, message.text, actor_id=message.from_user.id)
+@router.message(StateFilter(None, CopilotStates.pending), F.text & ~F.text.startswith("/"))
+async def chat_message(message: types.Message, state: FSMContext):
+    await receive(message, state)
 
 
 @router.callback_query(F.data.startswith("action:"))
