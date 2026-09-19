@@ -13,6 +13,10 @@ log = logging.getLogger(__name__)
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
+class ModelResponseError(ValueError):
+    """Expected invalid/refused/incomplete provider envelope, with safe text."""
+
+
 def _extract_output_text(data: Dict[str, Any]) -> str:
     """
     Responses API возвращает items в data["output"].
@@ -133,10 +137,19 @@ async def chat(
                 if single_attempt:
                     # Never log provider bodies or silently drop the response schema.
                     resp.raise_for_status()
-                    data = resp.json()
+                    try:
+                        data = resp.json()
+                    except ValueError as exc:
+                        raise ModelResponseError("Invalid model response envelope") from exc
+                    if not isinstance(data, dict):
+                        raise ModelResponseError("Invalid model response envelope")
                     if data.get("status") == "incomplete":
-                        raise ValueError("Incomplete structured model response")
-                    return _extract_output_text(data), data.get("usage", {}) or {}
+                        raise ModelResponseError("Incomplete structured model response")
+                    try:
+                        content = _extract_output_text(data)
+                    except (ValueError, AttributeError, TypeError) as exc:
+                        raise ModelResponseError("Invalid or refused model response") from exc
+                    return content, data.get("usage", {}) or {}
 
                 if resp.status_code >= 400:
                     body = resp.text

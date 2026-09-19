@@ -13,6 +13,8 @@ from .service import identity
 SCENARIOS = frozenset({"strategy_builder_v1", "competitive_positioning_v1"})
 MODULES = frozenset({ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS,
                      ModuleId.MARKET_ANALYSIS})
+# Caller confirmation is deliberately narrower than all descriptive site fields.
+PRODUCT_TRUTH_FIELDS = frozenset({SnapshotField.PRODUCT, SnapshotField.FEATURES, SnapshotField.VALUE})
 SEMANTIC_KEYS = {
     SnapshotField.PRODUCT: "product",
     SnapshotField.AUDIENCE: "target_or_target_hypothesis",
@@ -70,6 +72,8 @@ def project_confirmation(snapshot: OwnedProductSnapshot, confirmation: Confirmed
     if len(set(ids)) != len(ids) or any(i not in selected or selected[i].kind is not KnowledgeKind.OBSERVATION for i in ids):
         raise ProductContextError("Only existing observations may be explicitly confirmed")
     statements = tuple(selected[i] for i in ids)
+    if any(s.field not in PRODUCT_TRUTH_FIELDS for s in statements):
+        raise ProductContextError("Only product, feature and value observations may become product truth")
     return ContextEntry("product_truth", AuthorizedContextFact(
         fact_id=identity("confirmed", snapshot.snapshot_id, confirmation.model_dump(mode="json")),
         label="product_truth", input_key=PlanningInputKey.PRODUCT_TRUTH,

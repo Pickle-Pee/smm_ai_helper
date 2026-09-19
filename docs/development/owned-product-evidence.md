@@ -3,7 +3,8 @@
 This internal capability acquires descriptive context from one explicitly declared
 owned/authorized public HTML page. It does not run a module or choose an execution
 path. `BUSINESS_DIAGNOSTICS`, ModuleId, Registry 1.0/1.1/1.2, graph contracts and
-production ingress remain unchanged. No schema migration or new persistent cache.
+existing ingress remain unchanged. The dedicated [Copilot API](production-copilot-api.md)
+now composes this capability. No schema migration or new persistent cache.
 
 ## Trust and authorization
 
@@ -23,8 +24,8 @@ is source provenance, not independently verified truth. Quality Gates still chec
 structural support, not semantic truth.
 
 The caller owns authorization, extractor/provider configuration, and any explicit
-confirmation. The capability must be explicitly composed; no default production
-registration exists. Neither acquisition nor Copilot writes BrandProfile.
+confirmation. The production Copilot application adapter explicitly composes it;
+workers do not acquire owned pages. Neither acquisition nor Copilot writes BrandProfile.
 
 ## Flow and public internal operations
 
@@ -132,10 +133,14 @@ attribution; existing evidence/gate semantics are unchanged.
 statement_ids, confirmed_by and confirmation_reference. The caller must authenticate
 the confirmer and collect actual explicit confirmation. Acquisition never constructs
 this contract. `project_confirmation(snapshot, confirmation)` accepts only existing
-OBSERVATION identities from that snapshot and returns a confirmed_business_fact
+OBSERVATION identities for product/service, features/capabilities or value propositions
+from that snapshot and returns a confirmed_business_fact
 ContextEntry for **current_request.product_truth**. It does not mutate the site_claim
 snapshot or independently verify the business. Caller-supplied existing explicit
-product_truth remains supported without a snapshot. There is no confirmation UI.
+product_truth remains supported without a snapshot. Audience, job, pricing,
+positioning and proof observations cannot be promoted to product_truth. The Copilot
+API exposes candidates and re-acquires the snapshot on confirmation; no Telegram
+confirmation UI is connected yet.
 
 Both strategy_builder_v1 and competitive_positioning_v1 reuse the projected
 descriptive context. With product/audience/job recovered, missing product_truth
@@ -199,5 +204,5 @@ controlled extractor; inspect snapshot citations and missing fields; attach it t
 own URL + business goal; inspect grouped confirmation questions and absence of
 durable work; add explicit confirmation and relevant alternative, then execute via
 an explicitly configured Registry 1.2 Copilot/graph worker. Repeat with an explicit
-competitor source and inspect separate source provenance. Public API and Telegram
-continue using their unchanged production paths.
+competitor source and inspect separate source provenance. The dedicated Copilot API
+offers this flow; legacy API routes and Telegram retain their existing paths.

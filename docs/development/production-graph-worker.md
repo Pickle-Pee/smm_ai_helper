@@ -2,8 +2,8 @@
 
 `python -m app.worker` now runs fixed Marketing MVP and generic durable graphs
 in the same process. It does not start API serving, Telegram polling, Copilot
-intent interpretation or owned-product acquisition. No public request starts a
-new Copilot run. Internal authorized callers may persist already compiled plans;
+intent interpretation or owned-product acquisition. The dedicated
+[Copilot API](production-copilot-api.md) and internal authorized callers persist compiled plans;
 the worker restores their ContextPackets and predecessor results from PostgreSQL.
 
 ```text

@@ -191,6 +191,8 @@ def test_architecture_worker_execution_has_no_context_acquisition_or_ingress():
     for forbidden in ("AgentRunner", "MarketingExecutors", "product_context", "aiogram", "import bot", "marketing_copilot"):
         assert forbidden not in runtime
     for path in [root / "app/main.py", *(root / "app/routers").rglob("*.py"), *(root / "bot").rglob("*.py")]:
+        if path == root / "app/routers/copilot.py":
+            continue  # Dedicated HTTP contour; Telegram and legacy routes remain isolated.
         source = path.read_text(encoding="utf-8")
         assert "marketing_copilot" not in source and "orchestration_runtime" not in source
     assert FIXED_WAKEUP_KEY == "smm:marketing:wakeups:v1"

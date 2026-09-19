@@ -35,6 +35,16 @@ def request(path, *, payload=None, actor=123):
 def main():
     if os.environ.get("CI") != "true" or not os.environ.get("COMPOSE_PROJECT_NAME", "").startswith("smm-mvp-ci-"):
         raise SystemExit("This probe requires the dedicated disposable smm-mvp-ci-* CI project.")
+    assert json.loads(request("/health")) == {"status": "ok"}
+    schema = json.loads(request("/openapi.json"))
+    assert {"/copilot/execute", "/copilot/runs/{run_id}"} <= set(schema["paths"])
+    # Prove the new authenticated router is served, without invoking any provider.
+    try:
+        request("/copilot/execute", payload={"request_key": "smoke", "message": ""})
+    except HTTPError as exc:
+        assert exc.code == 422 and json.loads(exc.read())["code"] == "invalid_request"
+    else:
+        raise AssertionError("Copilot accepted an invalid request")
     if sys.argv[1] == "seed":
         result = json.loads(request("/workflows", payload={"request_key": "container-recovery", "competitor_url": "https://example.com"}))
         assert result["status"] == "needs_input" and result["jobs"] == []

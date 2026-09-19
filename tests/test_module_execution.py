@@ -362,6 +362,7 @@ def test_architecture_separates_metadata_from_implementations_and_forbids_revers
             if not {"module_execution", "orchestration_runtime"}.intersection(path.parts) and path not in {
                 ROOT / "app/marketing_copilot/application_contracts.py", ROOT / "app/marketing_copilot/factory.py",
                 ROOT / "app/marketing_copilot/service.py",
+                ROOT / "app/marketing_copilot/api_service.py", ROOT / "app/marketing_copilot/presentation.py",
             }:
                 assert "module_execution" not in path.read_text(encoding="utf-8"), path
 
