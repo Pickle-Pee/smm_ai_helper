@@ -53,6 +53,43 @@ async def brand(db, actor, values):
         session.add(BrandProfile(user_id=user.id, extra_json=values))
 
 
+def test_telegram_explicit_competitor_and_ignored_url_use_real_http_composition(mvp_database, monkeypatch):
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        urls = ("https://competitor.example", "https://ignored.example")
+        site = analyzer()
+        site.analyze.return_value.url_summaries[0].update(url=urls[0], final_url=urls[0])
+        api = configured(mvp_database, IntentKind.COMPETITOR_ANALYSIS, analyzer=site, intent_urls=urls)
+        app = application(api)
+        original_client = httpx.AsyncClient
+        requests = []
+        async def capture(request):
+            requests.append(json.loads(request.content))
+        def http_client(**kwargs):
+            return original_client(transport=httpx.ASGITransport(app=app), event_hooks={"request": [capture]}, **kwargs)
+        monkeypatch.setattr(httpx, "AsyncClient", http_client)
+        monkeypatch.setattr(settings, "API_BASE_URL", "http://backend")
+        monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+        # Exercise the unmodified client method, authenticated router and service.
+        monkeypatch.setattr(flow, "client", CopilotClient())
+        try:
+            fsm = context(actor)
+            msg = message("Проанализируй " + " ".join(urls), actor=actor)
+            await flow.receive(msg, fsm)
+            await click(fsm, msg, "competitor", "competitor", actor)
+            await click(fsm, msg, "skip", "skip", actor)
+            assert len(requests) == 1
+            assert requests[0]["message"] == msg.text
+            assert requests[0]["competitor_urls"] == [urls[0]]
+            assert requests[0]["market_source_urls"] == []
+            assert "Анализ конкурента" in text_sent(msg)
+            assert (await fsm.get_data())["copilot_pending"] is None
+            site.analyze.assert_awaited_once_with(urls[0])
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("kind,request_text,expected", [
     (IntentKind.LEAD_FUNNEL_CALCULATION, "Рассчитай лиды при бюджете 10000 и CPL 500", "Лиды: 20"),
     (IntentKind.POST_GENERATION, "Напиши пост", "Use the supplied product"),

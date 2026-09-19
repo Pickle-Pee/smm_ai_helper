@@ -108,6 +108,14 @@ explicitly masks raw-message URL fallback. Backend safe-fetch validation remains
 authoritative. For excerpts the pending payload preserves `market_sources`; v1 UI
 collects market URLs rather than introducing a new excerpt editor.
 
+At the application boundary, the presence of current-request `competitor_urls`,
+`competitor_or_category_scope`, `market_source_urls` or `market_sources` entries
+(including empty masks) disables both legacy raw-URL inference and raw-URL counting.
+Thus an ignored or market-source URL cannot trigger `single_competitor_required`
+when one competitor is explicitly scoped. Internal callers without these entries
+retain the legacy multi-URL clarification. The original Telegram message and the
+interpreter's literal-reference validation remain unchanged.
+
 An owned URL is submitted only in `owned_site_url`. Eligible API candidates are
 displayed as «На сайте указано: …» with their source, explicitly unverified. Nothing
 is preselected. The user selects statements and then presses «Подтвердить данные

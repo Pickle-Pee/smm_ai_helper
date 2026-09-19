@@ -55,7 +55,13 @@ class MarketingCopilotService:
         # An owned-source declaration requires explicitly scoped competitor context;
         # raw message URLs cannot assign roles in this mixed-source request.
         keys = {entry.semantic_key for entry in entries}
-        legacy_competitor_urls = request.owned_site_url is None and intent.kind in {
+        # Presence, including empty masks, declares caller-scoped source roles.
+        # Other literal URLs may be market sources or explicitly ignored.
+        scoped_source_roles = keys & {
+            "competitor_urls", PlanningInputKey.COMPETITOR_OR_CATEGORY_SCOPE.value,
+            "market_source_urls", "market_sources",
+        }
+        legacy_competitor_urls = not scoped_source_roles and request.owned_site_url is None and intent.kind in {
             IntentKind.COMPETITOR_ANALYSIS, IntentKind.COMPARATIVE_POSITIONING,
         }
         if legacy_competitor_urls and len(intent.provided_urls) == 1:
