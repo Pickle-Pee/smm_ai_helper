@@ -36,6 +36,36 @@ FastAPI backend
 
 Marketing/business decisions should not be implemented in Telegram handlers.
 
+Primary private-chat text passes through one routing point in `bot/handlers/chat.py`
+to the HTTP-only `bot/copilot_flow.py` adapter. Typed client-side `copilot_api.v1`
+contracts have schema-parity tests; the bot does not import backend Copilot,
+Registry, graph execution or database packages, even transitively. The explicit
+legacy command/task/image handlers retain routing priority. CONVERSATION delegates
+once to the existing `/chat/message` HTTP path.
+
+```text
+Telegram free text / local clarification + explicit URL roles
+ -> POST /copilot/execute (bearer + Telegram actor, stable request key)
+    +-> CONVERSATION -> legacy chat HTTP -> existing reply/image UX
+    +-> DIRECT_RESULT / MODULE_RESULT -> deterministic plain-text sections
+    +-> NEEDS_INPUT -> MemoryStorage FSM -> same logical HTTP request
+    +-> WORKFLOW_STARTED -> durable backend run reference + status button
+         -> existing graph worker -> PostgreSQL accepted artifacts
+status button -> GET /copilot/runs/{run_id} -> owner-checked presentation
+```
+
+Aiogram event isolation serializes each actor/chat FSM transition. The pre-run
+request, explicit context, source roles and unconfirmed website observations are
+local conveniences in MemoryStorage, not durable workflow state. After start only
+run/status references remain; every status is read from the backend. Stateless,
+reversible compact run-ID callbacks survive a bot restart. There is no new polling
+loop, generation, database table, image flow or fixed-workflow cutover. Restart
+loses unfinished clarification/confirmation and the short duplicate-event ledger;
+Task L owns that UX durability decision. See
+[Telegram Copilot UX](docs/development/telegram-copilot-ux.md) for exact identity,
+confirmation, retry, rendering and recovery semantics.
+
+
 ### Chat flow
 
 `POST /chat/message` delegates to `ChatService`.
@@ -80,7 +110,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 ### Internal Marketing Orchestrator planning foundation
 
-The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed `MarketingCopilotService` coordinates these proposals with deterministic tools, synchronous modules and durable graph start. The dedicated `/copilot` HTTP adapter below connects this service to production graph Jobs; Telegram remains disconnected. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
+The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed `MarketingCopilotService` coordinates these proposals with deterministic tools, synchronous modules and durable graph start. The dedicated `/copilot` HTTP adapter below connects this service to production graph Jobs; Telegram accesses this boundary through the Copilot HTTP adapter. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
 Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > owned-site published observations > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
@@ -161,7 +191,7 @@ context through `ContextResolver`, applies `ExecutionPolicy`, then dispatches:
 DIRECT_TOOL   -> deterministic tool registry -> Decimal funnel calculator
 SINGLE_MODULE -> scoped planner packet -> shared dispatcher -> Quality Gates
 WORKFLOW      -> planner -> PlanCompiler -> GraphExecutionService.start_compiled_run
-CONVERSATION  -> typed conversation_delegate for future chat ingress
+CONVERSATION  -> typed conversation_delegate -> existing /chat/message HTTP ingress
 ```
 
 The fast paths create no MarketingRun, Job or JobExecution. Only Registry 1.1.0 bound
@@ -207,7 +237,7 @@ REQUIRED BLOCKED results block the run; required quality rejection fails it with
 V1 nodes retain this behavior. V2 OPTIONAL failures remain canonical FAILED Jobs,
 close optional-contributor barriers, and add safe coverage limitations while the graph continues.
 Corrupt persisted contracts fail closed. Restart needs no process-local progress.
-The Copilot API persists approved compiled graphs; the production worker consumes their Jobs. Telegram has no graph ingress. See
+The Copilot API persists approved compiled graphs; the production worker consumes their Jobs. Telegram starts graphs only through the authenticated Copilot HTTP API. See
 [durable module graphs](docs/development/durable-module-graph-runtime.md) for
 contracts, authorization, serialization bounds, lock order and recovery tests.
 
@@ -239,7 +269,7 @@ Iteration failures remain local to their lane. SIGTERM/cancellation closes both
 Redis pools and per-call clients, leaving active leases recoverable, without
 recording shutdown as Job failure. OwnedProductEvidence acquisition remains
 outside the worker; persisted compiled context is the input. The Copilot API below
-starts graphs without changing fixed flows or database schema. Telegram remains disconnected.
+starts graphs without changing fixed flows or database schema. Telegram accesses this boundary through the Copilot HTTP adapter.
 See [production graph worker](docs/development/production-graph-worker.md).
 
 ### Internal bounded Strategy Builder
@@ -311,7 +341,7 @@ secret and Telegram actor header. The server resolves the actor to internal `Use
 and reads that user's BrandProfile before provider work. Strict bounded `copilot_api.v1`
 DTOs expose business inputs and explicit source roles, never execution bindings or
 caller-selected evidence authority. Existing `/chat`, `/tasks`, `/workflows`, brand and
-image routes retain their behavior; `bot/**` does not call this API yet.
+image routes retain their behavior; `bot/**` uses this API for primary free-text requests and owner-scoped status checks.
 
 ```text
 HTTP caller -> auth -> internal User -> BrandProfile / owned-page acquisition

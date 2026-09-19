@@ -47,8 +47,68 @@ async def remove_actor(db, actor):
 
 
 def configured(db, kind, **kwargs):
-    return build_production_copilot_api(sessions=db, queue=queue(), intent_model=intent_model(kind),
+    return build_production_copilot_api(sessions=db, queue=queue(), intent_model=intent_model(kind, kwargs.pop("intent_urls", ())),
         module_model=kwargs.pop("module_model", FakeModel()), analyzer=kwargs.pop("analyzer", analyzer()), **kwargs)
+
+
+@pytest.mark.parametrize("second_role", ["ignored", "market"])
+def test_explicit_competitor_role_overrides_multiple_literal_urls(mvp_database, monkeypatch, second_role):
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        urls = ("https://competitor.example", "https://ignored.example")
+        site = analyzer()
+        site.analyze.return_value.url_summaries[0].update(url=urls[0], final_url=urls[0])
+        api = configured(mvp_database, IntentKind.COMPETITOR_ANALYSIS, analyzer=site, intent_urls=urls)
+        request = payload(message="Проанализируй " + " ".join(urls), competitor_urls=[urls[0]],
+                          market_source_urls=[urls[1]] if second_role == "market" else [])
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+                response = await client.post("/copilot/execute", headers=headers(actor), json=request)
+            assert response.status_code == 200, response.text
+            public = response.json()
+            assert public["kind"] == "MODULE_RESULT", public
+            assert public["result"]["kind"] == "competitor_analysis"
+            site.analyze.assert_awaited_once_with(urls[0])
+            async with mvp_database() as session:
+                owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
+                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
+
+
+def test_comparative_positioning_uses_explicit_competitor_with_multiple_literal_urls(mvp_database, monkeypatch):
+    from app.orchestration_runtime.worker import ModuleGraphWorker
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        urls = ("https://competitor.example", "https://market.example", "https://ignored.example")
+        site = analyzer()
+        site.analyze.return_value.url_summaries[0].update(url=urls[0], final_url=urls[0])
+        api = configured(mvp_database, IntentKind.COMPARATIVE_POSITIONING, analyzer=site,
+            intent_urls=urls, module_model=FakeModel(use_parents=True))
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+                response = await client.post("/copilot/execute", headers=headers(actor), json=payload(
+                    message="Сравни и предложи позиционирование " + " ".join(urls),
+                    competitor_urls=[urls[0]], market_source_urls=[urls[1]]))
+            assert response.status_code == 202, response.text
+            rid = response.json()["run_id"]
+            async with mvp_database() as session:
+                saved = await session.get(OrchestrationPlanRecord, (rid, 1))
+                assert saved.compiled_plan_json["scenario_key"] == "competitive_positioning_v1"
+            worker = ModuleGraphWorker(api.copilot.graph_service)
+            assert await worker.once()
+            assert await worker.once()
+            run, jobs, artifacts = await state(mvp_database, rid)
+            assert run.status == "completed"
+            assert len(jobs) == 2
+            assert {a.payload_json["module_id"] for a in artifacts} == {"COMPETITOR_ANALYSIS", "POSITIONING"}
+            site.analyze.assert_awaited_once_with(urls[0])
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
 
 
 @pytest.mark.parametrize("kind,expected", [(IntentKind.LEAD_FUNNEL_CALCULATION, "DIRECT_RESULT"),

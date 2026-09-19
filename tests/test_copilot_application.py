@@ -121,6 +121,22 @@ def test_multiple_competitor_urls_require_selection():
     model = FakeModel()
     output = run(service(IntentKind.COMPETITOR_ANALYSIS, urls=urls, model=model), "Compare " + " ".join(urls))
     assert output.kind is ResultKind.NEEDS_INPUT and not model.calls
+    assert output.clarification.code == "single_competitor_required"
+
+
+@pytest.mark.parametrize("key", ["competitor_urls", "competitor_or_category_scope", "market_source_urls", "market_sources"])
+@pytest.mark.parametrize("url_count", [1, 2])
+def test_explicit_empty_source_roles_disable_legacy_url_inference(key, url_count):
+    from tests.test_module_executors import fact
+    urls = ("https://competitor.example", "https://ignored.example")[:url_count]
+    site = analyzer()
+    scoped = ContextEntry(key, fact(key, "" if key == "competitor_or_category_scope" else []))
+    output = run(service(IntentKind.COMPETITOR_ANALYSIS, urls=urls, site=site),
+                 "Проанализируй " + " ".join(urls), current_request=(scoped,),
+                 available_tools=frozenset({ToolCapability.SITE_FETCH}))
+    assert output.kind is ResultKind.NEEDS_INPUT
+    assert output.clarification.code != "single_competitor_required"
+    site.analyze.assert_not_awaited()
 
 
 @pytest.mark.parametrize("kind", [IntentKind.LEAD_FUNNEL_CALCULATION, IntentKind.POSITIONING,
