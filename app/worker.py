@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
 from app.db import AsyncSessionLocal
+from app.logging import setup_logging
 from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.workflows.executors import MarketingExecutors, InsufficientSource, InvalidModelOutput
 from app.workflows.presentation import delivery_parts
@@ -77,7 +78,7 @@ async def run_lane(worker, queue, *, lane):
 
 async def main(*, sessions=AsyncSessionLocal, queue_factory=RedisWakeups,
                graph_factory=build_production_graph_runtime, fixed_executor_factory=MarketingExecutors):
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     loop, task = asyncio.get_running_loop(), asyncio.current_task()
     # Docker sends SIGTERM. TaskGroup cancellation interrupts provider I/O and
     # closes per-call clients without recording a domain failure on shutdown.

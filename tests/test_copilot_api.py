@@ -48,7 +48,7 @@ def test_auth_rejects_before_application(monkeypatch, authorization, actor):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
             supplied = {k: v for k, v in {"authorization": authorization, "x-telegram-user-id": actor}.items() if v is not None}
             for method, url, kwargs in [("POST", "/copilot/execute", {"json": {"message": "hello", "request_key": "a"}}),
-                                        ("GET", "/copilot/runs/" + "a" * 64, {})]:
+                                        ("GET", "/copilot/runs/" + "a" * 64, {}), ("GET", "/copilot/runs", {})]:
                 assert (await client.request(method, url, headers=supplied, **kwargs)).status_code == 401
         api.execute.assert_not_awaited()
         api.reader.get.assert_not_awaited()

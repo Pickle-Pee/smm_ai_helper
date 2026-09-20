@@ -185,7 +185,8 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
                 "main_text_excerpt": "\n".join([PRODUCT, AUDIENCE, JOB, PRICE, LEADER])}
         site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
         extractor = AsyncMock(return_value=extraction())
-        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor)
+        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor,
+                         module_model=StrategyModel(use_parents=True))
         calls = wire(monkeypatch, api)
         # Require both user scalar clarification and explicit snapshot confirmation.
         await brand(mvp_database, actor, {"business_goal": "Increase bookings"})
@@ -205,6 +206,12 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
             assert "Начал собирать стратегию" in text_sent(answer)
             assert len({p.request_key for p in calls}) == 1
             assert calls[-1].confirmation.confirmed is True
+            rid = (await fsm.get_data())["copilot_run"]["run_id"]
+            for _ in range(3):
+                assert await ModuleGraphWorker(api.copilot.graph_service).once()
+            result = message(actor=actor)
+            await flow.status(result, actor, rid)
+            assert "Стратегический диагноз" in text_sent(result) and "Эксперименты" in text_sent(result)
         finally:
             await remove_actor(mvp_database, actor)
     asyncio.run(check())

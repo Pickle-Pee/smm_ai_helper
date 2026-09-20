@@ -68,3 +68,12 @@ class CopilotClient:
             return result
         except (ValidationError, ValueError):
             raise CopilotError("invalid_response") from None
+
+    async def recent(self, actor: int, *, offset=0) -> dto.RunListResponse:
+        if type(offset) is not int or not 0 <= offset <= 10000:
+            raise CopilotError("invalid_state")
+        raw = await self._request("GET", f"/copilot/runs?limit=10&offset={offset}", actor)
+        try:
+            return dto.RunListResponse.model_validate_json(raw)
+        except (ValidationError, ValueError):
+            raise CopilotError("invalid_response") from None

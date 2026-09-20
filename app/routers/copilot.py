@@ -1,15 +1,19 @@
 """Authenticated, versioned HTTP binding; application work lives in services."""
 from typing import Annotated
+import logging
 
-from fastapi import APIRouter, Depends, Path, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.security import require_actor
-from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, StartedResponse, ErrorResponse
+from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, RunListResponse, StartedResponse, ErrorResponse
 from app.marketing_copilot.api_errors import CopilotAPIError
 from app.marketing_copilot.production import build_production_copilot_api
+
+log = logging.getLogger(__name__)
 
 
 class CopilotRoute(APIRoute):
@@ -24,6 +28,20 @@ class CopilotRoute(APIRoute):
             except CopilotAPIError as exc:
                 return JSONResponse(status_code=exc.status, content=ErrorResponse(
                     code=exc.code, owned_site=exc.owned_site).model_dump(mode="json"))
+            except SQLAlchemyError as exc:
+                # A database failure is never a successful start. SQL errors can
+                # contain bound user context: keep them out of ASGI tracebacks.
+                log.error("Copilot database unavailable error_type=%s", type(exc).__name__)
+                return JSONResponse(status_code=503, content=ErrorResponse(
+                    code="temporarily_unavailable").model_dump(mode="json"))
+            except HTTPException:
+                raise
+            except Exception as exc:
+                # Keep the programming-error 500 boundary without allowing an
+                # ASGI traceback to print bound input or chained provider data.
+                log.error("Copilot request failed error_type=%s", type(exc).__name__)
+                return JSONResponse(status_code=500, content=ErrorResponse(
+                    code="temporarily_unavailable").model_dump(mode="json"))
         return safe_handler
 
 
@@ -49,6 +67,13 @@ async def execute(payload: ExecuteRequest, response: Response, actor: int = Depe
     if isinstance(result, StartedResponse):
         response.status_code = 202
     return result
+
+
+@router.get("/runs", response_model=RunListResponse)
+async def recent_runs(limit: Annotated[int, Query(ge=1, le=50)] = 10,
+                      offset: Annotated[int, Query(ge=0, le=10000)] = 0,
+                      actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.reader.recent(actor, limit=limit, offset=offset)
 
 
 @router.get("/runs/{run_id}", response_model=RunResponse)

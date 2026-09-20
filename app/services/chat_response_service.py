@@ -38,8 +38,8 @@ class ChatResponseService:
 
         try:
             assistant_qc = await qc_shorten(assistant_policy)
-        except Exception:
-            self.logger.exception("qc_shorten failed unexpectedly")
+        except Exception as exc:
+            self.logger.error("qc_shorten failed unexpectedly error_type=%s", type(exc).__name__)
             assistant_qc = assistant_policy
 
         return self.normalize(assistant_qc)

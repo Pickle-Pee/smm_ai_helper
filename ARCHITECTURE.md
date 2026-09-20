@@ -22,6 +22,8 @@ FastAPI backend
   |-- BrandProfileService
   |-- UrlAnalyzer
   |-- ImageOrchestrator
+  |-- MarketingCopilotService -> PostgreSQL graph Jobs -> graph worker -> accepted artifacts
+  |-- GraphRunReader -> owner-scoped run discovery / status / presentation
   |-- MarketingWorkflowService -> PostgreSQL jobs + Redis wakeups -> worker
   |-- DeliveryService -> bot sender -> Telegram
         |
@@ -51,6 +53,7 @@ Telegram free text / local clarification + explicit URL roles
     +-> NEEDS_INPUT -> MemoryStorage FSM -> same logical HTTP request
     +-> WORKFLOW_STARTED -> durable backend run reference + status button
          -> existing graph worker -> PostgreSQL accepted artifacts
+/copilot_runs -> GET /copilot/runs -> saved run selection
 status button -> GET /copilot/runs/{run_id} -> owner-checked presentation
 ```
 
@@ -60,8 +63,11 @@ local conveniences in MemoryStorage, not durable workflow state. After start onl
 run/status references remain; every status is read from the backend. Stateless,
 reversible compact run-ID callbacks survive a bot restart. There is no new polling
 loop, generation, database table, image flow or fixed-workflow cutover. Restart
-loses unfinished clarification/confirmation and the short duplicate-event ledger;
-Task L owns that UX durability decision. See
+loses unfinished clarification/confirmation and the short duplicate-event ledger.
+Pre-run buttons fail closed, including after redelivery rebuilds the same request:
+a per-dialog nonce prevents old revisions matching a new local flow. Durable run
+discovery via `/copilot_runs` closes the lost-acknowledgement window after backend
+acceptance. This is **at-least-recoverable**, not exactly-once Telegram delivery. See
 [Telegram Copilot UX](docs/development/telegram-copilot-ux.md) for exact identity,
 confirmation, retry, rendering and recovery semantics.
 
@@ -125,7 +131,12 @@ typed RequestInterpretation + caller-authorized tagged PlanningContext
 
 It supports `explicit_single_module_v1`, `new_positioning_v1`, `competitive_positioning_v1`, and `strategy_builder_v1`. `new_positioning_v1` plans parallel `MARKET_ANALYSIS` and `COMPETITOR_ANALYSIS` nodes followed by dependent `POSITIONING`. Context is scoped by explicit module/scenario relevance; the planner does not query BrandProfile, conversation, URL, artifact, or workflow persistence services.
 
-This boundary is not connected to API or Telegram ingress and does not replace `TaskRouter`, `AgentRunner`, or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent, QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution bindings, so every valid result remains `PLANNING_ONLY`; planning does not start workflow execution.
+The Copilot application consumes this planner behind its authenticated HTTP ingress;
+the planner itself has no ingress and does not replace `TaskRouter`, `AgentRunner`,
+or `TaskPipelineService`. It loads no Orchestrator prompt and calls no model, agent,
+QC, database, Redis, queue, or worker. Module Registry `1.0.0` has zero execution
+bindings, so planning results remain `PLANNING_ONLY`. The explicitly composed
+compiler/runtime authorizes and starts only the allowlisted execution scenarios.
 
 ### Internal deterministic Quality Gates foundation
 
@@ -336,7 +347,7 @@ outside Telegram and workers. See
 
 ### Production Copilot HTTP API
 
-`POST /copilot/execute` and `GET /copilot/runs/{run_id}` use the existing backend bearer
+`POST /copilot/execute`, `GET /copilot/runs` and `GET /copilot/runs/{run_id}` use the existing backend bearer
 secret and Telegram actor header. The server resolves the actor to internal `User.id`
 and reads that user's BrandProfile before provider work. Strict bounded `copilot_api.v1`
 DTOs expose business inputs and explicit source roles, never execution bindings or
@@ -373,6 +384,18 @@ sections, separate experiment designs, bounded research details, evidence covera
 limitations. Error reasons are allowlisted; raw provider envelopes and internal claim,
 fact, executor and result identities do not cross the public presentation boundary.
 Same actor/key/effective plan replays the same durable run; changed plans return 409.
+Recent-run discovery selects only owner-scoped `orchestration_graph.v1` public
+metadata from MarketingRun: run ID, status and UTC timestamps. Limits are 1–50
+(default 10), offsets 0–10000, with a deterministic creation-time/ID order. It
+creates no User, reads no context/artifacts, and needs no migration. New records
+can shift offset pages; reopen the latest list when needed. Accepted results are
+always revalidated by the existing individual-run reader before presentation.
+
+`/health` is in-process liveness. `/ready` checks initialized composition and a
+bounded PostgreSQL `SELECT 1`; it returns 503 when unavailable. Redis is optional
+for readiness and provider/Telegram availability is never probed. Compose checks
+readiness. All process entrypoints configure safe logging; graph claim/finish logs
+connect request keys/run IDs to Job IDs without business contents or credentials.
 See [production Copilot API](docs/development/production-copilot-api.md) for DTOs,
 confirmation semantics, transaction ownership and verification.
 
@@ -466,3 +489,6 @@ Redis transports wakeups; PostgreSQL stores canonical state. Workers reclaim exp
 - Product documents distinguish implemented fixed scope from broader vision. Use task -> implementation -> tests -> code review; no separate OpenSpec approval cycle is required.
 
 Production generic Orchestrator ingress, arbitrary execution of all 15 Registry modules, autonomous replanning and generic synthesis remain future work. Campaign execution, CRM integrations, final video generation/editing and production deployment are outside the implemented MVP. Neither provider calls nor Telegram delivery promise exactly-once external effects.
+
+Release operation, rollback, pre-run memory limits and the retained legacy surfaces
+are documented in [the Copilot production checklist](docs/operations/copilot-production-checklist.md).

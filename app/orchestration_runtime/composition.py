@@ -40,9 +40,12 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
     if not 0 < settings.HTTP_TIMEOUT < settings.GRAPH_TIMEOUT_SECONDS < settings.GRAPH_LEASE_SECONDS:
         raise ValueError("Require provider timeout < graph timeout < graph lease")
     if model_call is _DEFAULT:
-        url = httpx.URL(settings.OPENAI_BASE_URL)
+        try:
+            url = httpx.URL(settings.OPENAI_BASE_URL)
+        except httpx.InvalidURL:
+            raise ValueError("Production text model URL is invalid") from None
         if (not settings.OPENAI_API_KEY.strip() or not settings.DEFAULT_TEXT_MODEL_HARD.strip()
-                or url.scheme not in ("http", "https") or not url.host):
+                or url.scheme not in ("http", "https") or not url.host or url.userinfo or url.query or url.fragment):
             raise ValueError("Production text model capability is not configured")
         model_call = production_model_call
     if analyzer is _DEFAULT:

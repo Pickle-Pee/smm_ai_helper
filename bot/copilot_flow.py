@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import re
+import secrets
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -59,7 +60,7 @@ async def save(state, pending, *, renew=False):
     if renew:
         pending["revision"] += 1
     pending["token"] = hashlib.sha256(
-        f"{pending['payload']['request_key']}:{pending['revision']}".encode()).hexdigest()[:16]
+        f"{pending['nonce']}:{pending['payload']['request_key']}:{pending['revision']}".encode()).hexdigest()[:16]
     await state.update_data(copilot_pending=pending)
     await state.set_state(CopilotStates.pending)
 
@@ -221,7 +222,8 @@ async def receive(message, state: FSMContext):
     if pending is None:
         pending = dict(payload={"request_key": request_key(actor, message.chat.id, message.message_id),
             "message": message.text, "context": {}, "competitor_urls": [], "market_source_urls": [], "market_sources": []},
-            original_message=message.text, revision=0, fields=[], requirements=None, classified_urls=[], urls=[])
+            original_message=message.text, nonce=secrets.token_hex(16), revision=0,
+            fields=[], requirements=None, classified_urls=[], urls=[])
     elif pending["phase"] not in {"fields", "rewrite"}:
         await send_text(message, "Продолжите с помощью кнопок выше или начните новый запрос: /new")
         return
@@ -331,3 +333,25 @@ async def status(message, actor, run_id):
     markup = status_keyboard(run_id) if response.status in {dto.RunStatus.QUEUED, dto.RunStatus.RUNNING} else None
     for i, section in enumerate(sections):
         await send_text(message, section, reply_markup=markup if i == len(sections) - 1 else None)
+
+
+async def recent_runs(message, actor, *, offset=0):
+    try:
+        response = await client.recent(actor, offset=offset)
+    except CopilotError as exc:
+        await send_text(message, ERRORS.get(exc.category, ERRORS["server"]))
+        return
+    if not response.items:
+        await send_text(message, "Сохранённых запросов на этой странице пока нет. Напишите новый запрос.")
+        return
+    labels = {
+        dto.RunStatus.QUEUED: "В очереди", dto.RunStatus.RUNNING: "В работе",
+        dto.RunStatus.COMPLETED: "Готово", dto.RunStatus.COMPLETED_WITH_LIMITATIONS: "Готово с ограничениями",
+        dto.RunStatus.BLOCKED: "Нужны данные", dto.RunStatus.FAILED: "Не завершён",
+    }
+    buttons = [(f"{item.created_at:%d.%m %H:%M} UTC · {labels[item.status]} · {item.run_id[:8]}",
+                run_callback(item.run_id)) for item in response.items]
+    if response.next_offset is not None:
+        buttons.append(("Более ранние запросы", f"cr:{response.next_offset}"))
+    await send_text(message, "Ваши сохранённые запросы. Выберите запрос, чтобы проверить статус или снова получить результат.",
+                    reply_markup=keyboard(buttons))
