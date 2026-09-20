@@ -93,7 +93,7 @@ class CopilotAPIService:
             response = dto.NeedsInputResponse(code=clarification.code,
                 alternatives=[list(group) for group in clarification.alternatives],
                 actions=["Supply the missing business context or review the source observations."], owned_site=owned)
-        log.info("Copilot request user_id=%s request_id=%s kind=%s run_id=%s duration_ms=%s",
+        log.info("Copilot request user_id=%s request_key=%s kind=%s run_id=%s duration_ms=%s",
                  owner, payload.request_key, response.kind, getattr(response, "run_id", None),
                  int((time.monotonic() - started) * 1000))
         return response

@@ -1,4 +1,5 @@
 """Versioned public HTTP values. Internal execution envelopes never cross here."""
+from datetime import datetime
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -244,6 +245,28 @@ class Coverage(StrictDTO):
     competitors_supplied: int = Field(ge=0, le=3)
     competitors_accepted: int = Field(ge=0, le=3)
     limitations: list[Text] = Field(default_factory=list, max_length=32)
+
+
+class RunSummary(StrictDTO):
+    run_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    status: RunStatus
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def timestamp(cls, value):
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        if not isinstance(value, datetime) or value.utcoffset() is None:
+            raise ValueError("Expected an ISO timestamp with timezone")
+        return value
+
+
+class RunListResponse(StrictDTO):
+    schema_version: Literal["copilot_api.v1"] = "copilot_api.v1"
+    items: list[RunSummary] = Field(max_length=50)
+    next_offset: int | None = Field(default=None, ge=0, le=10000)
 
 
 class PublicFailure(StrictDTO):

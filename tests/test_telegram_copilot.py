@@ -68,7 +68,7 @@ def patch_http(monkeypatch, responder):
 
 def test_public_client_contract_matches_backend_schema():
     from app.marketing_copilot import api_contracts as server
-    for name in ("ExecuteRequest", "ExecuteResponse", "RunResponse", "ErrorResponse"):
+    for name in ("ExecuteRequest", "ExecuteResponse", "RunResponse", "RunListResponse", "ErrorResponse"):
         assert TypeAdapter(getattr(dto, name)).json_schema() == TypeAdapter(getattr(server, name)).json_schema()
 
 

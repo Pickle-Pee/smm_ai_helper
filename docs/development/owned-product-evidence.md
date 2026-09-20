@@ -139,8 +139,8 @@ ContextEntry for **current_request.product_truth**. It does not mutate the site_
 snapshot or independently verify the business. Caller-supplied existing explicit
 product_truth remains supported without a snapshot. Audience, job, pricing,
 positioning and proof observations cannot be promoted to product_truth. The Copilot
-API exposes candidates and re-acquires the snapshot on confirmation; no Telegram
-confirmation UI is connected yet.
+API exposes candidates and re-acquires the snapshot on confirmation. Telegram
+collects explicit selection/confirmation through that API, with no backend imports.
 
 Both strategy_builder_v1 and competitive_positioning_v1 reuse the projected
 descriptive context. With product/audience/job recovered, missing product_truth
@@ -205,4 +205,5 @@ own URL + business goal; inspect grouped confirmation questions and absence of
 durable work; add explicit confirmation and relevant alternative, then execute via
 an explicitly configured Registry 1.2 Copilot/graph worker. Repeat with an explicit
 competitor source and inspect separate source provenance. The dedicated Copilot API
-offers this flow; legacy API routes and Telegram retain their existing paths.
+offers this flow to primary Telegram requests; explicit legacy routes/commands
+retain their existing paths. Pre-run selections are lost safely on bot restart.

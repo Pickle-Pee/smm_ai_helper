@@ -4,6 +4,8 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from app.config import settings
+from app.logging import setup_logging
+from bot.backend import validate_configuration
 from bot.handlers import menu, agent_flow, history, chat, workflow, copilot
 from bot.delivery import delivery_loop
 
@@ -21,6 +23,8 @@ def create_dispatcher():
 
 
 async def main():
+    setup_logging()
+    validate_configuration()
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     dp = create_dispatcher()
     async with asyncio.TaskGroup() as group:

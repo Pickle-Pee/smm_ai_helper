@@ -58,7 +58,7 @@ so the maximum is **three model HTTP requests per graph Job**, independent of
 `HTTP_RETRIES`. A failed URL fetch can use an attempt before calling the model.
 The safe analyzer retains bounded redirect handling, with no new fetch retries.
 
-TimeoutError, httpx timeout/network failures and HTTP 408/429/500/502/503/504 are
+TimeoutError, httpx transport failures (including remote protocol errors) and HTTP 408/429/500/502/503/504 are
 transient. The classifier walks explicit `__cause__` chains with cycle protection
 for existing wrapped provider errors. An arbitrary RuntimeError, malformed
 structured output, contract violation, other HTTP status or application bug is
@@ -123,4 +123,7 @@ through Redis outage/recovery and handle SIGTERM with exit code zero.
 Manual deployment check: apply existing migrations, start the worker with valid
 configuration, observe `Worker lanes ready fixed=2 graph=1 registry=1.2.0` (or the
 configured counts), and inspect Job/JobExecution recovery after a worker restart.
-There is deliberately no public endpoint for starting a graph in this change.
+The authenticated Copilot API starts approved graphs and Telegram uses that API.
+Release checks include active/idle worker SIGTERM, an interrupted provider call,
+replacement after lease expiry and accepted artifact recovery after recreation.
+See [production checklist](../operations/copilot-production-checklist.md).

@@ -1,4 +1,6 @@
 """Owner-scoped, repeatable, read-only graph projections without execution/wakeups."""
+from datetime import timezone
+
 from pydantic import ValidationError
 from sqlalchemy import select, text
 
@@ -13,6 +15,24 @@ from .presentation import module_presentation, coverage_presentation
 class GraphRunReader:
     def __init__(self, sessions, graph_service):
         self.sessions, self.graph = sessions, graph_service
+
+    async def recent(self, telegram_id, *, limit=10, offset=0):
+        if not 1 <= limit <= 50 or not 0 <= offset <= 10000:
+            raise CopilotAPIError(422, "invalid_request")
+        async with self.sessions() as session, session.begin():
+            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+            # Project only public metadata, never load input/state/error or artifacts.
+            rows = (await session.execute(select(
+                MarketingRun.run_id, MarketingRun.status, MarketingRun.created_at, MarketingRun.updated_at,
+            ).join(User).where(MarketingRun.workflow_type == WORKFLOW_TYPE,
+                User.telegram_id == telegram_id).order_by(
+                MarketingRun.created_at.desc(), MarketingRun.run_id.desc()).offset(offset).limit(limit + 1))).all()
+            return dto.RunListResponse(items=[dto.RunSummary(
+                run_id=row.run_id, status=dto.RunStatus(row.status.upper()),
+                created_at=row.created_at.replace(tzinfo=timezone.utc),
+                updated_at=row.updated_at.replace(tzinfo=timezone.utc),
+            ) for row in rows[:limit]],
+                next_offset=offset + limit if len(rows) > limit and offset + limit <= 10000 else None)
 
     async def get(self, telegram_id, run_id):
         async with self.sessions() as session, session.begin():

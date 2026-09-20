@@ -1,0 +1,74 @@
+warning: in the working copy of '.github/workflows/ci.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ARCHITECTURE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/config.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/llm/openai_images.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/llm/openai_text.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/logging.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/marketing_copilot/api_contracts.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/marketing_copilot/api_service.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/marketing_copilot/run_reader.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/orchestration_runtime/composition.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/orchestration_runtime/worker.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/routers/copilot.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/services/chat_response_service.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/services/qc_shortener.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/worker.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/backend.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/copilot_client.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/copilot_contracts.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/copilot_flow.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/handlers/copilot.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/handlers/menu.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'bot/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docker-compose.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/owned-product-evidence.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/production-copilot-api.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/production-graph-worker.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/strategy-builder-v1.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/strategy-intelligence-executors.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/telegram-copilot-ux.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/development/unified-copilot-execution.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_chat_response_service.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_copilot_api.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_production_worker_postgresql.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_telegram_copilot.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_telegram_copilot_postgresql.py', LF will be replaced by CRLF the next time Git touches it
+ .github/workflows/ci.yml                           | 11 [32m+++++[m[31m--[m
+ .idea/AI_SMM_Bot.iml                               |  2 [32m+[m[31m-[m
+ ARCHITECTURE.md                                    | 34 [32m+++++++++++++++++++[m[31m---[m
+ app/config.py                                      |  1 [32m+[m
+ app/llm/openai_images.py                           |  5 [32m++[m[31m--[m
+ app/llm/openai_text.py                             |  5 [32m++[m[31m--[m
+ app/logging.py                                     | 13 [32m+++++++++[m
+ app/main.py                                        | 10 [32m+++++++[m
+ app/marketing_copilot/api_contracts.py             | 23 [32m+++++++++++++++[m
+ app/marketing_copilot/api_service.py               |  2 [32m+[m[31m-[m
+ app/marketing_copilot/run_reader.py                | 20 [32m+++++++++++++[m
+ app/orchestration_runtime/composition.py           |  7 [32m+++[m[31m--[m
+ app/orchestration_runtime/worker.py                |  8 [32m+++[m[31m--[m
+ app/routers/copilot.py                             | 29 [32m++++++++++++++++[m[31m--[m
+ app/services/chat_response_service.py              |  4 [32m+[m[31m--[m
+ app/services/qc_shortener.py                       |  4 [32m+[m[31m--[m
+ app/worker.py                                      |  3 [32m+[m[31m-[m
+ bot/backend.py                                     | 12 [32m++++++++[m
+ bot/copilot_client.py                              |  9 [32m++++++[m
+ bot/copilot_contracts.py                           | 23 [32m+++++++++++++++[m
+ bot/copilot_flow.py                                | 28 [32m++++++++++++++++[m[31m--[m
+ bot/handlers/copilot.py                            | 23 [32m++++++++++++++[m[31m-[m
+ bot/handlers/menu.py                               |  1 [32m+[m
+ bot/main.py                                        |  4 [32m+++[m
+ docker-compose.yaml                                |  2 [32m+[m[31m-[m
+ docs/development/owned-product-evidence.md         |  7 [32m+++[m[31m--[m
+ docs/development/production-copilot-api.md         | 21 [32m+++++++++++[m[31m--[m
+ docs/development/production-graph-worker.md        |  7 [32m+++[m[31m--[m
+ docs/development/strategy-builder-v1.md            |  7 [32m+++[m[31m--[m
+ .../development/strategy-intelligence-executors.md |  5 [32m++[m[31m--[m
+ docs/development/telegram-copilot-ux.md            | 29 [32m+++++++++++++[m[31m-----[m
+ docs/development/unified-copilot-execution.md      | 13 [32m+++++[m[31m----[m
+ tests/test_chat_response_service.py                |  6 [32m++[m[31m--[m
+ tests/test_copilot_api.py                          |  2 [32m+[m[31m-[m
+ tests/test_production_worker_postgresql.py         | 15 [32m++++++++[m[31m--[m
+ tests/test_telegram_copilot.py                     |  2 [32m+[m[31m-[m
+ tests/test_telegram_copilot_postgresql.py          |  9 [32m+++++[m[31m-[m
+ 37 files changed, 343 insertions(+), 63 deletions(-)

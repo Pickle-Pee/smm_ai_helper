@@ -1,10 +1,11 @@
 # Internal Strategy Builder v1
 
 `MARKETING_STRATEGY -> strategy_builder_v1 -> PlanCompiler -> GraphExecutionService`
-is an internal opt-in capability. `MarketingCopilotService` returns
+is explicitly composed by the production Copilot API using Registry 1.2.0. `MarketingCopilotService` returns
 `WORKFLOW_STARTED` after durable start; it neither executes nodes nor waits for
-completion. `ModuleGraphWorker` executes the graph. No API, Telegram, production
-worker lane, delivery or presentation integration is added.
+completion. The production `ModuleGraphWorker` lane executes the graph. Telegram
+starts and discovers runs through the HTTP API and renders accepted artifacts;
+there is no separate graph Telegram delivery queue or additional synthesis call.
 
 ## Composition and authority
 

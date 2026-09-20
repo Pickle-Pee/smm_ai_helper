@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        hide_input_in_errors = True
 
 settings = Settings()
 

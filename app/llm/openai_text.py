@@ -152,8 +152,7 @@ async def chat(
                     return content, data.get("usage", {}) or {}
 
                 if resp.status_code >= 400:
-                    body = resp.text
-                    log.error("OpenAI responses error status=%s body=%s", resp.status_code, body[:4000])
+                    log.error("OpenAI responses error status=%s", resp.status_code)
 
                     try:
                         err = (resp.json() or {}).get("error", {}) or {}
@@ -203,7 +202,7 @@ async def chat(
                     usage2 = data2.get("usage", {}) or {}
 
                     if not content2:
-                        raise RuntimeError(f"Responses returned no text even after retry: {data2}")
+                        raise RuntimeError("Responses returned no text even after retry")
 
                     return content2, usage2
 

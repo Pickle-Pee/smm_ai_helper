@@ -193,8 +193,13 @@ def test_shutdown_leaves_both_active_leases_recoverable(mvp_database):
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("status,body,attempts", [(503, {"error": "SECRET"}, 3),
-    (401, {"error": "SECRET"}, 1), (200, {"output_text": "malformed SECRET"}, 1)])
+@pytest.mark.parametrize("status,body,attempts", [
+    *((status, {"error": "SECRET"}, 3) for status in (408, 429, 500, 502, 503, 504)),
+    *((status, {"error": "SECRET"}, 1) for status in (400, 401, 403)),
+    ("timeout", {}, 3), ("transport", {}, 3), ("protocol", {}, 3),
+    (200, "invalid JSON SECRET", 1), (200, {"output_text": "malformed SECRET"}, 1),
+    (200, {"output_text": '{}'}, 1),
+])
 def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_database, monkeypatch, status, body, attempts):
     from tests.test_graph_model_adapter import install_transport
     from tests.test_production_graph_worker import queue
@@ -202,6 +207,12 @@ def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_da
         calls = []
         def respond(request):
             calls.append(request)
+            if status in {"timeout", "transport", "protocol"}:
+                error = {"timeout": httpx.ReadTimeout, "transport": httpx.ConnectError,
+                         "protocol": httpx.RemoteProtocolError}[status]
+                raise error("SECRET", request=request)
+            if isinstance(body, str):
+                return httpx.Response(status, text=body)
             return httpx.Response(status, json=body)
         clients = install_transport(monkeypatch, respond)
         runtime = build_production_graph_runtime(sessions=mvp_database, queue=queue(), analyzer=analyzer())

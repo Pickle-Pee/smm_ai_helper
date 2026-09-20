@@ -24,7 +24,7 @@ def transient(exc):
         seen.add(id(exc))
         if isinstance(exc, (ExecutorOutputError, ModuleExecutionContractError, RuntimeContractError)):
             return False
-        if isinstance(exc, (TimeoutError, httpx.TimeoutException, httpx.NetworkError)):
+        if isinstance(exc, (TimeoutError, httpx.TransportError)):
             return True
         if isinstance(exc, httpx.HTTPStatusError):
             return exc.response.status_code in {408, 429, 500, 502, 503, 504}
@@ -44,6 +44,7 @@ class ModuleGraphWorker:
         item = await self.service.claim(job_id)
         if item is None:
             return False
+        log.info("Graph claimed run_id=%s job_id=%s", item.run_id, item.job_id)
         try:
             work = await self.service.load_work(item)
             if work is None:
@@ -58,13 +59,14 @@ class ModuleGraphWorker:
             if not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):
                 await self.service.fail(item, code="quality_rejected")
                 return True
-            await self.service.finish(item, result, quality)
+            accepted = await self.service.finish(item, result, quality)
+            log.info("Graph finish run_id=%s job_id=%s accepted=%s", item.run_id, item.job_id, accepted)
         except SQLAlchemyError:
             # A persistence outage must leave the lease for replacement/recovery.
             raise
         except Exception as exc:
             # Consume a failed attempt explicitly; log only safe type/identity.
-            log.error("Graph attempt failed job_id=%s error_type=%s", item.job_id, type(exc).__name__)
+            log.error("Graph attempt failed run_id=%s job_id=%s error_type=%s", item.run_id, item.job_id, type(exc).__name__)
             retryable = transient(exc)
             await self.service.fail(item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
         return True

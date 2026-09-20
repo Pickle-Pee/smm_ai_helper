@@ -2,7 +2,8 @@
 
 The dedicated API connects the existing internal Copilot to production capabilities.
 It does not replace ChatService, TaskPipelineService or MarketingWorkflowService.
-Telegram remains disconnected; no `bot/**` changes or polling are needed.
+Primary Telegram text now uses this HTTP boundary; `/copilot_runs` discovers saved
+graphs after bot restart. See [Telegram UX](telegram-copilot-ux.md).
 Storage uses existing User, BrandProfile, MarketingRun, Job, JobExecution,
 OrchestrationPlanRecord and MarketingArtifact models; there is no migration.
 
@@ -22,7 +23,7 @@ GET /copilot/runs/{run_id} -> owner/type check -> accepted-artifact validation
 
 ## Authentication and identity
 
-Both endpoints require `Authorization: Bearer <BOT_BACKEND_TOKEN>` and
+All Copilot endpoints require `Authorization: Bearer <BOT_BACKEND_TOKEN>` and
 `X-Telegram-User-ID: <positive Telegram integer>`, exactly as existing authenticated
 routes do. The actor header alone grants no access. This is a trusted backend-client
 boundary; do not distribute the shared backend credential to browsers/end users.
@@ -187,6 +188,22 @@ Other errors: 409 `request_conflict`, 404 `not_found`, 422 `invalid_request` or
 `invalid_confirmation`. HTTP validation never echoes submitted values. Authentication
 uses existing 401/503 `detail` responses. Logs contain safe actor/request/result/run
 identities and timings; messages, prompts, fetched pages and product truth are excluded.
+
+Database errors return safe 503 envelopes. Programming errors remain 500, with
+only exception type logged rather than raw chained exceptions or input values.
+
+## Durable run discovery
+
+`GET /copilot/runs?limit=10&offset=0` returns `copilot_api.v1`, `items` and nullable
+`next_offset`. Each item contains only `run_id`, `status`, `created_at`, `updated_at`;
+timestamps include UTC. No inferred labels or unvalidated artifact flags are used.
+Limit is 1–50; offset is 0–10000. Order is created_at descending then run_id
+descending. This bounded offset list can shift when new runs arrive; it is a
+recovery convenience, not a stable export cursor. Status URLs remain stable.
+The read-only query joins User and filters `orchestration_graph.v1`; it reads no
+private JSON or provider metadata and creates no user. A new/foreign actor sees
+an empty list. Existing per-run 404 semantics remain unchanged. PostgreSQL's
+existing owner/type indexes are sufficient for the bounded MVP smoke; no migration.
 
 Same internal actor + request_key + effective compiled plan returns the same run and
 does not duplicate Jobs. A changed compiled plan returns 409. Changes in saved brand

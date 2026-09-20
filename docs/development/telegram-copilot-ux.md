@@ -68,10 +68,10 @@ messages and callbacks for each FSM key. Pending data contains:
 - explicit scalar context, owned URL, competitor URLs, market URLs/excerpts;
 - last grouped clarification requirements and next scalar field;
 - unclassified/classified URLs, snapshot candidates and explicitly selected indices;
-- presentation phase and revision-bound callback token.
+- presentation phase and callback token bound to a revision and local-dialog nonce.
 
 Only indices into the saved API candidates are accepted by selection buttons;
-statement IDs are never parsed from user text. Revision tokens invalidate old
+statement IDs are never parsed from user text. Revision/nonce tokens invalidate old
 URL/clarification/retry keyboards. A bounded ledger of the latest 64 message and
 callback identities suppresses recent redeliveries, including duplicate scalar
 answers and selection toggles. It is a convenience, not durable deduplication.
@@ -171,9 +171,20 @@ the recent event ledger and the convenience pointer for `/copilot_status` withou
 an ID. Old pre-run buttons tell the user to start again. Already delivered run
 status buttons keep working after restart because they contain a reversible run
 identity. If the process dies after backend acceptance but before Telegram receives
-the acknowledgement, the user may lack that button. Durable continuation/recovery
-and a Copilot run-list UX are explicitly deferred to Task L. Recent Telegram-event
-deduplication and synchronous reply delivery are not exactly-once guarantees.
+the acknowledgement, `/copilot_runs` fetches the authenticated user's latest graph
+runs and reconstructs status buttons. Choosing a terminal run renders its accepted
+backend artifacts again. Paging callbacks contain only a bounded offset; both list
+and status use the clicking actor, without FSM lookup or bot-side result storage.
+The delivery guarantee is **at-least-recoverable**, not exactly-once. Recent
+Telegram-event deduplication and synchronous reply delivery are not exactly-once
+guarantees. Retrying synchronous work can repeat external model execution.
+
+Keeping the short pre-run interaction in MemoryStorage avoids a new persistence
+model for transient unconfirmed observations. After restart, start the request
+again. Old pre-run callbacks fail closed even if Telegram redelivers the original
+message and recreates the same logical key: the new local-dialog nonce differs.
+Plain new text after restart starts a fresh request, never resumes missing facts.
+There is no silent confirmation or recovery of previously selected website claims.
 
 ## Verification and manual checks
 
@@ -184,7 +195,9 @@ state, stale callbacks, retries, cancellation, rendering and import boundaries.
 with real authenticated HTTP routing, production Copilot composition, PostgreSQL
 and graph workers. It checks DIRECT, POST, CONVERSATION, strategy/experiments,
 optional competitor failure, owned-site reacquisition, duplicate Jobs and foreign
-ownership. The container CI smoke includes both suites with no Telegram polling.
+ownership. Release suites also simulate acceptance before crash/timeout, list
+recovery and redelivery with the ledger lost. Container CI exercises the real
+polling lifecycle with a fake Telegram transport; no Telegram network is used.
 
 Manual checks on a configured private-chat bot:
 
@@ -194,6 +207,6 @@ Manual checks on a configured private-chat bot:
 4. Supply own/competitor/market links, explicitly classify each; test the fourth competitor limit.
 5. Select only a subset of site claims and confirm. Change the page and verify reconfirmation.
 6. Check completed/limited/failed strategy states, separate experiments and research coverage.
-7. Restart only the bot; an earlier run status button must still work. Unfinished
-   clarification must be restarted, as documented above.
+7. Restart only the bot; an earlier run status button and `/copilot_runs` must work,
+   including completed presentation. Unfinished clarification must be restarted.
 8. Verify legacy `/analyze`, standalone task buttons, `/history` and image UI remain available.

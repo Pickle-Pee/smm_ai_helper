@@ -3,8 +3,9 @@
 `MarketingCopilotService` is an application coordinator, not another marketing agent.
 Import it explicitly from `app.marketing_copilot.service`; compose providers with
 `build_marketing_copilot_service` in `app.marketing_copilot.factory`. Existing package
-exports remain a pure semantic foundation. No public API/Telegram/worker-main ingress
-uses this service. Existing chat, standalone task and fixed MVP behavior is unchanged.
+exports remain a pure semantic foundation. The production HTTP Copilot adapter uses
+this service; Telegram calls that API. Worker-main executes the resulting persisted
+Jobs independently. Existing chat, standalone task and fixed MVP APIs are retained.
 
 ## Contracts and caller responsibilities
 
@@ -148,7 +149,8 @@ starts a real durable run through the application, verifies only the root Job ex
 then explicitly runs the worker to completion. It also verifies replay/conflict,
 zero graph entities for synchronous work and rejection of partial claims by graph
 finish and worker. Existing architecture tests allow only the explicit new internal
-consumers; production imports remain forbidden.
+consumers; current guards permit the dedicated production HTTP composition while
+forbidding direct execution or database imports from Telegram.
 
 No migration is added; head remains `20260917_0009`. No live paid providers are needed.
 Task E verification executed locally: focused execution/regression suites **632 passed**;
@@ -157,8 +159,9 @@ disposable PostgreSQL 15 and Redis **1170 passed, zero skips**. `python -m compi
 `git diff --check` (including staged files) and `alembic check` passed; the latter reported
 no new upgrade operations. Existing deprecation warnings remain.
 
-Limitations: three executable modules, narrow deterministic text grammar, no artifact
-hydration, no resumable clarification, no generic synthesis or public delivery, and
+Limitations: three executable modules in the default internal 1.1 composition (six
+in explicit production 1.2), narrow deterministic text grammar, no arbitrary artifact
+hydration, no durable pre-run clarification, no generic synthesis or push delivery, and
 no synchronous idempotency persistence. Provider failures are not retried by this
 application service. Quality Gates validate structural provenance, not semantic truth.
 

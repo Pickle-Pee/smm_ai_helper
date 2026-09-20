@@ -23,6 +23,7 @@ async def start(message: types.Message):
         "\n/new — новый запрос\n"
         "/cancel — отменить уточнения до запуска анализа\n"
         "/copilot_status — проверить готовность последнего запроса\n"
+        "/copilot_runs — найти сохранённые запросы и результаты после перезапуска\n"
     )
 
     await message.answer(text)

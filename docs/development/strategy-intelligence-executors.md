@@ -4,7 +4,8 @@ The internal intelligence layer adds three exact `module_executor.v1` implementa
 It retains `ModuleExecutorRegistry -> ModuleExecutorDispatcher -> ModuleExecutionResult`
 and the existing outer `QualityGateEvaluator` / `fully_accepted()` boundary. There is
 no alternate quality mechanism, provider retry, persistence inside an executor or
-production ingress. The integration base is merged PR #59, commit
+ingress inside an executor. The production Copilot API and graph worker now compose
+these capabilities explicitly. The original integration base is merged PR #59, commit
 `017bf09f11c3c0a16dde4e9b9c431e48064465fe`.
 
 ## Version matrix
@@ -13,7 +14,7 @@ production ingress. The integration base is merged PR #59, commit
 | --- | --- | --- | --- |
 | 1.0.0 | None | 15 | `ModuleRegistry.load()` and Quality Gates/planning |
 | 1.1.0 | COMPETITOR_ANALYSIS, POSITIONING, CREATOR | 12 | Existing executor factory and Copilot composition |
-| 1.2.0 | The three above plus MARKET_ANALYSIS, VIRTUAL_CMO, EXPERIMENTS | 9 | Explicit opt-in only |
+| 1.2.0 | The three above plus MARKET_ANALYSIS, VIRTUAL_CMO, EXPERIMENTS | 9 | Explicit production Copilot/graph composition |
 
 All 15 canonical IDs and all descriptor metadata are unchanged. Only source version,
 availability and bindings differ. The two older JSON resources are unchanged.
