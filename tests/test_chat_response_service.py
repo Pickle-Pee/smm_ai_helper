@@ -8,8 +8,8 @@ class FakeLogger:
     def __init__(self):
         self.exceptions = []
 
-    def exception(self, message):
-        self.exceptions.append(message)
+    def error(self, message, *args):
+        self.exceptions.append(message % args)
 
 
 def test_normalize_applies_policy_before_payload_normalization(monkeypatch):
@@ -142,7 +142,7 @@ def test_generate_falls_back_to_policy_result_when_qc_fails(monkeypatch):
     )
 
     assert result == {"reply": "Raw", "safe": True}
-    assert logger.exceptions == ["qc_shorten failed unexpectedly"]
+    assert logger.exceptions == ["qc_shorten failed unexpectedly error_type=RuntimeError"]
     assert policy_calls == [
         {"reply": "Raw"},
         {"reply": "Raw", "safe": True},

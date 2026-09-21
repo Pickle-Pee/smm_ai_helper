@@ -14,7 +14,7 @@ from .contracts import (
 from .errors import InvalidPlanError
 
 
-SUPPORTED_SCENARIOS = frozenset({"explicit_single_module_v1", "new_positioning_v1"})
+SUPPORTED_SCENARIOS = frozenset({"explicit_single_module_v1", "new_positioning_v1", "competitive_positioning_v1", "strategy_builder_v1"})
 _POSITIONING_NODE_MODULES = (
     ("market_analysis", ModuleId.MARKET_ANALYSIS),
     ("competitor_analysis", ModuleId.COMPETITOR_ANALYSIS),
@@ -88,14 +88,14 @@ class PlanValidator:
                 raise InvalidPlanError("dependent nodes cannot share a parallel group")
 
         questions = plan.blocking_questions
-        if len(questions) > 3:
+        if len(questions) > (6 if plan.scenario_key == "strategy_builder_v1" else 3):
             raise InvalidPlanError("more than three blocking questions")
         question_keys = [item.input_key.value.casefold() for item in questions]
         if len(question_keys) != len(set(question_keys)):
             raise InvalidPlanError("duplicate blocking question")
         if len({item.question for item in questions}) != len(questions):
             raise InvalidPlanError("duplicate blocking question")
-        if {item.input_key for item in questions} & known_input_keys:
+        if plan.scenario_key != "strategy_builder_v1" and {item.input_key for item in questions} & known_input_keys:
             raise InvalidPlanError("blocking question asks for known input")
         for question in questions:
             node = node_by_id.get(question.node_id)
@@ -107,8 +107,24 @@ class PlanValidator:
             if matching[0].requirement.question_template != question.question:
                 raise InvalidPlanError("blocking question is not the approved deterministic template")
 
+        if plan.scenario_key == "strategy_builder_v1":
+            from .strategy import strategy_topology
+            try:
+                strategy_topology(plan.nodes, plan.dependencies)
+            except ValueError as exc:
+                raise InvalidPlanError(str(exc)) from exc
         if plan.scenario_key == "explicit_single_module_v1":
             self._validate_single_module(plan)
+        if plan.scenario_key == "competitive_positioning_v1":
+            if tuple((n.node_id, n.module_id) for n in plan.nodes) != _POSITIONING_NODE_MODULES[1:]:
+                raise InvalidPlanError("invalid competitive-positioning nodes")
+            if tuple((e.upstream_node_id, e.downstream_node_id) for e in plan.dependencies) != _POSITIONING_EDGES[:1]:
+                raise InvalidPlanError("invalid competitive-positioning edges")
+            for node in plan.nodes:
+                if node.parallel_group or node.parallelizable:
+                    raise InvalidPlanError("competitive-positioning is sequential")
+                if (node.next_if_pass, node.next_if_fail) != _POSITIONING_TRANSITIONS[node.node_id]:
+                    raise InvalidPlanError("invalid competitive-positioning transitions")
         if plan.scenario_key == "new_positioning_v1":
             self._validate_positioning_topology(plan)
 
@@ -121,7 +137,7 @@ class PlanValidator:
             for item in self._registry.descriptors
         ):
             raise InvalidPlanError("planning foundation requires zero execution bindings")
-        if len(plan.blocking_questions) > 3:
+        if len(plan.blocking_questions) > (6 if plan.scenario_key == "strategy_builder_v1" else 3):
             raise InvalidPlanError("more than three blocking questions")
         question_keys = [item.input_key.value for item in plan.blocking_questions]
         if len(question_keys) != len(set(question_keys)) or len({item.question for item in plan.blocking_questions}) != len(plan.blocking_questions):

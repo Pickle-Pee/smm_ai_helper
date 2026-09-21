@@ -84,8 +84,7 @@ async def generate_image(
                     resp = await client.post(url, headers=headers, json=payload)
 
                     if resp.status_code >= 400:
-                        body = resp.text
-                        log.error("OpenAI images error status=%s body=%s", resp.status_code, body[:4000])
+                        log.error("OpenAI images error status=%s", resp.status_code)
 
                         # Не ретраим большинство 4xx
                         if resp.status_code not in RETRYABLE_STATUS_CODES:
@@ -101,7 +100,7 @@ async def generate_image(
                     if "url" in item:
                         return await _download_image(item["url"], timeout=timeout)
 
-                    raise ValueError(f"Unexpected images response: {data}")
+                    raise ValueError("Unexpected images response")
 
                 except httpx.HTTPStatusError as exc:
                     last_error = exc

@@ -219,15 +219,24 @@ class UrlAnalyzer:
     - Avoids heavy scraping for platforms that are frequently blocked.
     """
 
-    def __init__(self, db_session: Any = None, *, cache_session_factory=None) -> None:
+    def __init__(self, db_session: Any = None, *, cache_session_factory=None, propagate_fetch_errors: bool = False) -> None:
         # The legacy db_session argument opts into caching, but its transaction
         # is never used. Cache transactions have independent short sessions.
         self._cache_sessions = cache_session_factory or (AsyncSessionLocal if db_session is not None else None)
+        self._propagate_fetch_errors = propagate_fetch_errors
 
     async def analyze(self, text: str) -> Optional[UrlAnalysisResult]:
         urls = extract_targets(text)
         if not urls:
             return None
+        return await self._analyze_urls(urls)
+
+    async def analyze_url(self, url: str) -> UrlAnalysisResult:
+        """Analyze exactly one authorized URL, without discovering handles in its query."""
+        validate_url(url)
+        return await self._analyze_urls([normalize_url(url)])
+
+    async def _analyze_urls(self, urls: List[str]) -> UrlAnalysisResult:
         cached = []
         for url in urls:
             try:
@@ -281,6 +290,8 @@ class UrlAnalyzer:
         try:
             resp = await fetch_public(url)
         except Exception as exc:
+            if self._propagate_fetch_errors:
+                raise
             return {"ok": False, "url": url, "status_code": None,
                     "error": f"fetch_error:{type(exc).__name__}",
                     "warnings": ["fetch_failed"], "page_type": "unknown"}

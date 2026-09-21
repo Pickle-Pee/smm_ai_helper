@@ -60,7 +60,7 @@ async def qc_shorten(assistant_payload: Dict[str, Any]) -> Dict[str, Any]:
             response_format={"type": "json_object"},  # заставляем JSON-объект
         )
     except Exception as e:
-        log.exception("qc_shorten: OpenAI call failed")
+        log.error("qc_shorten: OpenAI call failed error_type=%s", type(e).__name__)
         return _fallback_from_raw(base, f"openai_call:{type(e).__name__}")
 
     # Парсинг: используем обычный json.loads, потому что response_format должен гарантировать объект
@@ -75,5 +75,5 @@ async def qc_shorten(assistant_payload: Dict[str, Any]) -> Dict[str, Any]:
             return _fallback_from_raw(base, "empty_reply")
         return data
     except Exception as e:
-        log.error("qc_shorten: JSON parse failed: %s; content=%r", e, content[:8000])
+        log.error("qc_shorten: JSON parse failed error_type=%s", type(e).__name__)
         return _fallback_from_raw(base, f"json_parse:{type(e).__name__}")

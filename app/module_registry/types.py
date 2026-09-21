@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+import re
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 
 class ModuleId(str, Enum):
@@ -72,11 +73,35 @@ def _deep_freeze(value: Any) -> Any:
     return value
 
 
+_EXECUTOR_KEY = re.compile(r"[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*", re.ASCII)
+
+
+def validate_executor_key(value: str) -> str:
+    """Validate an opaque exact key; never normalize it or import its target."""
+    if type(value) is not str or len(value) > 128 or _EXECUTOR_KEY.fullmatch(value) is None:
+        raise ValueError("executor_key must be a stable lowercase key of at most 128 characters")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionBinding:
-    agent_id: str
-    compatibility: str
+    """Declarative compatibility evidence, independent of runtime availability."""
+
+    executor_key: str
+    contract_version: str
+    compatibility: Literal["exact"]
     evidence: str
+
+    def __post_init__(self) -> None:
+        validate_executor_key(self.executor_key)
+        # The dispatcher owns supported versions; metadata only declares one.
+        if (type(self.contract_version) is not str or len(self.contract_version) > 128
+                or _EXECUTOR_KEY.fullmatch(self.contract_version) is None):
+            raise ValueError("contract_version must be a stable version key")
+        if type(self.compatibility) is not str or self.compatibility != "exact":
+            raise ValueError("execution binding requires exact compatibility")
+        if type(self.evidence) is not str or not self.evidence.strip():
+            raise ValueError("execution binding requires non-empty evidence")
 
 
 @dataclass(frozen=True, slots=True)

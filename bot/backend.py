@@ -7,6 +7,18 @@ class BackendError(RuntimeError):
     pass
 
 
+def validate_configuration():
+    from aiogram.utils.token import validate_token, TokenValidationError
+    try:
+        url = httpx.URL(settings.API_BASE_URL)
+        if (url.scheme not in ("http", "https") or not url.host or url.userinfo
+                or url.query or url.fragment or not settings.BOT_BACKEND_TOKEN.strip()):
+            raise ValueError()
+        validate_token(settings.TELEGRAM_BOT_TOKEN)
+    except (ValueError, TypeError, httpx.InvalidURL, TokenValidationError):
+        raise ValueError("Bot requires a valid API_BASE_URL, BOT_BACKEND_TOKEN and TELEGRAM_BOT_TOKEN") from None
+
+
 def actor_headers(telegram_id: int) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.BOT_BACKEND_TOKEN}",

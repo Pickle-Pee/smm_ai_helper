@@ -6,8 +6,6 @@ from importlib.resources import files
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from app.services.agent_registry import AgentRegistry
-
 from .types import (
     ExecutionBinding,
     InputRequirement,
@@ -18,7 +16,26 @@ from .types import (
     ToolCapability,
 )
 
-REGISTRY_VERSION = "1.0.0"
+DEFAULT_REGISTRY_VERSION = "1.0.0"
+EXECUTABLE_REGISTRY_VERSION = "1.1.0"
+INTELLIGENCE_REGISTRY_VERSION = "1.2.0"
+EXECUTION_REGISTRY_VERSIONS = frozenset({EXECUTABLE_REGISTRY_VERSION, INTELLIGENCE_REGISTRY_VERSION})
+REGISTRY_VERSION = DEFAULT_REGISTRY_VERSION  # Backward-compatible public constant.
+APPROVED_EXECUTION_BINDINGS = MappingProxyType({
+    ModuleId.COMPETITOR_ANALYSIS: "competitor_analysis.v1",
+    ModuleId.POSITIONING: "positioning.v1",
+    ModuleId.CREATOR: "creator.v1",
+})
+INTELLIGENCE_EXECUTION_BINDINGS = MappingProxyType({
+    **APPROVED_EXECUTION_BINDINGS,
+    ModuleId.MARKET_ANALYSIS: "market_analysis.v1",
+    ModuleId.VIRTUAL_CMO: "virtual_cmo.v1",
+    ModuleId.EXPERIMENTS: "experiments.v1",
+})
+EXECUTION_BINDINGS_BY_VERSION = MappingProxyType({
+    EXECUTABLE_REGISTRY_VERSION: APPROVED_EXECUTION_BINDINGS,
+    INTELLIGENCE_REGISTRY_VERSION: INTELLIGENCE_EXECUTION_BINDINGS,
+})
 _SEPARATOR_RE = re.compile(r"[\s_-]+", re.UNICODE)
 
 
@@ -60,7 +77,7 @@ class ModuleRegistry:
         version: str,
         descriptors: Iterable[ModuleDescriptor],
     ) -> None:
-        if version != REGISTRY_VERSION:
+        if version not in ({DEFAULT_REGISTRY_VERSION} | EXECUTION_REGISTRY_VERSIONS):
             raise ModuleRegistryError(f"unsupported source version: {version!r}")
         descriptor_items = tuple(descriptors)
         expected_ids = frozenset(ModuleId)
@@ -76,11 +93,19 @@ class ModuleRegistry:
             raise ModuleRegistryError(f"invalid canonical ID set; missing={missing}, unexpected={unexpected}")
 
         by_id = {descriptor.module_id: descriptor for descriptor in descriptor_items}
-        known_agents = AgentRegistry.supported_agent_types()
         for descriptor in descriptor_items:
-            self._validate_descriptor(descriptor, expected_ids, known_agents)
-        if any(descriptor.execution_binding is not None for descriptor in descriptor_items):
+            self._validate_descriptor(descriptor, expected_ids)
+        bound = {d.module_id: d.execution_binding for d in descriptor_items if d.execution_binding is not None}
+        if version == DEFAULT_REGISTRY_VERSION and bound:
             raise ModuleRegistryError("registry version 1.0.0 must contain zero execution bindings")
+        if version in EXECUTION_REGISTRY_VERSIONS:
+            approved = EXECUTION_BINDINGS_BY_VERSION[version]
+            if set(bound) != set(approved) or any(
+                binding.executor_key != approved[module]
+                or binding.contract_version != "module_executor.v1" or binding.compatibility != "exact"
+                for module, binding in bound.items()
+            ):
+                raise ModuleRegistryError(f"registry {version} requires exactly its approved exact bindings")
 
         lookup: dict[str, ModuleDescriptor] = {}
         canonical_keys = {normalize_lookup_key(item.value): item for item in expected_ids}
@@ -108,13 +133,15 @@ class ModuleRegistry:
 
     @classmethod
     def load(cls, version: str = REGISTRY_VERSION) -> "ModuleRegistry":
-        if version != REGISTRY_VERSION:
+        if version not in ({DEFAULT_REGISTRY_VERSION} | EXECUTION_REGISTRY_VERSIONS):
             raise ModuleRegistryError(f"unsupported registry version: {version!r}")
         resource = files("app.module_registry").joinpath(f"v{version}.json")
         try:
             raw = json.loads(resource.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ModuleRegistryError(f"cannot load module registry v{version}") from exc
+        if not isinstance(raw, Mapping) or raw.get("source_version") != version:
+            raise ModuleRegistryError("registry resource version does not match requested version")
         return cls.from_mapping(raw)
 
     @classmethod
@@ -151,11 +178,9 @@ class ModuleRegistry:
             if binding_raw is not None:
                 if not isinstance(binding_raw, Mapping):
                     raise ModuleRegistryError(f"{field('execution_binding')} must be an object or null")
-                binding = ExecutionBinding(
-                    agent_id=_require_text(binding_raw.get("agent_id"), field("execution_binding.agent_id")),
-                    compatibility=_require_text(binding_raw.get("compatibility"), field("execution_binding.compatibility")),
-                    evidence=_require_text(binding_raw.get("evidence"), field("execution_binding.evidence")),
-                )
+                if set(binding_raw) != {"executor_key", "contract_version", "compatibility", "evidence"}:
+                    raise ModuleRegistryError("execution binding requires exactly executor_key, contract_version, compatibility, evidence")
+                binding = ExecutionBinding(**binding_raw)
             return ModuleDescriptor(
                 module_id=module_id,
                 module_types=module_types,
@@ -176,7 +201,7 @@ class ModuleRegistry:
             raise ModuleRegistryError(f"invalid enum value in modules[{index}]: {exc}") from exc
 
     @staticmethod
-    def _validate_descriptor(descriptor: ModuleDescriptor, expected_ids: frozenset[ModuleId], known_agents: set[str]) -> None:
+    def _validate_descriptor(descriptor: ModuleDescriptor, expected_ids: frozenset[ModuleId]) -> None:
         if not descriptor.module_types:
             raise ModuleRegistryError(f"{descriptor.module_id.value} has no module type")
         if descriptor.module_id in descriptor.handoffs:
@@ -190,10 +215,8 @@ class ModuleRegistry:
         if descriptor.availability_status is ModuleAvailabilityStatus.EXECUTION_BOUND and binding is None:
             raise ModuleRegistryError("execution-bound module requires an execution binding")
         if binding is not None:
-            if binding.compatibility != "exact":
-                raise ModuleRegistryError("execution binding requires exact compatibility")
-            if binding.agent_id not in known_agents:
-                raise ModuleRegistryError(f"execution binding targets unknown agent: {binding.agent_id}")
+            if type(binding) is not ExecutionBinding:
+                raise ModuleRegistryError("execution binding must be ExecutionBinding")
 
     @property
     def version(self) -> str:

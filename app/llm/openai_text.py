@@ -13,6 +13,10 @@ log = logging.getLogger(__name__)
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
+class ModelResponseError(ValueError):
+    """Expected invalid/refused/incomplete provider envelope, with safe text."""
+
+
 def _extract_output_text(data: Dict[str, Any]) -> str:
     """
     Responses API возвращает items в data["output"].
@@ -77,10 +81,16 @@ async def chat(
     max_output_tokens: int | None = None,
     response_format: Dict[str, Any] | None = None,
     task: str | None = None,
+    *,
+    single_attempt: bool = False,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Responses API:
       POST /responses { model, input, max_output_tokens, text: { format: ... } }
+
+    single_attempt is for durable graph execution: one bounded request, no
+    schema fallback or token-budget expansion; JobExecution owns retries.
+    Other callers retain the existing transport policy.
     """
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
@@ -120,13 +130,29 @@ async def chat(
     last_error: Exception | None = None
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(settings.HTTP_RETRIES + 1):
+        for attempt in range(1 if single_attempt else settings.HTTP_RETRIES + 1):
             try:
                 resp = await client.post(url, headers=headers, json=payload)
 
+                if single_attempt:
+                    # Never log provider bodies or silently drop the response schema.
+                    resp.raise_for_status()
+                    try:
+                        data = resp.json()
+                    except ValueError as exc:
+                        raise ModelResponseError("Invalid model response envelope") from exc
+                    if not isinstance(data, dict):
+                        raise ModelResponseError("Invalid model response envelope")
+                    if data.get("status") == "incomplete":
+                        raise ModelResponseError("Incomplete structured model response")
+                    try:
+                        content = _extract_output_text(data)
+                    except (ValueError, AttributeError, TypeError) as exc:
+                        raise ModelResponseError("Invalid or refused model response") from exc
+                    return content, data.get("usage", {}) or {}
+
                 if resp.status_code >= 400:
-                    body = resp.text
-                    log.error("OpenAI responses error status=%s body=%s", resp.status_code, body[:4000])
+                    log.error("OpenAI responses error status=%s", resp.status_code)
 
                     try:
                         err = (resp.json() or {}).get("error", {}) or {}
@@ -176,7 +202,7 @@ async def chat(
                     usage2 = data2.get("usage", {}) or {}
 
                     if not content2:
-                        raise RuntimeError(f"Responses returned no text even after retry: {data2}")
+                        raise RuntimeError("Responses returned no text even after retry")
 
                     return content2, usage2
 
@@ -184,6 +210,8 @@ async def chat(
                 return content.strip(), usage
 
             except httpx.HTTPStatusError as exc:
+                if single_attempt:
+                    raise
                 last_error = exc
                 status = exc.response.status_code if exc.response else None
                 if status not in RETRYABLE_STATUS_CODES:
@@ -193,6 +221,8 @@ async def chat(
                 await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
 
             except (httpx.TimeoutException, httpx.TransportError, ValueError, KeyError, RuntimeError) as exc:
+                if single_attempt:
+                    raise
                 last_error = exc
                 if attempt >= settings.HTTP_RETRIES:
                     break

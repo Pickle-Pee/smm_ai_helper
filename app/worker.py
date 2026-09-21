@@ -1,14 +1,19 @@
 """Run with python -m app.worker. External work never owns a DB transaction."""
 import asyncio
+from contextlib import AsyncExitStack
 import logging
+import signal
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
+from app.db import AsyncSessionLocal
+from app.logging import setup_logging
+from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.workflows.executors import MarketingExecutors, InsufficientSource, InvalidModelOutput
 from app.workflows.presentation import delivery_parts
-from app.workflows.queue import RedisWakeups
+from app.workflows.queue import RedisWakeups, FIXED_WAKEUP_KEY, GRAPH_WAKEUP_KEY
 from app.workflows.service import MarketingWorkflowService
 
 log = logging.getLogger(__name__)
@@ -57,29 +62,57 @@ class MarketingWorker:
         return True
 
 
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    queue = RedisWakeups()
-    service = MarketingWorkflowService(queue=queue)
-    async def lane():
-        worker = MarketingWorker(service, MarketingExecutors())
-        while True:
-            try:
-                if not await worker.once():
-                    hint = await queue.wait()
-                    if hint:
-                        await worker.once(hint)
-            except Exception as exc:
-                # DB outages leave leases durable and recoverable.
-                log.error("Worker loop unavailable error_type=%s", type(exc).__name__)
-                await asyncio.sleep(2)
+async def run_lane(worker, queue, *, lane):
+    """Every iteration scans PostgreSQL before consulting an expendable hint."""
+    while True:
+        try:
+            if not await worker.once():
+                hint = await queue.wait()
+                if hint:
+                    await worker.once(hint)
+        except Exception as exc:
+            # Cancellation is BaseException: leave the active lease recoverable.
+            log.error("Worker loop unavailable lane=%s error_type=%s", lane, type(exc).__name__)
+            await asyncio.sleep(2)
+
+
+async def main(*, sessions=AsyncSessionLocal, queue_factory=RedisWakeups,
+               graph_factory=build_production_graph_runtime, fixed_executor_factory=MarketingExecutors):
+    setup_logging()
+    loop, task = asyncio.get_running_loop(), asyncio.current_task()
+    # Docker sends SIGTERM. TaskGroup cancellation interrupts provider I/O and
+    # closes per-call clients without recording a domain failure on shutdown.
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    handles_sigterm = False
     try:
-        async with asyncio.TaskGroup() as group:
-            for _ in range(settings.WORKER_CONCURRENCY):
-                group.create_task(lane())
+        try:
+            loop.add_signal_handler(signal.SIGTERM, task.cancel)
+            handles_sigterm = True
+        except (NotImplementedError, RuntimeError):
+            pass  # Windows/non-main-thread loops use normal task cancellation.
+        async with AsyncExitStack() as resources:
+            fixed_queue = queue_factory(key=FIXED_WAKEUP_KEY)
+            resources.push_async_callback(fixed_queue.close)
+            graph_queue = queue_factory(key=GRAPH_WAKEUP_KEY)
+            resources.push_async_callback(graph_queue.close)
+            service = MarketingWorkflowService(sessions, queue=fixed_queue)
+            graph = graph_factory(sessions=sessions, queue=graph_queue, fixed_queue_key=fixed_queue.key)
+            log.info("Worker lanes ready fixed=%s graph=%s registry=%s",
+                     settings.WORKER_CONCURRENCY, settings.GRAPH_WORKER_CONCURRENCY, graph.metadata.version)
+            async with asyncio.TaskGroup() as group:
+                for index in range(settings.WORKER_CONCURRENCY):
+                    group.create_task(run_lane(MarketingWorker(service, fixed_executor_factory()),
+                                               fixed_queue, lane=f"fixed-{index}"))
+                for index in range(settings.GRAPH_WORKER_CONCURRENCY):
+                    group.create_task(run_lane(graph.create_worker(), graph_queue, lane=f"graph-{index}"))
     finally:
-        await queue.close()
+        if handles_sigterm:
+            loop.remove_signal_handler(signal.SIGTERM)
+            signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass

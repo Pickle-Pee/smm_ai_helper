@@ -1,0 +1,30 @@
+# CI-only overlay: fake credentials come from CI's isolated .env.
+services:
+  fake-provider:
+    build: .
+    command: python -m tests.release_fake_provider
+    env_file: .env
+    volumes:
+      - ./tests:/app/tests:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/state')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  backend:
+    environment:
+      OPENAI_BASE_URL: http://fake-provider:8090/v1
+    depends_on:
+      fake-provider:
+        condition: service_healthy
+  worker:
+    environment:
+      OPENAI_BASE_URL: http://fake-provider:8090/v1
+      GRAPH_WORKER_CONCURRENCY: 2
+    depends_on:
+      fake-provider:
+        condition: service_healthy
+  bot:
+    command: python -m tests.release_offline_bot
+    volumes:
+      - ./tests:/app/tests:ro

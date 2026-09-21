@@ -3,6 +3,15 @@ import logging
 
 class ContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info:
+            # Framework exception rendering can include SQL parameters, complete
+            # Telegram updates or chained provider envelopes. Keep the type only.
+            record.msg = "Unhandled exception error_type=%s"
+            record.args = (record.exc_info[0].__name__,)
+            record.exc_info = record.exc_text = None
+        elif record.name.startswith(("aiogram", "aiohttp")) and record.levelno >= logging.WARNING:
+            # aiogram's polling errors interpolate str(exc) without exc_info.
+            record.msg, record.args = "Telegram transport/lifecycle warning", ()
         for field in (
             "request_id",
             "user_id",
@@ -17,6 +26,10 @@ class ContextFilter(logging.Filter):
 
 
 def setup_logging() -> None:
+    # Transport INFO/DEBUG includes complete URLs (Telegram embeds its token in
+    # the URL; public source query strings may contain private context).
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     logging.basicConfig(
         level=logging.INFO,
         format=(

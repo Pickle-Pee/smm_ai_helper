@@ -72,6 +72,9 @@ jobs:
       - name: Apply migrations
         run: alembic upgrade head
 
+      - name: Verify schema matches migration head
+        run: alembic check
+
       - name: Run tests
         run: python -m pytest
 
@@ -108,7 +111,12 @@ jobs:
             -e MVP_TEST_DATABASE_URL=postgresql+asyncpg://smm_user:smm_pass@db:5432/smm_mvp_test_container \
             -e REDIS_TEST_URL=redis://redis:6379/15 \
             -v "$PWD/tests:/app/tests:ro" \
-            backend python -m pytest -q --tb=short tests/test_marketing_mvp_postgresql.py tests/test_workflow_provider_protocols.py tests/test_workflow_redis.py
+            backend python -m pytest -q --tb=short \
+              tests/test_marketing_mvp_postgresql.py tests/test_workflow_provider_protocols.py tests/test_workflow_redis.py \
+              tests/test_production_graph_worker.py tests/test_graph_model_adapter.py tests/test_production_worker_postgresql.py \
+              tests/test_copilot_api.py tests/test_copilot_api_postgresql.py \
+              tests/test_telegram_copilot.py tests/test_telegram_copilot_postgresql.py \
+              tests/test_release_hardening_postgresql.py tests/test_release_telegram.py tests/test_release_operations.py
 
       - name: Verify persistence after app container recreation
         run: |
@@ -116,9 +124,15 @@ jobs:
           docker compose up --no-build --no-deps --force-recreate --wait --wait-timeout 60 -d backend worker
           python scripts/check_container_persistence.py verify
 
+      - name: Verify both worker lane families, Redis recovery and graceful shutdown
+        run: python scripts/check_worker_lanes.py
+
+      - name: Recover an active Copilot graph after real container SIGTERM and restart
+        run: python scripts/check_copilot_release.py
+
       - name: Service diagnostics
         if: failure()
-        run: docker compose logs --no-color --tail=100 db redis migrate backend worker
+        run: docker compose -f docker-compose.yaml -f tests/compose.release.yaml logs --no-color --tail=100 db redis migrate backend worker bot fake-provider
 
       - name: Remove the disposable CI project
         if: always()
