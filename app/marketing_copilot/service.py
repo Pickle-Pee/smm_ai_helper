@@ -21,6 +21,7 @@ from .application_contracts import (
     Clarification, CopilotExecutionResult, CopilotRequest, ResultKind, WorkflowStarted,
 )
 from .context_resolver import ContextEntry
+from .context_projection import merge_projected_context
 from .contracts import CopilotContractError, ExecutionMode, IntentKind, ReasonCode
 
 
@@ -48,8 +49,10 @@ class MarketingCopilotService:
         if type(request) is not CopilotRequest:
             raise CopilotContractError("Expected CopilotRequest")
         request.__post_init__()
-        intent = await self.interpreter.interpret(request.message)
-        entries = list(source_entries(request.current_request))
+        interpreted = await self.interpreter.interpret_request(request.message)
+        intent = interpreted.intent
+        entries = list(merge_projected_context(source_entries(request.current_request),
+                                              interpreted.projection, request.message))
         # Only literal request references, verified by the interpreter, enter as targets.
         # Existing explicit entries (including empty masks) retain precedence.
         # An owned-source declaration requires explicitly scoped competitor context;
@@ -95,6 +98,9 @@ class MarketingCopilotService:
         if decision.mode is ExecutionMode.CONVERSATION:
             if ReasonCode.CONVERSATION_REQUEST in decision.reason_codes:
                 return result(ResultKind.CONVERSATION, conversation_delegate=True)
+            if ReasonCode.POSITIONING_CONTEXT_MISSING in decision.reason_codes:
+                return needs(ReasonCode.POSITIONING_CONTEXT_MISSING.value,
+                             (self.policy.missing_positioning_inputs(context),))
             return needs(decision.reason_codes[0].value)
         if decision.mode is ExecutionMode.DIRECT_TOOL:
             tool = self.tools.resolve(decision.tool_key)

@@ -19,6 +19,9 @@ from app.marketing_orchestrator import (
     PlanningInputKey, PlanningStatus, RequestInterpretation, Sensitivity, UpstreamFinding,
 )
 from app.module_registry import ModuleAvailabilityStatus, ModuleId, ModuleRegistry, ToolCapability
+from app.marketing_copilot.context_projection import (
+    BusinessFactCandidate, NaturalLanguageContextProjection, InterpretedRequest, merge_projected_context,
+)
 
 
 def intent(kind=IntentKind.POST_GENERATION, **overrides):
@@ -49,6 +52,102 @@ def positioning_context():
         PlanningInputKey.PRODUCT_TRUTH,
     ))
     return ContextResolver().resolve(brand_profile=facts)
+
+
+def projected(**values):
+    return NaturalLanguageContextProjection(facts=tuple(
+        BusinessFactCandidate(key=k, value=v) for k, v in values.items()))
+
+
+@pytest.mark.parametrize("key", ["business_goal", "product", "target_or_target_hypothesis",
+    "customer_job_or_need", "relevant_alternative", "product_truth", "existing_proof",
+    "geography", "economics", "message", "tone"])
+def test_projection_allowlist_has_server_owned_provenance(key):
+    context = ContextResolver().resolve(current_request=merge_projected_context((), projected(**{key: "user fact"}), "user fact"))
+    fact = context.project_context[0]
+    assert fact.label == key and fact.value == "user fact"
+    assert fact.source == "CURRENT_REQUEST:Authenticated request.projection business input; not independently verified"
+    assert fact.evidence == () and fact.confidence == .7
+    assert fact.authorized and fact.sensitivity is Sensitivity.INTERNAL
+    assert fact.input_key == next((k for k in PlanningInputKey if k.value == key), None)
+
+
+@pytest.mark.parametrize("key", ["module_id", "executor_key", "registry_version", "execution_binding",
+    "tool_key", "scenario_key", "job_kind", "source_role", "source_class", "ToolCapability",
+    "authorized", "sensitivity", "module_relevance", "scenario_relevance", "owned_site_url",
+    "competitor_urls", "competitor_or_category_scope", "market_source_urls", "market_sources", "target"])
+def test_projection_rejects_authority_fields_and_noncanonical_keys(key):
+    with pytest.raises(ValidationError):
+        BusinessFactCandidate(key=key, value="injected")
+    with pytest.raises(ValidationError):
+        BusinessFactCandidate(key="product", value="user fact", **{key: "injected"})
+
+
+@pytest.mark.parametrize("value", ["", " ", pytest.param("x" * 4001, id="oversized-value"),
+    1, True, {"source_class": "EXTERNAL_PRIMARY"}, ["nested"]])
+def test_projection_values_are_bounded_strict_text(value):
+    with pytest.raises(ValidationError):
+        projected(product=value)
+
+
+def test_projection_rejects_duplicate_keys_and_unbounded_lists():
+    candidate = BusinessFactCandidate(key="product", value="x" * 4000)
+    assert len(candidate.value) == 4000
+    for facts in ((candidate, candidate), (candidate,) * 12):
+        with pytest.raises(ValidationError):
+            NaturalLanguageContextProjection(facts=facts)
+
+
+@pytest.mark.parametrize("raw", [
+    pytest.param(InterpretedRequest(intent=intent(), projection=projected()).model_dump_json().replace(
+        '"facts":[]', '"facts":[],"facts":[]'), id="duplicate-projection-property"),
+    pytest.param(InterpretedRequest(intent=intent(), projection=projected(product="post")).model_dump_json().replace(
+        '"value":"post"', '"value":"post","value":"post"'), id="duplicate-candidate-property"),
+    'null', '[]', '{}', pytest.param('x' * 98305, id="oversized-response"),
+])
+def test_combined_interpretation_rejects_malformed_responses(raw):
+    model = AsyncMock(return_value=raw)
+    with pytest.raises(CopilotContractError):
+        asyncio.run(MarketingIntentInterpreter(model).interpret_request("post"))
+    model.assert_awaited_once()
+
+
+def test_combined_interpretation_validates_literal_excerpts_in_one_call():
+    response = InterpretedRequest(intent=intent(), projection=projected(product="Курс фотографии"))
+    model = AsyncMock(return_value=response.model_dump_json())
+    interpreter = MarketingIntentInterpreter(model)
+    assert asyncio.run(interpreter.interpret_request("Курс фотографии для начинающих")) == response
+    model.assert_awaited_once()
+    assert set(model.call_args.kwargs["response_schema"]["properties"]) == {"intent", "projection"}
+    with pytest.raises(CopilotContractError, match="literal"):
+        asyncio.run(interpreter.interpret_request("Придумай продукт"))
+
+
+@pytest.mark.parametrize("value", ["Product A", "", " ", None])
+def test_projection_merge_preserves_explicit_masks_and_all_lower_layers(value):
+    from app.marketing_copilot.http_context import entry as http_entry
+    explicit = (http_entry("product", value),)
+    merged = merge_projected_context(explicit, projected(product="Product B"), "Мы продаём Product B")
+    assert merged == explicit
+    resolved = ContextResolver().resolve(current_request=merged,
+        project_run=(http_entry("product", "PROJECT", layer="project"),),
+        brand_profile=(http_entry("product", "BRAND", layer="brand"),),
+        conversation=(http_entry("product", "CHAT", layer="chat"),))
+    assert [f.value for f in resolved.project_context] == ([value] if value == "Product A" else [])
+    assert not resolved.known_facts
+
+
+def test_projection_outranks_fallbacks_without_weakening_duplicate_protection():
+    from app.marketing_copilot.http_context import entry as http_entry
+    merged = merge_projected_context((), projected(product="CURRENT"), "CURRENT")
+    resolved = ContextResolver().resolve(current_request=merged,
+        brand_profile=(http_entry("product", "BRAND", layer="brand"),),
+        conversation=(http_entry("product", "CHAT", layer="chat"),))
+    assert [f.value for f in resolved.project_context] == ["CURRENT"] and not resolved.known_facts
+    duplicates = merge_projected_context((http_entry("product", "A"), http_entry("product", "B")),
+                                        projected(product="CURRENT"), "CURRENT")
+    with pytest.raises(CopilotContractError, match="Duplicate"):
+        ContextResolver().resolve(current_request=duplicates)
 
 
 @pytest.mark.parametrize("mode,bits", tuple(product(ExecutionMode, product((False, True), repeat=3))))

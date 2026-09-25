@@ -71,3 +71,9 @@ class PublicIntentInterpreter:
         except CopilotContractError as exc:
             # Here this is invalid provider intent, not a downstream application bug.
             raise ProviderUnavailable() from exc
+
+    async def interpret_request(self, text):
+        try:
+            return await self.interpreter.interpret_request(text)
+        except CopilotContractError as exc:
+            raise ProviderUnavailable() from exc
