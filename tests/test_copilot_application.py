@@ -22,9 +22,10 @@ from tests.test_module_executors import FakeModel, analyzer, facts_for_module
 from tests.graph_fakes import source_plan
 
 
-def intent_model(kind, urls=(), **kwargs):
-    return AsyncMock(return_value=intent(kind, provided_urls=urls,
-        deterministic_calculation_required=kind is IntentKind.LEAD_FUNNEL_CALCULATION, **kwargs).model_dump_json())
+def intent_model(kind, urls=(), *, facts=None, **kwargs):
+    return AsyncMock(return_value=json.dumps({"intent": intent(kind, provided_urls=urls,
+        deterministic_calculation_required=kind is IntentKind.LEAD_FUNNEL_CALCULATION, **kwargs).model_dump(mode="json"),
+        "projection": {"facts": [{"key": k, "value": v} for k, v in (facts or {}).items()]}}))
 
 
 def entries(module):
@@ -39,6 +40,94 @@ def service(kind, *, urls=(), model=None, site=None, **kwargs):
 
 def run(svc, message="Напиши пост...", **kwargs):
     return asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="request-1", message=message, **kwargs)))
+
+
+CREATOR_MESSAGE = ("Напиши короткий пост для Telegram для онлайн-курса фотографии для начинающих фотографов. "
+    "Цель — получить заявки на курс. Тон дружелюбный, без канцелярита. Нужны заголовок, основной текст и CTA.")
+CREATOR_FACTS = dict(product="онлайн-курса фотографии", target_or_target_hypothesis="начинающих фотографов",
+    business_goal="получить заявки на курс", tone="дружелюбный, без канцелярита",
+    message="Напиши короткий пост для Telegram для онлайн-курса фотографии для начинающих фотографов.")
+POSITIONING_MESSAGE = ("Помоги сформулировать позиционирование онлайн-курса фотографии для начинающих. "
+    "Аудитория — люди, которые только купили камеру или снимают на телефон и хотят перестать фотографировать наугад. "
+    "Их задача — понять основы композиции, света и настроек и начать получать предсказуемо хорошие кадры. "
+    "Сейчас они используют бесплатные ролики на YouTube и разрозненные статьи. "
+    "Наш курс последовательно объясняет базу и даёт практические задания с обратной связью.")
+POSITIONING_FACTS = dict(product="онлайн-курса фотографии",
+    target_or_target_hypothesis="люди, которые только купили камеру или снимают на телефон и хотят перестать фотографировать наугад",
+    customer_job_or_need="понять основы композиции, света и настроек и начать получать предсказуемо хорошие кадры",
+    relevant_alternative="бесплатные ролики на YouTube и разрозненные статьи",
+    product_truth="Наш курс последовательно объясняет базу и даёт практические задания с обратной связью.")
+
+
+@pytest.mark.parametrize("kind,message,facts,module", [
+    (IntentKind.POST_GENERATION, CREATOR_MESSAGE, CREATOR_FACTS, ModuleId.CREATOR),
+    (IntentKind.POSITIONING, POSITIONING_MESSAGE, POSITIONING_FACTS, ModuleId.POSITIONING),
+])
+def test_natural_request_reaches_real_executor_and_quality_gates(kind, message, facts, module):
+    from app.marketing_copilot.api_contracts import ExecuteRequest
+    from app.marketing_copilot.http_context import current_entries
+    model = FakeModel()
+    ingress = intent_model(kind, facts=facts)
+    svc = build_marketing_copilot_service(intent_model=ingress, module_model=model)
+    payload = ExecuteRequest(request_key="natural", message=message)
+    output = run(svc, message, current_request=current_entries(payload))
+    assert output.kind is ResultKind.MODULE_RESULT and output.module_result.module_id is module
+    ingress.assert_awaited_once()
+    sent = json.loads(model.calls[0]["text"])
+    actual = {f["label"]: f for f in sent["context"]["known_facts"]}
+    for key, value in facts.items():
+        assert actual[key]["value"] == value
+        assert "CURRENT_REQUEST:" in actual[key]["source"]
+        assert "not independently verified" in actual[key]["source"]
+    assert {e["source_class"] for e in sent["local_evidence"]} == {"FIRST_PARTY"}
+
+
+def test_strategy_natural_request_reaches_real_compile_and_start_without_module_generation():
+    facts = {**POSITIONING_FACTS, "business_goal": "получить заявки на курс"}
+    message = "Разработай стратегию. Цель — получить заявки на курс. " + POSITIONING_MESSAGE
+    model = FakeModel()
+    svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY, facts=facts),
+        module_model=model, registry_version="1.2.0")
+    svc.graph_service = SimpleNamespace(start_compiled_run=AsyncMock())
+    output = run(svc, message)
+    assert output.kind is ResultKind.WORKFLOW_STARTED
+    svc.graph_service.start_compiled_run.assert_awaited_once()
+    compiled = svc.graph_service.start_compiled_run.call_args.kwargs["plan"]
+    assert compiled.scenario_key == "strategy_builder_v1" and compiled.registry_version == "1.2.0"
+    assert [n.module_id for n in compiled.nodes] == [ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS]
+    packet = compiled.nodes[0].context_packet
+    assert {f.label: f.value for f in (*packet.known_facts, *packet.relevant_project_context)}.items() >= facts.items()
+    assert not model.calls
+
+
+def test_missing_positioning_facts_stay_missing_and_prose_rewrite_completes_them():
+    from app.marketing_copilot.http_context import entry
+    model = FakeModel()
+    svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.POSITIONING), module_model=model)
+    missing = run(svc, "Сделай позиционирование моего продукта")
+    assert missing.kind is ResultKind.NEEDS_INPUT
+    assert set(missing.clarification.alternatives[0]) == set(POSITIONING_FACTS)
+    first = {k: v for k, v in POSITIONING_FACTS.items() if k != "product_truth"}
+    first_message = POSITIONING_MESSAGE[:POSITIONING_MESSAGE.index("Наш курс")]
+    svc.interpreter._model_call = intent_model(IntentKind.POSITIONING, facts=first)
+    missing = run(svc, first_message)
+    assert missing.clarification.alternatives == (("product_truth",),)
+    assert not model.calls
+    # The existing Telegram field-answer path supplies the prose as explicit context.
+    completed = run(svc, first_message, current_request=(entry("product_truth", POSITIONING_FACTS["product_truth"]),))
+    assert completed.kind is ResultKind.MODULE_RESULT
+    # A self-contained rewrite also fills the gap entirely via natural language.
+    svc.interpreter._model_call = intent_model(IntentKind.POSITIONING, facts=POSITIONING_FACTS)
+    assert run(svc, POSITIONING_MESSAGE).kind is ResultKind.MODULE_RESULT
+
+
+def test_projection_logs_only_field_names_and_counts(caplog):
+    from app.marketing_copilot.context_projection import merge_projected_context
+    from tests.test_marketing_copilot import projected
+    with caplog.at_level("INFO", logger="app.marketing_copilot.context_projection"):
+        merge_projected_context((), projected(product="PRIVATE BUSINESS VALUE"), "PRIVATE BUSINESS VALUE")
+    assert "count=1" in caplog.text and "product" in caplog.text
+    assert "PRIVATE" not in caplog.text
 
 
 def test_direct_vertical_never_dispatches_or_starts_work():

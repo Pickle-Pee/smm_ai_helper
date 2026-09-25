@@ -24,6 +24,17 @@ class ExecutionPolicy:
     def __init__(self, registry: ModuleRegistry | None = None):
         self._registry = registry or ModuleRegistry.load()
 
+    @staticmethod
+    def missing_positioning_inputs(context):
+        keys = {
+            fact.input_key for fact in (*context.project_context, *context.known_facts)
+            if fact.authorized and has_value(fact.value) and (
+                ModuleId.POSITIONING in fact.module_relevance
+                or "explicit_single_module_v1" in fact.scenario_relevance
+            )
+        }
+        return tuple(sorted(key.value for key in _POSITIONING_KEYS - keys))
+
     def decide(self, intent: MarketingIntent, context: PlanningContext) -> ExecutionDecision:
         if type(intent) is not MarketingIntent or type(context) is not PlanningContext:
             raise CopilotContractError("Policy requires MarketingIntent and resolved PlanningContext")
@@ -60,14 +71,7 @@ class ExecutionPolicy:
         if intent.kind is IntentKind.POSITIONING:
             if intent.external_evidence_required:
                 return conversation(ReasonCode.EXTERNAL_EVIDENCE_REQUIRED)
-            keys = {
-                fact.input_key for fact in (*context.project_context, *context.known_facts)
-                if fact.authorized and has_value(fact.value) and (
-                    ModuleId.POSITIONING in fact.module_relevance
-                    or "explicit_single_module_v1" in fact.scenario_relevance
-                )
-            }
-            if not _POSITIONING_KEYS <= keys:
+            if self.missing_positioning_inputs(context):
                 return conversation(ReasonCode.POSITIONING_CONTEXT_MISSING)
             return decision(ExecutionMode.SINGLE_MODULE, ReasonCode.POSITIONING_CONTEXT_SUFFICIENT,
                             module_id=self._registry.get(ModuleId.POSITIONING).module_id)

@@ -17,7 +17,7 @@ No ORM entity, FastAPI Request or Telegram object crosses this boundary.
 
 The caller authorizes the actor, each fact, project/run and artifact reference, and
 SITE_FETCH capability. There is no persistence-backed context retrieval here.
-`ContextResolver` preserves explicit request > project/run > BrandProfile > conversation,
+`ContextResolver` preserves current request > owned-site > project/run > BrandProfile > conversation,
 including explicit empty masks. The legacy executor `competitor_url` slot is canonicalized
 to `competitor_or_category_scope` before resolving precedence, so an old profile URL
 cannot override a literal current URL. Duplicate aliases fail closed. The interpreter
@@ -26,8 +26,56 @@ fetch-target fact; it is never represented as collected evidence.
 
 Artifacts stay upstream findings scoped by existing planner dependency rules. There is
 no broad user-artifact retrieval, reference hydration, or automatic attachment of saved
-results to synchronous modules. Callers must supply relevant business facts for this
-first fast path; simply naming a saved artifact does not supply its facts or claims.
+results to synchronous modules. Business facts may be supplied explicitly or in the
+current natural-language message; simply naming a saved artifact does not supply its facts or claims.
+
+### Natural-language current-request projection (#76 / #74)
+
+The application uses `MarketingIntentInterpreter.interpret_request()` for one
+structured provider call returning `InterpretedRequest`: separate `MarketingIntent`
+and `NaturalLanguageContextProjection` objects. The standalone semantic-only
+`interpret()` capability remains available. Intent stays non-executable; neither
+object can set execution bindings, permissions, source roles or registry versions.
+
+The projection contains at most 11 unique canonical keys: `business_goal`, `product`,
+`target_or_target_hypothesis`, `customer_job_or_need`, `relevant_alternative`,
+`product_truth`, `existing_proof`, `geography`, `economics`, `message`, `tone`.
+Each value is a nonblank string of at most 4000 characters and must occur verbatim
+in the current message. Unknown properties, duplicate JSON properties, duplicate
+semantic keys, non-string values and invented excerpts fail closed. No repair or
+second extraction call is made. The public provider adapter maps invalid combined
+output to the existing provider-unavailable response.
+
+`message -> bounded candidates -> server validation -> AuthorizedContextFact ->
+merge with explicit context -> ContextResolver -> policy/planner/executor`.
+Conversion reuses the existing server-owned HTTP business-fact mapping, including
+module/scenario relevance, internal sensitivity and conservative confidence.
+Projected facts have `CURRENT_REQUEST:Authenticated request.projection business
+input; not independently verified` provenance. Executors retain FIRST_PARTY evidence
+classification. This is permission to consume user assertions, not independent
+verification of product truth or proof.
+
+Explicit current entries (including empty/null masks and confirmed owned-site
+product truth) win before resolver entry. Duplicates already present in explicit
+context remain errors. Projection wins over lower layers without altering resolver
+precedence. The projection schema has no URL-role fields; existing public source
+mapping and the internal legacy literal-competitor URL behavior are unchanged.
+Owned-site observations are never sent to this extraction call and still require
+explicit confirmation before becoming product truth.
+
+Extraction instructions require direct business assertions and omit missing facts,
+third-party/site claims, examples and hypothetical claims. Literal grounding prevents
+model-invented values; semantic classification of an excerpt still depends on the
+model and is not an independent fact check. A supplied post topic can populate
+`message` without inventing a value proposition. Positioning clarification lists the
+actual missing typed inputs. The existing Telegram field-answer path and a complete
+prose rewrite can fill those gaps without FSM changes or persistence of projections.
+Logs contain only merged field names/counts, never values, messages or raw responses.
+
+Regression tests use deterministic structured-provider doubles with real resolver,
+planner, compiler, module executors and Quality Gates. Strategy tests stop at graph
+start under a fake durable service. They do not test live model extraction accuracy
+or fix Positioning's separate live-output bug #77 or classification bug #78.
 
 `CopilotExecutionResult` validates the exact kind/payload and decision-mode match:
 
