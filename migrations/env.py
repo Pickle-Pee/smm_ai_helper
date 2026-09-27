@@ -17,9 +17,13 @@ target_metadata = Base.metadata
 
 
 def _sync_database_url(url: str) -> str:
-    """Convert SQLAlchemy asyncpg URL into a sync URL Alembic can use."""
+    """Convert SQLAlchemy async PostgreSQL URL into the sync Alembic driver."""
     if url.startswith("postgresql+asyncpg://"):
-        return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return url.replace(
+            "postgresql+asyncpg://",
+            "postgresql+psycopg://",
+            1,
+        )
     return url
 
 
