@@ -189,7 +189,7 @@ def test_strategy_http_real_stores_fake_transport_worker_and_readonly_polling(mv
             calls.append(value)
             text = value["input"][1]["content"]
             schema = value["text"]["format"]["schema"]
-            if "kind" in schema["properties"]:
+            if "intent" in schema["properties"]:
                 output = await intent_model(IntentKind.MARKETING_STRATEGY)()
                 assert set(schema["required"]) == set(schema["properties"])
             else:
