@@ -18,7 +18,12 @@ class PositioningExecutor(BaseExecutor):
 value proposition, differentiation, RTB, positioning, USP directions, offer and
 message hierarchy as requested. Ground product promises and RTB in supplied product
 truth/proof; a positioning statement is not a slogan. Never invent uniqueness or
-customer quotes. Differentiation is a hypothesis to validate. Cite materially used
+customer quotes. For differentiation, points_of_difference and USP_directions,
+kind must always be HYPOTHESIS, including when based on supplied product truth.
+For RTB, value_proposition, positioning_statement and offer, evidence_ids must
+include at least one supplied local_evidence ID whose input_key is product_truth
+or existing_proof. Parent claims alone do not satisfy this requirement. Never
+invent evidence IDs. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 

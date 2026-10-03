@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 import hashlib
 import json
+import logging
 from typing import Any, Protocol
 
 from pydantic import ValidationError
@@ -24,8 +25,27 @@ from app.services.expert_instruction_composer import ExpertInstructionComposer
 from .schemas import OutputBase
 
 
+log = logging.getLogger(__name__)
+
+
+class OutputFailureStage(str, Enum):
+    JSON_INVALID = "json_invalid"
+    SCHEMA_INVALID = "schema_invalid"
+    OUTPUT_COVERAGE_INVALID = "output_coverage_invalid"
+    SUPPORT_IDENTITY_INVALID = "support_identity_invalid"
+    EVIDENCE_REFERENCE_INVALID = "evidence_reference_invalid"
+    PARENT_REFERENCE_INVALID = "parent_reference_invalid"
+    SUPPORT_MISSING = "support_missing"
+    STATEMENT_SEMANTICS_INVALID = "statement_semantics_invalid"
+    RESULT_CONTRACT_INVALID = "result_contract_invalid"
+
+
 class ExecutorOutputError(ValueError):
     """The provider returned an invalid structured module output (never retried)."""
+
+    def __init__(self, message="Invalid structured module output", *, stage=OutputFailureStage.RESULT_CONTRACT_INVALID):
+        super().__init__(message)
+        self.stage = OutputFailureStage(stage)
 
 
 class ModuleModelCall(Protocol):
@@ -210,18 +230,27 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                                      text=json.dumps(data, ensure_ascii=False),
                                      response_schema=self.output_type.model_json_schema())
         # Provider exceptions occur above this boundary and propagate unchanged.
+        stage = OutputFailureStage.JSON_INVALID
         try:
             if type(raw) is not str or len(raw) > 131072:
                 raise ValueError("Expected bounded JSON text")
             json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+            stage = OutputFailureStage.SCHEMA_INVALID
             output = self.output_type.model_validate_json(raw)
+            stage = OutputFailureStage.RESULT_CONTRACT_INVALID
             return self.build_result(request, output, evidence, parents)
         except (ValueError, TypeError, RecursionError, UnicodeError, ValidationError) as exc:
-            raise ExecutorOutputError("Invalid structured module output") from exc
+            if isinstance(exc, ExecutorOutputError):
+                stage = exc.stage
+            log.warning("Module output rejected module=%s stage=%s", self.module_id.value, stage.value)
+            # Validation exceptions may contain model text. Expose only a bounded
+            # stage and suppress their traceback in callers that log exceptions.
+            raise ExecutorOutputError(stage=stage) from None
 
     def build_result(self, request, output, evidence, parents):
-        if {o.output_name for o in output.outputs} != set(request.expected_outputs):
-            raise ValueError("Requested output coverage mismatch")
+        if (len(output.outputs) != len(request.expected_outputs)
+                or {o.output_name for o in output.outputs} != set(request.expected_outputs)):
+            raise ExecutorOutputError(stage=OutputFailureStage.OUTPUT_COVERAGE_INVALID)
         local = {e.record.evidence_id: e for e in evidence}
         rid = stable_id("res", request)
         assumptions = tuple(AssumptionRecord(stable_id("asm", request, str(i)), text, Materiality.MATERIAL)
@@ -233,12 +262,17 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
         claims = []
         for i, statement in enumerate(output.outputs):
             if len(set(statement.evidence_ids)) != len(statement.evidence_ids) or len(set(statement.parent_claim_ids)) != len(statement.parent_claim_ids):
-                raise ValueError("Duplicate support identity")
-            if not set(statement.evidence_ids) <= local.keys() or not set(statement.parent_claim_ids) <= parents.keys():
-                raise ValueError("Unknown evidence or parent identity")
+                raise ExecutorOutputError(stage=OutputFailureStage.SUPPORT_IDENTITY_INVALID)
+            if not set(statement.evidence_ids) <= local.keys():
+                raise ExecutorOutputError(stage=OutputFailureStage.EVIDENCE_REFERENCE_INVALID)
+            if not set(statement.parent_claim_ids) <= parents.keys():
+                raise ExecutorOutputError(stage=OutputFailureStage.PARENT_REFERENCE_INVALID)
             if not statement.evidence_ids and not statement.parent_claim_ids:
-                raise ValueError("Each output needs material support")
-            self.validate_statement(statement, local, parents)
+                raise ExecutorOutputError(stage=OutputFailureStage.SUPPORT_MISSING)
+            try:
+                self.validate_statement(statement, local, parents)
+            except (ValueError, TypeError):
+                raise ExecutorOutputError(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID) from None
             supports = [local[eid].confidence for eid in statement.evidence_ids]
             supports.extend(parents[pid].confidence for pid in statement.parent_claim_ids)
             # Hypotheses and recommendations never become high-confidence facts.
