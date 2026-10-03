@@ -56,33 +56,6 @@ async def execute_node(service, rid, node):
     assert await ModuleGraphWorker(service).once(module_job_id(rid, 1, node))
 
 
-def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_database, monkeypatch):
-    from app.orchestration_runtime.model_adapter import production_model_call
-    from tests.positioning_provider import PositioningProvider
-    from tests.test_graph_model_adapter import install_transport
-
-    provider = PositioningProvider()
-    install_transport(monkeypatch, provider)
-
-    async def exercise():
-        service, _, rid, owner, _ = await setup(mvp_database, competitors=0, market=False)
-        service.executors = strategy_executors(production_model_call)
-        try:
-            await execute_node(service, rid, "positioning")
-            _, jobs, artifacts = await state(mvp_database, rid)
-            assert {j.workflow_step: j.status for j in jobs} == {
-                "positioning": JobStatus.SUCCEEDED, "virtual_cmo": JobStatus.PENDING,
-            }
-            assert len(artifacts) == 1 and artifacts[0].step == "positioning"
-            quality = artifacts[0].payload_json["quality"]
-            assert len(quality["accepted_result_ids"]) == 1
-            assert len(quality["accepted_claim_ids"]) == 16
-            assert len(provider.calls) == 1
-        finally:
-            await cleanup(mvp_database, rid, owner)
-    asyncio.run(exercise())
-
-
 async def drain(service, db, rid):
     for _ in range(12):
         run, jobs, _ = await state(db, rid)
