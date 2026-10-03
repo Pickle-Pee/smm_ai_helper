@@ -155,6 +155,34 @@ def test_malformed_provider_envelopes_are_expected_safe_failures(monkeypatch, en
     assert len(calls) == 1 and all(c.is_closed for c in clients)
 
 
+def test_natural_ruble_lead_http_request_returns_calculation(monkeypatch):
+    from tests.test_copilot_application import intent_model
+    from app.marketing_copilot.contracts import IntentKind
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    model = FakeModel()
+    ingress = intent_model(IntentKind.LEAD_FUNNEL_CALCULATION)
+    api = build_production_copilot_api(intent_model=ingress, module_model=model, analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+            response = await client.post("/copilot/execute", headers=headers(), json={
+                "request_key": "natural-ruble-leads",
+                "message": "Рассчитай количество лидов при бюджете 10000 ₽ и CPL 500 ₽"})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["kind"] == "DIRECT_RESULT"
+        calculation = body["calculation"]
+        assert calculation["calculation_type"] == "leads"
+        assert calculation["formula"] == "budget/cpl"
+        assert calculation["inputs"]["budget"] == "10000"
+        assert calculation["inputs"]["cpl"] == "500"
+        assert calculation["outputs"]["leads"] == "20"
+    asyncio.run(check())
+    ingress.assert_awaited_once()
+    assert not model.calls
+    api.queue.wake.assert_not_awaited()
+
+
 @pytest.mark.parametrize("context,expected", [({}, "онлайн-курса фотографии"),
     ({"product": "Product A"}, "Product A"), ({"product": ""}, None), ({"product": None}, None)])
 def test_natural_creator_http_request_and_explicit_precedence(monkeypatch, context, expected):

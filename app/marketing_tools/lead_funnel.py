@@ -99,14 +99,20 @@ class LeadFunnelCalculator:
 
         No partial regex extraction that might silently truncate ranges or units.
         """
-        number = r"([0-9]+(?:[.,][0-9]+)?)"
+        # Normalize ordinary spaces only; tabs, newlines and hidden whitespace
+        # remain in the message and therefore cannot match this grammar.
+        message = re.sub(r" +", " ", message.strip(" "))
+        number = r"((?:[0-9]{1,3}(?: [0-9]{3})+|[0-9]+)(?:[.,][0-9]+)?)"
+        monetary = rf"{number}(?: ?(?:₽|руб\.?|рублей))?"
+        lead_request = r"рассчитай (?:лиды|количество лидов|сколько лидов)"
         patterns = (
-            (rf"рассчитай лиды при бюджете {number}, cpc {number} и конверсии {number}%", ("budget", "cpc", "conversion_rate_percent")),
-            (rf"рассчитай лиды при бюджете {number} и cpl {number}", ("budget", "cpl")),
-            (rf"рассчитай лиды при трафике {number} и конверсии {number}%", ("traffic", "conversion_rate_percent")),
+            (rf"{lead_request} при бюджете {monetary}, cpc {monetary} и конверсии {number}%", ("budget", "cpc", "conversion_rate_percent")),
+            (rf"{lead_request} при бюджете {monetary} и cpl {monetary}", ("budget", "cpl")),
+            (rf"{lead_request} при трафике {number} и конверсии {number}%", ("traffic", "conversion_rate_percent")),
         )
         for pattern, keys in patterns:
-            match = re.fullmatch(pattern, message.strip(), re.IGNORECASE)
+            match = re.fullmatch(pattern, message, re.IGNORECASE)
             if match:
-                return FunnelInput(**{key: Decimal(value.replace(",", ".")) for key, value in zip(keys, match.groups())})
+                return FunnelInput(**{key: Decimal(value.replace(" ", "").replace(",", "."))
+                                      for key, value in zip(keys, match.groups())})
         raise ToolInputNeeded(FunnelTarget.LEADS, "explicit_parameters_required")
