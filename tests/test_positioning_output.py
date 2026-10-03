@@ -3,7 +3,7 @@ import asyncio
 import json
 import traceback
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -28,6 +28,23 @@ from tests.test_copilot_application import (
     entries, intent_model, run, POSITIONING_MESSAGE, POSITIONING_FACTS,
 )
 from tests.test_strategy_builder import strategy_compiled, strategy_executors
+
+
+@pytest.fixture(params=[False, True], ids=["logger-enabled", "logger-disabled"])
+def rejection_log(monkeypatch, request):
+    from app.module_execution.executors.common import log
+
+    # Alembic fileConfig disables existing loggers in migration tests. Observe
+    # the executor's logging contract even after that global reconfiguration.
+    monkeypatch.setattr(log, "disabled", request.param)
+    warning = Mock()
+    monkeypatch.setattr(log, "warning", warning)
+    return warning
+
+
+def assert_safe_rejection_log(warning, stage):
+    warning.assert_called_once_with(
+        "Module output rejected module=%s stage=%s", "POSITIONING", stage)
 
 
 def test_minimal_live_failure_class_is_structurally_excluded():
@@ -123,7 +140,7 @@ def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):
     (lambda p,d: p["outputs"][0].update(parent_claim_ids=["clm_unknown", "clm_unknown"]), "support_identity_invalid"),
     (lambda p,d: next(s for s in p["outputs"] if s["output_name"] == "USP_directions").update(kind="RECOMMENDATION"), "schema_invalid"),
 ])
-def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, caplog, mutation, stage):
+def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, rejection_log, mutation, stage):
     provider = PositioningProvider(mutation)
     install_transport(monkeypatch, provider)
     with pytest.raises(ExecutorOutputError) as caught:
@@ -131,8 +148,8 @@ def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, caplog, muta
     assert caught.value.stage.value == stage
     assert not transient(caught.value)
     assert len(provider.calls) == 1
-    assert f"module=POSITIONING stage={stage}" in caplog.text
-    assert "PRIVATE_SENTINEL" not in caplog.text + "".join(traceback.format_exception(caught.value))
+    assert_safe_rejection_log(rejection_log, stage)
+    assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))
 
 
 @pytest.mark.parametrize("name", ["RTB", "value_proposition", "positioning_statement", "offer"])
@@ -152,14 +169,15 @@ def test_product_claim_support_remains_required(name, input_key, valid):
 
 
 @pytest.mark.parametrize("raw,stage", [("not JSON PRIVATE_SENTINEL", "json_invalid"), ("{}", "schema_invalid")])
-def test_parse_diagnostics_are_safe(raw, stage, caplog):
+def test_parse_diagnostics_are_safe(raw, stage, rejection_log):
     with pytest.raises(ExecutorOutputError) as caught:
         dispatch(request(ModuleId.POSITIONING), AsyncMock(return_value=raw))
     assert caught.value.stage.value == stage
-    assert "PRIVATE_SENTINEL" not in caplog.text + "".join(traceback.format_exception(caught.value))
+    assert_safe_rejection_log(rejection_log, stage)
+    assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))
 
 
-def test_result_construction_diagnostics_are_safe(monkeypatch, caplog):
+def test_result_construction_diagnostics_are_safe(monkeypatch, rejection_log):
     import app.module_execution.executors.common as common
     def invalid(**kwargs):
         raise ValueError("PRIVATE_SENTINEL")
@@ -167,4 +185,5 @@ def test_result_construction_diagnostics_are_safe(monkeypatch, caplog):
     with pytest.raises(ExecutorOutputError) as caught:
         dispatch(request(ModuleId.POSITIONING))
     assert caught.value.stage is OutputFailureStage.RESULT_CONTRACT_INVALID
-    assert "PRIVATE_SENTINEL" not in caplog.text + "".join(traceback.format_exception(caught.value))
+    assert_safe_rejection_log(rejection_log, "result_contract_invalid")
+    assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))

@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply({"released": True})
             return
         schema = body["text"]["format"]["schema"]
-        if "kind" in schema["properties"]:
+        if "intent" in schema["properties"]:
             output = asyncio.run(intent_model(IntentKind.MARKETING_STRATEGY)())
         else:
             with lock:
