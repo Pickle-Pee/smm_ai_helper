@@ -13,6 +13,7 @@ from app.config import Settings, settings
 from app.module_execution import ModuleExecutorRegistry
 from app.module_execution.errors import ModuleCompatibilityError
 from app.module_execution.executors import ExecutorOutputError
+from app.module_execution.executors.common import OutputFailureStage
 from app.module_registry import ModuleRegistry
 from app.orchestration_runtime import composition
 from app.orchestration_runtime.worker import ModuleGraphWorker, transient
@@ -110,6 +111,24 @@ def test_transient_cause_chain_and_cycles(error, retryable):
 def test_explicit_contract_failure_is_terminal_even_with_transient_cause(error):
     error.__cause__ = TimeoutError()
     assert not transient(error)
+
+
+@pytest.mark.parametrize("stage", list(OutputFailureStage))
+def test_graph_output_failure_matches_direct_terminal_classification(stage):
+    from app.marketing_copilot.api_errors import ExecutionInvalid
+    exc = ExecutorOutputError("PRIVATE_SENTINEL", stage=stage)
+    exc.__cause__ = httpx.ReadTimeout("PRIVATE_SENTINEL")
+    item = SimpleNamespace(run_id="run.test", job_id="job.test")
+    service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
+        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), object())),
+        fail=AsyncMock(), finish=AsyncMock())
+    worker = ModuleGraphWorker(service)
+    worker.dispatcher.dispatch = AsyncMock(side_effect=exc)
+    assert asyncio.run(worker.once()) is True
+    service.fail.assert_awaited_once_with(item, code="execution_invalid", retryable=False)
+    assert service.fail.call_args.kwargs["code"] == ExecutionInvalid().code
+    service.finish.assert_not_awaited()
+    assert transient(exc) is False
 
 
 def test_loop_failure_isolation_scans_before_stale_hint_and_safe_logs(caplog, monkeypatch):

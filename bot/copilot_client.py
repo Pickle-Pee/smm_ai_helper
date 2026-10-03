@@ -36,6 +36,14 @@ class CopilotClient:
             category = {401: "auth", 403: "auth", 404: "not_found", 422: "invalid_state",
                         503: "temporary"}.get(status, "server")
             owned = None
+            if status == 500:
+                try:
+                    error = dto.ErrorResponse.model_validate_json(response.content)
+                    if (error.code == "execution_invalid"
+                            and {"schema_version", "kind", "owned_site", "code"} <= error.model_fields_set):
+                        category = error.code
+                except (ValidationError, ValueError):
+                    pass
             if status == 409:
                 try:
                     error = dto.ErrorResponse.model_validate_json(response.content)

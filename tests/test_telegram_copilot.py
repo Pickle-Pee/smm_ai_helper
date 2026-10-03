@@ -425,3 +425,54 @@ def test_owned_acquisition_failure_offers_manual_context(monkeypatch, outcome):
         assert "вручную" in text_sent(msg) and outcome not in text_sent(msg)
         assert (await fsm.get_data())["copilot_pending"]["fields"] == ["product_truth"]
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("change", [None, {"internal_stage": "PRIVATE_SENTINEL"}, {"kind": "MODULE_RESULT"},
+    {"schema_version": "wrong"}, {"code": "temporarily_unavailable"}, {"code": "unknown"},
+    "kind", "schema_version", "owned_site", "code", "code_only", "non_json"])
+def test_execution_invalid_http_envelope_fails_closed(monkeypatch, caplog, change):
+    body = dto.ErrorResponse(code="execution_invalid").model_dump(mode="json")
+    if change == "code_only":
+        body = {"code": "execution_invalid"}
+    elif change == "non_json":
+        body = "PRIVATE_SENTINEL"
+    elif isinstance(change, str):
+        body.pop(change)
+    elif change:
+        body.update(change)
+    patch_http(monkeypatch, lambda _: httpx.Response(500, text=body) if change == "non_json" else httpx.Response(500, json=body))
+    with pytest.raises(CopilotError) as caught:
+        asyncio.run(CopilotClient().execute(123, dto.ExecuteRequest(request_key="k", message="text")))
+    assert caught.value.category == ("execution_invalid" if change is None else "server")
+    assert caught.value.status == 500
+    assert "PRIVATE_SENTINEL" not in str(caught.value) + caplog.text
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_real_http_flow_terminal_output_and_transient_retry(monkeypatch, status):
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(status, json=dto.ErrorResponse(code="execution_invalid" if status == 500 else "temporarily_unavailable").model_dump(mode="json"))
+        return httpx.Response(200, json=started().model_dump(mode="json"))
+    patch_http(monkeypatch, respond)
+    monkeypatch.setattr(flow, "client", CopilotClient())
+    async def check():
+        state, msg = context(), message()
+        await flow.receive(msg, state)
+        assert (await state.get_data())["copilot_pending"]["phase"] == ("stopped" if status == 500 else "retry")
+        buttons = [button.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for button in row]
+        assert buttons == (["Начать новый запрос", "Отмена"] if status == 500 else ["Повторить", "Начать новый запрос", "Отмена"])
+        if status == 500:
+            assert text_sent(msg) == "Не удалось получить корректный результат выполнения. Начните новый запрос или сообщите администратору."
+        await click(state, msg, "retry")
+        if status == 500:
+            assert len(calls) == 1
+            assert "Повторить" not in str(msg.answer.call_args_list)
+            await click(state, msg, "new", "new")
+            await flow.receive(message(mid=2), state)
+            assert json.loads(calls[0].content)["request_key"] != json.loads(calls[1].content)["request_key"]
+        else:
+            assert len(calls) == 2 and calls[0].content == calls[1].content
+    asyncio.run(check())

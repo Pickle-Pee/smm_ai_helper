@@ -46,7 +46,7 @@ class CopilotRoute(APIRoute):
 
 
 router = APIRouter(prefix="/copilot", tags=["copilot-v1"], route_class=CopilotRoute,
-    responses={status: {"model": ErrorResponse} for status in (404, 409, 422, 503)})
+    responses={status: {"model": ErrorResponse} for status in (404, 409, 422, 500, 503)})
 
 
 def service(request: Request):

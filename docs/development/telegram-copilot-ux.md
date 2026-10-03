@@ -152,10 +152,15 @@ block. BLOCKED uses the API's public reason/action (translated when known). FAIL
 shows only «Не удалось завершить запрос. Можно попробовать снова.»
 
 Network errors, backend authentication/configuration errors, invalid client state
-(422), conflicts (409), temporary unavailability (503), malformed responses and
+(422), conflicts (409), temporary unavailability (503), invalid execution results
+(500 `execution_invalid`), malformed responses and
 unexpected server failures have separate safe handling. «Повторить» reuses the
 unchanged payload/key after network/503/server failure; synchronous responses are
 not durably cached by the backend, so such retries can repeat synchronous work.
+`execution_invalid` is recognized only in a validated 500 error envelope with
+explicit `schema_version`, `kind`, `owned_site` and `code` fields. It stops
+the pending request and offers a new request or cancellation without «Повторить».
+Malformed 500 envelopes and other error codes retain generic server handling.
 `request_conflict` never silently changes the key or auto-retries with new context;
 the user must start a new request. `/cancel` clears pre-run pending data. An already
 started analysis cannot be cancelled through Telegram v1; no graph status is changed.

@@ -131,7 +131,7 @@ union with `kind`; optional owned acquisition information appears under `owned_s
 | CONVERSATION | 200 | `delegate: legacy_chat`; no hidden ChatService call |
 | NEEDS_INPUT | 200 | Safe code, grouped `alternatives`, actions and optional confirmation candidates |
 | WORKFLOW_STARTED | 202 | `run_id`, `status: ACCEPTED`, relative `status_url` |
-| ERROR | 404/409/422/503 | Allowlisted code and optional fresh owned acquisition information |
+| ERROR | 404/409/422/500/503 | Allowlisted code and optional fresh owned acquisition information |
 
 DIRECT and SINGLE do not create runs or Jobs. SINGLE presentation requires full
 result-and-claim acceptance, not merely a successful model call. CREATOR renders a
@@ -178,8 +178,9 @@ Invalid persisted contracts fail closed with a safe 503 instead of releasing art
 Intent/extraction use thin adapters over the existing single-attempt strict Responses
 transport; nullable intent properties are required on the provider wire. No SDK,
 fallback, repair or application retry stack is added. Before durable start, expected
-provider/structured-output failures become 503 `temporarily_unavailable`; owned
-extractor failures instead become source outcomes. The complete pre-start application
+provider transport/structured-response failures become 503 `temporarily_unavailable`;
+invalid executor output (`ExecutorOutputError`) becomes 500 `execution_invalid`.
+Owned extractor failures instead become source outcomes. The complete pre-start application
 operation is bounded by GRAPH_TIMEOUT_SECONDS, excluding the identity transaction.
 Programming defects retain the normal 500 boundary. Worker failures use durable
 attempt/retry rules from the production worker contract.

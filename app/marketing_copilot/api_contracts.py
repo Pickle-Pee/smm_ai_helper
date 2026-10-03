@@ -290,4 +290,4 @@ class RunResponse(StrictDTO):
 class ErrorResponse(ResponseBase):
     kind: Literal["ERROR"] = "ERROR"
     code: Literal["request_conflict", "confirmation_changed", "invalid_confirmation", "temporarily_unavailable",
-                  "not_found", "invalid_request"]
+                  "not_found", "invalid_request", "execution_invalid"]
