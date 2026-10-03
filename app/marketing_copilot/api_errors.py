@@ -8,3 +8,8 @@ class CopilotAPIError(Exception):
 class ProviderUnavailable(CopilotAPIError):
     def __init__(self):
         super().__init__(503, "temporarily_unavailable")
+
+
+class ExecutionInvalid(CopilotAPIError):
+    def __init__(self):
+        super().__init__(500, "execution_invalid")

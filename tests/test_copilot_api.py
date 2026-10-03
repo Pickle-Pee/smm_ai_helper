@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.marketing_copilot.api_contracts import ExecuteRequest
 from app.marketing_copilot.api_errors import ProviderUnavailable
+from app.module_execution.executors.common import ExecutorOutputError, OutputFailureStage
 from app.marketing_copilot.production import build_production_copilot_api
 from app.marketing_copilot import provider_adapters as adapters
 from app.marketing_copilot.contracts import MarketingIntent
@@ -248,3 +249,37 @@ def test_owned_site_snapshot_is_never_input_to_request_projection_or_implicit_co
     assert ingress.call_args.kwargs["text"] == message
     assert PRODUCT not in ingress.call_args.kwargs["text"]
     assert not model.calls
+
+
+@pytest.mark.parametrize("failure", ["schema", *OutputFailureStage, "timeout", "connect", 429, 503])
+def test_direct_module_output_failure_is_terminal_and_transport_failure_is_temporary(monkeypatch, failure):
+    from tests.test_copilot_application import CREATOR_MESSAGE, CREATOR_FACTS, intent_model
+    from app.marketing_copilot.contracts import IntentKind
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    if failure == "schema":
+        model = AsyncMock(return_value=json.dumps({"PRIVATE_SENTINEL": "private model output"}))
+    else:
+        if isinstance(failure, OutputFailureStage):
+            exc = ExecutorOutputError("PRIVATE_SENTINEL", stage=failure)
+            exc.__cause__ = TimeoutError("PRIVATE_SENTINEL")
+        elif failure == "timeout":
+            exc = httpx.ReadTimeout("PRIVATE_SENTINEL")
+        elif failure == "connect":
+            exc = httpx.ConnectError("PRIVATE_SENTINEL")
+        else:
+            req = httpx.Request("POST", "https://provider.test")
+            exc = httpx.HTTPStatusError("PRIVATE_SENTINEL", request=req, response=httpx.Response(failure, request=req))
+        model = AsyncMock(side_effect=exc)
+    api = build_production_copilot_api(intent_model=intent_model(IntentKind.POST_GENERATION, facts=CREATOR_FACTS),
+        module_model=model, analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    terminal = failure == "schema" or isinstance(failure, OutputFailureStage)
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+            response = await client.post("/copilot/execute", headers=headers(), json={"request_key": "invalid-output", "message": CREATOR_MESSAGE})
+        assert response.status_code == (500 if terminal else 503)
+        assert response.json() == {"schema_version": "copilot_api.v1", "kind": "ERROR",
+            "code": "execution_invalid" if terminal else "temporarily_unavailable", "owned_site": None}
+        assert "PRIVATE_SENTINEL" not in response.text
+    asyncio.run(check())
+    model.assert_awaited_once()

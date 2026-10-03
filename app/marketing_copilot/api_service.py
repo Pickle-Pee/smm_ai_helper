@@ -16,7 +16,7 @@ from app.product_context.projection import attach_acquisition, project_confirmat
 from app.services.brand_profile_service import BrandProfileService
 from app.module_registry import ToolCapability
 from . import api_contracts as dto
-from .api_errors import CopilotAPIError, ProviderUnavailable
+from .api_errors import CopilotAPIError, ExecutionInvalid, ProviderUnavailable
 from .application_contracts import CopilotRequest, ResultKind
 from .http_context import current_entries, brand_entries
 from .presentation import owned_result, module_presentation, calculation_presentation
@@ -71,7 +71,7 @@ class CopilotAPIService:
         except StartIdentityConflict as exc:
             raise CopilotAPIError(409, "request_conflict") from exc
         except ExecutorOutputError as exc:
-            raise ProviderUnavailable() from exc
+            raise ExecutionInvalid() from exc
         except Exception as exc:
             if not expected_provider_failure(exc):
                 raise
