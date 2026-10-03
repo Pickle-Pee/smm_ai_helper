@@ -42,16 +42,10 @@ class CompetitorStatement(OutputStatement):
 class PositioningStatement(OutputStatement):
     output_name: Literal[
         "category", "frame_of_reference", "target", "demand_context", "JTBD_frame",
-        "value_proposition", "points_of_parity",
-        "RTB", "positioning_statement", "offer", "message_hierarchy",
+        "value_proposition", "differentiation", "points_of_parity", "points_of_difference",
+        "RTB", "positioning_statement", "USP_directions", "offer", "message_hierarchy",
         "claim_risks", "validation_plan.",
     ]
-
-
-class PositioningHypothesisStatement(OutputStatement):
-    # Disjoint output names make the kind rule enforceable by strict generation.
-    output_name: Literal["differentiation", "points_of_difference", "USP_directions"]
-    kind: Literal["HYPOTHESIS"]
 
 
 class CreatorStatement(OutputStatement):
@@ -71,7 +65,7 @@ class CompetitorOutput(OutputBase):
 
 
 class PositioningOutput(OutputBase):
-    outputs: list[PositioningStatement | PositioningHypothesisStatement] = Field(min_length=1, max_length=32)
+    outputs: list[PositioningStatement] = Field(min_length=1, max_length=32)
 
 
 class TextPost(StrictOutput):
