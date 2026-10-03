@@ -143,6 +143,19 @@ def test_direct_vertical_never_dispatches_or_starts_work():
     svc.dispatcher.dispatch.assert_not_awaited()
 
 
+def test_natural_ruble_lead_request_returns_direct_result_without_clarification():
+    model = FakeModel()
+    ingress = intent_model(IntentKind.LEAD_FUNNEL_CALCULATION)
+    svc = build_marketing_copilot_service(intent_model=ingress, module_model=model)
+    output = run(svc, "Рассчитай количество лидов при бюджете 10000 ₽ и CPL 500 ₽")
+    assert output.decision.mode is ExecutionMode.DIRECT_TOOL
+    assert output.kind is ResultKind.DIRECT_RESULT
+    assert output.direct_result.leads == 20
+    assert output.clarification is None
+    ingress.assert_awaited_once()
+    assert not model.calls
+
+
 @pytest.mark.parametrize("kind,module", [
     (IntentKind.POST_GENERATION, ModuleId.CREATOR),
     (IntentKind.POSITIONING, ModuleId.POSITIONING),
