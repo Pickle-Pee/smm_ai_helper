@@ -8,6 +8,7 @@ from app.config import settings
 from app.llm.openai_text import chat as openai_chat
 from app.prompts.assistant_prompts import ASSISTANT_CORE_SYSTEM_PROMPT
 from app.agents.utils import safe_json_parse
+from app.services.assistant_normalizer import normalize_plain_text
 from app.services.facts_extractor import extract_facts
 from app.services.instagram_intake import parse_instagram_insights
 from app.services.strategy_template import is_strategy_like, build_strategy_scaffold
@@ -15,7 +16,7 @@ from app.services.url_insights import build_url_insights
 
 
 def _fallback_assistant_payload(raw_text: str) -> Dict[str, Any]:
-    t = (raw_text or "").strip()
+    t = normalize_plain_text(raw_text or "").strip()
     if not t:
         t = "Не смог получить ответ от модели. Попробуй переформулировать запрос в 1–2 предложениях."
     else:

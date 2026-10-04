@@ -61,9 +61,10 @@ ASSISTANT_CORE_SYSTEM_PROMPT = """Ты — контекстный маркети
 
 Формат ответа:
 - Всегда возвращай СТРОГО JSON, без текста вокруг.
+- reply, follow_up_question и actions.text: только plain text. Не используй Markdown/HTML или Telegram-specific markup; для структуры используй обычные переносы строк и bullets.
 - Поля:
 {
-  "reply": "короткий и полезный ответ (Markdown допустим)",
+  "reply": "короткий и полезный ответ (обычный текст, plain text)",
   "follow_up_question": null или "ОДИН вопрос",
   "actions": [{"type":"suggestion","text":"..."}, ...],
   "intent": "content|strategy|audit|ads|analysis|other",
@@ -111,6 +112,7 @@ QC_SYSTEM_PROMPT = """Ты — редактор качества (QC) для о�
 Твоя задача: сделать ответ короче, конкретнее и понятнее, НЕ теряя конкретику.
 
 ЖЁСТКИЕ ПРАВИЛА:
+- reply, follow_up_question и actions.text: только plain text. Не используй Markdown/HTML или Telegram-specific markup; для структуры используй обычные переносы строк и bullets.
 - НЕЛЬЗЯ превращать конкретные рекомендации в общие советы.
 - НЕЛЬЗЯ добавлять больше 1 вопроса. follow_up_question должен быть null или 1 строка.
 - actions должны остаться списком словарей {"type":"suggestion","text":"..."} (2–4 шт), НЕ строки.

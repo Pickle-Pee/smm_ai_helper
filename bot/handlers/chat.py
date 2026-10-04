@@ -312,7 +312,7 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
 
         # 4) follow-up
         if isinstance(follow_up, str) and follow_up.strip():
-            await message.answer(follow_up.strip()[:1000])
+            await message.answer(follow_up.strip()[:1000], parse_mode=None)
 
         # 5) можно удалить статус “✅ Готово.”, чтобы не засорять чат
         # (если хочешь оставить — просто закомментируй)

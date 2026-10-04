@@ -4,6 +4,108 @@ import re
 from typing import Any, Dict, List
 
 
+# Recognize formatting only at delimiter boundaries; URLs and HTML stay literal.
+_URL_OR_HTML = re.compile(r"(?<![a-zA-Z0-9+.-])[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>]+|<[^<>\n]+>")
+_HEADING = re.compile(r"(?m)^( {0,3})#{1,6}[ \t]+([^\n]+)$")
+_EMPHASIS = re.compile(
+    r"(?<![\w*])\*\*(?!\s)([^*\n]*?\S)\*\*(?![\w*])"
+    r"|(?<![\w_])__(?!\s)([^_\n]*?\S)__(?![\w_])"
+    r"|(?<![\w*])\*(?![\s*])([^*\n]*?\S)\*(?![\w*])"
+    r"|(?<![\w_])_(?![\s_])([^_\n]*?\S)_(?![\w_])"
+    r"|(?<!`)`([^`\n]+)`(?!`)"
+)
+
+
+def _plain_links(text: str) -> str:
+    """Keep both link label and destination, including balanced URL parentheses."""
+    out: List[str] = []
+    cursor = 0
+    scanned_until = 0
+    literal_index = 0
+    literal_spans = [(match.start(), match.end()) for match in _URL_OR_HTML.finditer(text)]
+    for match in re.finditer(r"\[([^\[\]\n]+)\]\(", text):
+        if match.start() < scanned_until:
+            continue
+        while literal_index < len(literal_spans) and literal_spans[literal_index][1] <= match.start():
+            literal_index += 1
+        if literal_index < len(literal_spans) and literal_spans[literal_index][0] <= match.start():
+            continue
+        end = match.end()
+        depth = 1
+        while end < len(text) and text[end] not in "\r\n":
+            if text[end] == "(":
+                depth += 1
+            elif text[end] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            end += 1
+        # Never rescan a suffix already checked for a closing parenthesis. An
+        # unmatched opener leaves the rest of its line literal.
+        scanned_until = end + 1
+        target = text[match.end():end]
+        if depth or not target or any(char.isspace() for char in target):
+            continue
+        out.extend((text[cursor:match.start()], match.group(1), " — ", target))
+        cursor = end + 1
+    out.append(text[cursor:])
+    return "".join(out)
+
+
+def normalize_plain_text(text: str) -> str:
+    """Remove common paired Markdown syntax without interpreting model output.
+
+    This deliberately is not a Markdown parser. Unpaired delimiters, arithmetic,
+    intraword underscores, URLs, and raw HTML are ordinary plain text.
+    """
+    text = _plain_links(text)
+    # Protect literal spans while removing surrounding formatting. Pick a marker
+    # absent from the input so user/model text cannot collide with placeholders.
+    marker = "\x00"
+    while marker in text:
+        marker += "\x00"
+    literals: List[str] = []
+
+    def protect(match: re.Match[str]) -> str:
+        literal = match.group(0)
+        # A paired wrapper belongs to formatting, not to the enclosed URL.
+        if "://" in literal:
+            for delimiter in ("**", "__", "*", "_", "`"):
+                start = match.start() - len(delimiter)
+                if (
+                    start >= 0
+                    and text[start:match.start()] == delimiter
+                    and literal.endswith(delimiter)
+                    and delimiter not in literal[:-len(delimiter)]
+                ):
+                    literal = literal[:-len(delimiter)]
+                    break
+        literals.append(literal)
+        suffix = match.group(0)[len(literal):]
+        return f"{marker}{len(literals) - 1}{marker}" + suffix
+
+    text = _URL_OR_HTML.sub(protect, text)
+    while True:
+        cleaned = _HEADING.sub(r"\1\2", text)
+        cleaned = _EMPHASIS.sub(lambda match: next(group for group in match.groups() if group is not None), cleaned)
+        if cleaned == text:
+            break
+        text = cleaned
+    return re.sub(
+        re.escape(marker) + r"(\d+)" + re.escape(marker),
+        lambda match: literals[int(match.group(1))],
+        text,
+    )
+
+
+def normalize_payload_text(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize display fields before policies can truncate paired delimiters."""
+    for key in ("reply", "follow_up_question"):
+        if isinstance(data.get(key), str):
+            data[key] = normalize_plain_text(data[key])
+    return data
+
+
 # --- helpers: anti-banal actions + strip questions ---
 
 _BANAL_ACTION_MAP = [
@@ -23,7 +125,7 @@ _BANAL_REPLY_PATTERNS = [
 
 
 def _improve_action_text(text: str) -> str:
-    t = (text or "").strip()
+    t = normalize_plain_text(text or "").strip()
     low = t.lower().strip().rstrip(".")
     for pat, repl in _BANAL_ACTION_MAP:
         if re.search(pat, low, flags=re.IGNORECASE):
@@ -123,6 +225,12 @@ def normalize_assistant_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     if fu is not None and not isinstance(fu, str):
         data["follow_up_question"] = None
         fu = None
+
+    if isinstance(fu, str):
+        fu = normalize_plain_text(fu)
+        data["follow_up_question"] = fu
+    if isinstance(data.get("reply"), str):
+        data["reply"] = normalize_plain_text(data["reply"])
 
     # actions: нормализация + анти-банальность
     data["actions"] = normalize_actions(data.get("actions"))
