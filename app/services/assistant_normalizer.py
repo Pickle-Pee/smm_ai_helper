@@ -66,22 +66,67 @@ def normalize_plain_text(text: str) -> str:
         marker += "\x00"
     literals: List[str] = []
 
+    openers: Dict[str, int] = {}
+    scanned_until = 0
+
+    def scan_openers(end: int) -> None:
+        nonlocal scanned_until
+        for token in re.finditer(r"\*+|_+|`+|[\r\n]", text[scanned_until:end]):
+            delimiter = token.group(0)
+            position = scanned_until + token.start()
+            if delimiter in ("\r", "\n"):
+                openers.clear()
+                continue
+            # Any intervening delimiter of the same kind invalidates a pending
+            # opener. Delimiters inside protected URL/HTML spans are never scanned.
+            for pending in tuple(openers):
+                if pending[0] == delimiter[0]:
+                    del openers[pending]
+            if delimiter not in ("**", "__", "*", "_", "`"):
+                continue
+            before = text[position - 1] if position else ""
+            after_index = position + len(delimiter)
+            after = text[after_index] if after_index < len(text) else ""
+            valid_before = before != "`" if delimiter == "`" else not (before.isalnum() or before == "_" or before == delimiter[0])
+            if valid_before and after and not after.isspace():
+                openers[delimiter] = position
+        scanned_until = end
+
     def protect(match: re.Match[str]) -> str:
+        nonlocal scanned_until
+        scan_openers(match.start())
         literal = match.group(0)
-        # A paired wrapper belongs to formatting, not to the enclosed URL.
-        if "://" in literal:
-            for delimiter in ("**", "__", "*", "_", "`"):
-                start = match.start() - len(delimiter)
-                if (
-                    start >= 0
-                    and text[start:match.start()] == delimiter
-                    and literal.endswith(delimiter)
-                    and delimiter not in literal[:-len(delimiter)]
-                ):
-                    literal = literal[:-len(delimiter)]
-                    break
+        suffix = ""
+        if "://" in literal and not literal.startswith("<"):
+            closing = re.search(r"(\*\*|__|\*|_|`)([.,!?;:]*)$", literal)
+            if closing:
+                delimiter, punctuation = closing.groups()
+                opener = openers.get(delimiter)
+                url = literal[:closing.start()]
+                # Internal boundary delimiters make URL/wrapper ownership
+                # ambiguous. Intraword query/path punctuation remains literal.
+                ambiguous = any(
+                    len(delimiter) > 1
+                    or not (index > 0 and index + len(delimiter) < len(url)
+                            and url[index - 1].isalnum() and url[index + len(delimiter)].isalnum())
+                    for index in (item.start() for item in re.finditer(re.escape(delimiter), url))
+                )
+                after = text[match.end()] if match.end() < len(text) else ""
+                valid_after = after != "`" if delimiter == "`" else not (after.isalnum() or after == "_" or after == delimiter[0])
+                # Prove the whole pair against the same grammar used below,
+                # substituting the protected URL only for this structural check.
+                if (opener is not None and not ambiguous and valid_after
+                        and _EMPHASIS.fullmatch(text[opener:match.start()] + "URL" + delimiter)):
+                    literal = url
+                    suffix = delimiter + punctuation
+                    del openers[delimiter]
+        # A literal delimiter cannot become evidence for an external pair,
+        # nor leave a failed candidate active for repeated suffix scans.
+        for pending in tuple(openers):
+            if pending[0] in literal:
+                del openers[pending]
         literals.append(literal)
-        suffix = match.group(0)[len(literal):]
+        scanned_until = match.end()
         return f"{marker}{len(literals) - 1}{marker}" + suffix
 
     text = _URL_OR_HTML.sub(protect, text)

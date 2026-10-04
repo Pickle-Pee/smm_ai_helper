@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.services.assistant_normalizer import normalize_assistant_payload
+from app.services.assistant_normalizer import normalize_assistant_payload, normalize_plain_text
 from app.services.assistant_core import _fallback_assistant_payload
 from app.services.chat_response_service import ChatResponseService
 from app.services import chat_response_service, qc_shortener
@@ -26,6 +26,36 @@ PLAIN_REPRO = "Продвижение:\nПомогу выбрать каналы
 ])
 def test_formatting_becomes_plain_text(raw, expected):
     assert normalize_assistant_payload({"reply": raw})["reply"] == expected
+
+
+@pytest.mark.parametrize("delimiter", ["**", "*", "__", "_", "`"])
+@pytest.mark.parametrize("body,expected", [
+    ("Сайт: https://example.com", "Сайт: https://example.com"),
+    ("[Подробнее](https://example.com)", "Подробнее — https://example.com"),
+    ("Сайт: https://example.com/path).", "Сайт: https://example.com/path)."),
+    ("Сайт: https://example.com/a_b?q=a*b&x=y_z#part",
+     "Сайт: https://example.com/a_b?q=a*b&x=y_z#part"),
+])
+def test_formatting_span_ending_in_url(delimiter, body, expected):
+    output = normalize_plain_text(f"{delimiter}{body}{delimiter}")
+    assert output == expected
+    assert normalize_plain_text(output) == output
+
+
+@pytest.mark.parametrize("text", [
+    "https://example.com/a_b",
+    "https://example.com/a_b?q=a*b&x=y_z#part",
+    "https://example.com/path**", "https://example.com/path__",
+    "https://example.com/path*", "https://example.com/path_",
+    "https://example.com/path`", "https://example.com/path).",
+    "Сайт: https://example.com/path**",
+    "**Незакрытый\nСайт: https://example.com/path**",
+    '<b title="**">Текст</b> Сайт: https://example.com/path**',
+    "https://example.com/other** Сайт: https://example.com/path**",
+])
+def test_literal_url_suffix_is_preserved_and_idempotent(text):
+    assert normalize_plain_text(text) == text
+    assert normalize_plain_text(normalize_plain_text(text)) == text
 
 
 @pytest.mark.parametrize("text", [
