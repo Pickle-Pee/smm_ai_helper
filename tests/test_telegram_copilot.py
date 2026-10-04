@@ -335,7 +335,14 @@ def test_cancel_before_and_after_run(monkeypatch):
 
 
 def test_conversation_delegates_through_existing_chat_http(monkeypatch):
+    from app.services.chat_response_service import ChatResponseService
     from bot.handlers import chat
+    raw_reply = "**Продвижение:**\nПомогу выбрать каналы.\n\n**Реклама:**\nПомогу проверить гипотезы."
+    expected_reply = "Продвижение:\nПомогу выбрать каналы.\n\nРеклама:\nПомогу проверить гипотезы."
+    backend_payload = ChatResponseService.normalize({
+        "reply": raw_reply, "follow_up_question": "**Продолжить**?",
+        "actions": [{"type": "suggestion", "text": "**Проверить** `CPL`"}],
+    })
     calls = []
     def respond(request):
         calls.append(request)
@@ -344,7 +351,7 @@ def test_conversation_delegates_through_existing_chat_http(monkeypatch):
         assert request.url.path == "/chat/message"
         assert json.loads(request.content)["user_id"] == "tg:123"
         assert request.headers["x-telegram-user-id"] == "123"
-        return httpx.Response(200, json={"reply": "Ответ legacy", "actions": [], "images": []})
+        return httpx.Response(200, json={**backend_payload, "images": []})
     patch_http(monkeypatch, respond)
     monkeypatch.setattr(chat, "_chat_action_indicator", AsyncMock())
     monkeypatch.setattr(chat, "_long_request_indicator", AsyncMock())
@@ -353,7 +360,13 @@ def test_conversation_delegates_through_existing_chat_http(monkeypatch):
         msg.answer.return_value = SimpleNamespace(edit_text=AsyncMock(), delete=AsyncMock())
         await flow.receive(msg, fsm)
         assert [c.url.path for c in calls] == ["/copilot/execute", "/chat/message"]
-        assert text_sent(msg).count("Ответ legacy") == 1
+        assert text_sent(msg).count(expected_reply) == 1
+        delivered = [c for c in msg.answer.call_args_list if c.args[0] in (expected_reply, "Продолжить?")]
+        assert len(delivered) == 2
+        assert all(c.kwargs["parse_mode"] is None for c in delivered)
+        assert "**" not in text_sent(msg)
+        keyboard = delivered[0].kwargs["reply_markup"]
+        assert keyboard.inline_keyboard[0][0].text == "Проверить CPL"
     asyncio.run(check())
 
 

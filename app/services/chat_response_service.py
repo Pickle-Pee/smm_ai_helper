@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List
 
 from app.services.assistant_core import generate_assistant_reply
-from app.services.assistant_normalizer import normalize_assistant_payload
+from app.services.assistant_normalizer import normalize_assistant_payload, normalize_payload_text
 from app.services.qc_shortener import qc_shorten
 from app.services.response_policy import enforce_policy
 
@@ -17,7 +17,7 @@ class ChatResponseService:
 
     @staticmethod
     def normalize(payload: Dict[str, Any]) -> Dict[str, Any]:
-        return normalize_assistant_payload(enforce_policy(payload))
+        return normalize_assistant_payload(enforce_policy(normalize_payload_text(payload)))
 
     async def generate(
         self,
@@ -34,7 +34,7 @@ class ChatResponseService:
             last_messages=last_messages,
             url_summaries=url_summaries,
         )
-        assistant_policy = enforce_policy(assistant_raw)
+        assistant_policy = enforce_policy(normalize_payload_text(assistant_raw))
 
         try:
             assistant_qc = await qc_shorten(assistant_policy)
