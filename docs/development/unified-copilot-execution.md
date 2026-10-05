@@ -32,18 +32,25 @@ current natural-language message; simply naming a saved artifact does not supply
 ### Natural-language current-request projection (#76 / #74)
 
 The application uses `MarketingIntentInterpreter.interpret_request()` for one
-structured provider call returning `InterpretedRequest`: separate `MarketingIntent`
-and `NaturalLanguageContextProjection` objects. The standalone semantic-only
+structured provider call returning `ProviderInterpretedRequest`: a `MarketingIntent`
+and a fixed `ProviderContextProjection` object. After validation it converts to the
+existing internal `InterpretedRequest` / `NaturalLanguageContextProjection`.
+The standalone semantic-only
 `interpret()` capability remains available. Intent stays non-executable; neither
 object can set execution bindings, permissions, source roles or registry versions.
 
 The projection contains at most 11 unique canonical keys: `business_goal`, `product`,
 `target_or_target_hypothesis`, `customer_job_or_need`, `relevant_alternative`,
 `product_truth`, `existing_proof`, `geography`, `economics`, `message`, `tone`.
-Each value is a nonblank string of at most 4000 characters and must occur verbatim
-in the current message. Unknown properties, duplicate JSON properties, duplicate
-semantic keys, non-string values and invented excerpts fail closed. No repair or
-second extraction call is made. The public provider adapter maps invalid combined
+The provider schema declares these 11 properties explicitly with
+`additionalProperties=false`; strict-schema normalization requires all slots. Each
+slot is null or a nonblank string of at most 4000 characters occurring verbatim
+in the current message. Non-null slots convert in canonical order to internal
+`BusinessFactCandidate` entries. Null/absent facts create no context entry. Semantic
+keys cannot repeat structurally; duplicate raw JSON properties still fail closed.
+Unknown properties, non-string values and invented excerpts fail closed. The old
+provider `facts` array is rejected; public API DTOs and persisted state are unchanged,
+so no data migration is needed. No repair or second extraction call is made. The public provider adapter maps invalid combined
 output to the existing provider-unavailable response.
 
 `message -> bounded candidates -> server validation -> AuthorizedContextFact ->

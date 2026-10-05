@@ -21,6 +21,7 @@ from app.marketing_orchestrator import (
 from app.module_registry import ModuleAvailabilityStatus, ModuleId, ModuleRegistry, ToolCapability
 from app.marketing_copilot.context_projection import (
     BusinessFactCandidate, NaturalLanguageContextProjection, InterpretedRequest, merge_projected_context,
+    ProviderContextProjection, ProviderInterpretedRequest,
 )
 
 
@@ -99,10 +100,10 @@ def test_projection_rejects_duplicate_keys_and_unbounded_lists():
 
 
 @pytest.mark.parametrize("raw", [
-    pytest.param(InterpretedRequest(intent=intent(), projection=projected()).model_dump_json().replace(
-        '"facts":[]', '"facts":[],"facts":[]'), id="duplicate-projection-property"),
-    pytest.param(InterpretedRequest(intent=intent(), projection=projected(product="post")).model_dump_json().replace(
-        '"value":"post"', '"value":"post","value":"post"'), id="duplicate-candidate-property"),
+    pytest.param(ProviderInterpretedRequest(intent=intent(), projection=ProviderContextProjection()).model_dump_json().replace(
+        '"product":null', '"product":null,"product":null'), id="duplicate-projection-property"),
+    pytest.param(ProviderInterpretedRequest(intent=intent(), projection=ProviderContextProjection(product="post")).model_dump_json().replace(
+        '"product":"post"', '"product":"post","product":"post"'), id="duplicate-projection-value-property"),
     'null', '[]', '{}', pytest.param('x' * 98305, id="oversized-response"),
 ])
 def test_combined_interpretation_rejects_malformed_responses(raw):
@@ -114,7 +115,8 @@ def test_combined_interpretation_rejects_malformed_responses(raw):
 
 def test_combined_interpretation_validates_literal_excerpts_in_one_call():
     response = InterpretedRequest(intent=intent(), projection=projected(product="Курс фотографии"))
-    model = AsyncMock(return_value=response.model_dump_json())
+    model = AsyncMock(return_value=ProviderInterpretedRequest(
+        intent=response.intent, projection=ProviderContextProjection(product="Курс фотографии")).model_dump_json())
     interpreter = MarketingIntentInterpreter(model)
     assert asyncio.run(interpreter.interpret_request("Курс фотографии для начинающих")) == response
     model.assert_awaited_once()
@@ -467,3 +469,122 @@ def test_foundation_uses_no_runtime_execution_or_implicit_provider(monkeypatch):
                  if "marketing_copilot" not in p.parts and "marketing_copilot" in p.read_text(encoding="utf-8")]
     assert set(consumers) == {root / "app/product_context/projection.py", root / "app/routers/copilot.py"}
     # Only the explicit projection and separate Copilot router consume this boundary.
+
+
+CANONICAL_PROJECTION_FIELDS = (
+    "business_goal", "product", "target_or_target_hypothesis", "customer_job_or_need",
+    "relevant_alternative", "product_truth", "existing_proof", "geography", "economics",
+    "message", "tone",
+)
+
+
+@pytest.mark.parametrize("key", CANONICAL_PROJECTION_FIELDS)
+@pytest.mark.parametrize("value", ["", " ", "x" * 4001, 1, True, {}, []])
+def test_provider_projection_enforces_bounded_strict_excerpts(key, value):
+    with pytest.raises(ValidationError):
+        ProviderContextProjection(**{key: value})
+
+
+@pytest.mark.parametrize("key", CANONICAL_PROJECTION_FIELDS)
+def test_every_provider_slot_requires_literal_current_request_excerpt(key):
+    response = ProviderInterpretedRequest(intent=intent(),
+        projection=ProviderContextProjection(**{key: "user fact"})).model_dump_json()
+    interpreter = MarketingIntentInterpreter(AsyncMock(return_value=response))
+    result = asyncio.run(interpreter.interpret_request("This is a user fact."))
+    assert result.projection == projected(**{key: "user fact"})
+    for text in ("Invent a fact", "User fact", "user other fact"):
+        with pytest.raises(CopilotContractError, match="literal"):
+            asyncio.run(interpreter.interpret_request(text))
+
+
+@pytest.mark.parametrize("projection", [{}, {key: None for key in CANONICAL_PROJECTION_FIELDS}])
+def test_null_and_absent_provider_facts_never_enter_authorized_context(projection):
+    model = AsyncMock(return_value=json.dumps({"intent": intent().model_dump(mode="json"),
+                                             "projection": projection}))
+    result = asyncio.run(MarketingIntentInterpreter(model).interpret_request("post"))
+    assert result.projection.facts == ()
+    assert merge_projected_context((), result.projection, "post") == ()
+    assert not ContextResolver().resolve(current_request=()).project_context
+
+
+@pytest.mark.parametrize("projection", [
+    {"unknown_business_field": "post"}, {"authorized": True},
+    {"facts": [{"key": "product", "value": "post"}, {"key": "product", "value": "post"}]},
+])
+def test_provider_projection_rejects_unknown_fields_and_old_array(projection):
+    model = AsyncMock(return_value=json.dumps({"intent": intent().model_dump(mode="json"),
+                                             "projection": projection}))
+    with pytest.raises(CopilotContractError):
+        asyncio.run(MarketingIntentInterpreter(model).interpret_request("post"))
+
+
+@pytest.mark.parametrize("kind", tuple(IntentKind))
+def test_combined_wire_conversion_preserves_every_intent_kind(kind):
+    expected = intent(kind)
+    model = AsyncMock(return_value=ProviderInterpretedRequest(intent=expected,
+        projection=ProviderContextProjection()).model_dump_json())
+    assert asyncio.run(MarketingIntentInterpreter(model).interpret_request("post")).intent == expected
+
+
+PRODUCTION_STRATEGY_REQUEST = """Я купила садик частный, нужно до нового года выйти в плюс. Сейчас пытаемся заполнить группы.
+Садик в анкудиноваке (Нижегородская область)
+
+Литтл Фит
+Русская ул., 5, д. Анкудиновка
+https://yandex.ru/maps/org/littl_fit/168712003593?si=b3fwd1df69wpnp465qcyd4zx4r
+
+У нас есть карточки на картах, группа в ВК
+Пропиши стратегию маркетинговую, как нам заполнить две возрастные группы 1,5-3 года и 3-6 лет
+И выйти в плюс по прибыли"""
+
+
+def test_production_strategy_wire_contract_cannot_repeat_semantic_keys(monkeypatch):
+    from app.marketing_copilot import provider_adapters as adapters
+    from app.marketing_copilot.http_context import entry as http_entry
+
+    expected = intent(IntentKind.MARKETING_STRATEGY)
+    wire = ProviderInterpretedRequest(intent=expected, projection=ProviderContextProjection(
+        business_goal="до нового года выйти в плюс", product="садик частный",
+        target_or_target_hypothesis="две возрастные группы 1,5-3 года и 3-6 лет",
+        geography="Садик в анкудиноваке (Нижегородская область)",
+    ))
+
+    async def provider(**kwargs):
+        schema = kwargs["response_schema"]
+        projection = schema["$defs"]["ProviderContextProjection"]
+        assert projection["type"] == "object"
+        assert tuple(projection["properties"]) == CANONICAL_PROJECTION_FIELDS
+        assert set(projection["required"]) == set(CANONICAL_PROJECTION_FIELDS)
+        assert projection["additionalProperties"] is False
+        assert "BusinessFactCandidate" not in schema["$defs"]
+        for slot in projection["properties"].values():
+            assert slot["anyOf"] == [{"maxLength": 4000, "minLength": 1, "type": "string"}, {"type": "null"}]
+            assert "default" not in slot
+        assert "И выйти в плюс по прибыли" in kwargs["text"]  # A second statement of the same goal.
+        return wire.model_dump_json()
+
+    transport = AsyncMock(side_effect=provider)
+    monkeypatch.setattr(adapters, "production_model_call", transport)
+    result = asyncio.run(adapters.PublicIntentInterpreter(adapters.application_model_call)
+                         .interpret_request(PRODUCTION_STRATEGY_REQUEST))
+    transport.assert_awaited_once()
+    assert result.intent == expected
+    assert [f.key for f in result.projection.facts] == [
+        "business_goal", "product", "target_or_target_hypothesis", "geography"]
+    explicit = (http_entry("business_goal", "И выйти в плюс по прибыли"),)
+    merged = merge_projected_context(explicit, result.projection, PRODUCTION_STRATEGY_REQUEST)
+    assert merged[0] == explicit[0]
+    assert sum(e.semantic_key == "business_goal" for e in merged) == 1
+    decision = ExecutionPolicy().decide(result.intent, ContextResolver().resolve(current_request=merged))
+    assert decision.mode is ExecutionMode.WORKFLOW
+    assert decision.scenario_key == "strategy_builder_v1"
+
+
+def test_provider_wire_projection_does_not_change_public_request_dto():
+    from app.marketing_copilot.api_contracts import ExecuteRequest, BusinessContext
+    assert set(ExecuteRequest.model_fields) == {
+        "request_key", "message", "context", "owned_site_url", "competitor_urls",
+        "market_source_urls", "market_sources", "confirmation"}
+    assert set(BusinessContext.model_fields) == (set(CANONICAL_PROJECTION_FIELDS)
+                                               - {"target_or_target_hypothesis"}) | {"target"}
+    assert "projection" not in ExecuteRequest.model_json_schema()["properties"]

@@ -25,7 +25,7 @@ from tests.graph_fakes import source_plan
 def intent_model(kind, urls=(), *, facts=None, **kwargs):
     return AsyncMock(return_value=json.dumps({"intent": intent(kind, provided_urls=urls,
         deterministic_calculation_required=kind is IntentKind.LEAD_FUNNEL_CALCULATION, **kwargs).model_dump(mode="json"),
-        "projection": {"facts": [{"key": k, "value": v} for k, v in (facts or {}).items()]}}))
+        "projection": facts or {}}))
 
 
 def entries(module):
