@@ -4,6 +4,7 @@ from collections import Counter
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import event, func, select, text
@@ -11,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.models import Task, TaskSessionRecord
+from app.services import task_pipeline
 from app.services.task_completion_service import TaskCompletionService
 from app.services.task_finalization_service import TaskFinalizationService, TaskFinalizationUnavailable
 from app.services.task_pipeline import TaskPipelineService
@@ -129,16 +131,45 @@ def test_failed_owner_releases_claim_and_later_answer_completes(mvp_database, mo
     async def run():
         owner, state = await seed(mvp_database)
         counts, entered = Counter(), asyncio.Event()
+        claim_tokens = []
+        acquire = TaskFinalizationService.acquire
+        execution_timeout = None
+
+        async def observed_acquire(*args, **kwargs):
+            claimed = await acquire(*args, **kwargs)
+            assert claimed is not None and claimed.finalization_token
+            claim_tokens.append(claimed.finalization_token)
+            return claimed
+
+        monkeypatch.setattr(TaskFinalizationService, "acquire", observed_acquire)
+
+        if failure == "timeout":
+            def controlled_timeout(delay):
+                nonlocal execution_timeout
+                if execution_timeout is None:
+                    assert delay == settings.TASK_FINALIZATION_TIMEOUT_SECONDS
+                    # Keep the real timeout/cancellation path, but arm its deadline
+                    # only once the agent has entered, after all PostgreSQL work.
+                    execution_timeout = asyncio.timeout(None)
+                    return execution_timeout
+                return asyncio.timeout(delay)  # Real cleanup/retry deadlines.
+
+            # Patch only the pipeline's asyncio reference, leaving test watchdogs
+            # and database internals untouched.
+            monkeypatch.setattr(task_pipeline, "asyncio", SimpleNamespace(
+                timeout=controlled_timeout, sleep=asyncio.sleep,
+            ))
 
         async def interrupt():
             entered.set()
             if failure == "provider":
                 raise RuntimeError("injected provider failure")
+            if failure == "timeout":
+                assert execution_timeout is not None
+                execution_timeout.reschedule(asyncio.get_running_loop().time())
             if failure in {"cancel", "timeout"}:
                 await asyncio.Event().wait()
 
-        if failure == "timeout":
-            monkeypatch.setattr(settings, "TASK_FINALIZATION_TIMEOUT_SECONDS", 0.2)
         async with mvp_database() as db:
             pipeline = pipeline_with_doubles(db, mvp_database, state, counts, interrupt)
             if failure == "commit":
@@ -153,19 +184,24 @@ def test_failed_owner_releases_claim_and_later_answer_completes(mvp_database, mo
                     task.cancel()
                 expected = (asyncio.CancelledError if failure == "cancel" else
                             TaskFinalizationUnavailable if failure == "timeout" else RuntimeError)
-                with pytest.raises(expected):
+                with pytest.raises(expected) as raised:
                     await task
+            assert entered.is_set()
+            if failure == "timeout":
+                assert execution_timeout.expired()
+                assert isinstance(raised.value.__cause__, TimeoutError)
+                assert counts == {"router": 1, "agent": 1}
             assert not db.in_transaction()
         async with mvp_database() as db:
             record = await db.get(TaskSessionRecord, state.session_id)
             assert record.completed_response is record.finalization_token is record.finalization_lease_until is None
             assert await db.scalar(select(func.count()).select_from(Task).where(Task.user_id == owner)) == 0
-        monkeypatch.setattr(settings, "TASK_FINALIZATION_TIMEOUT_SECONDS", 240)
         async with mvp_database() as db:
             pipeline = pipeline_with_doubles(db, mvp_database, state, counts)
             response = await pipeline.answer(db, state.session_id, "goal", "retry")
         assert counts["agent"] == 2  # Explicit recovery, not concurrent duplicate generation.
-        await assert_canonical(mvp_database, owner, state, response)
+        assert len(claim_tokens) == 2 and claim_tokens[0] != claim_tokens[1]
+        assert await assert_canonical(mvp_database, owner, state, response) == {"goal": "retry"}
     asyncio.run(run())
 
 
