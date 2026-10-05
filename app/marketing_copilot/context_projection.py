@@ -40,6 +40,34 @@ class InterpretedRequest(_StrictContract):
     projection: NaturalLanguageContextProjection
 
 
+class ProviderContextProjection(_StrictContract):
+    """Fixed provider slots; semantic keys cannot repeat in an array."""
+    business_goal: Excerpt | None = None
+    product: Excerpt | None = None
+    target_or_target_hypothesis: Excerpt | None = None
+    customer_job_or_need: Excerpt | None = None
+    relevant_alternative: Excerpt | None = None
+    product_truth: Excerpt | None = None
+    existing_proof: Excerpt | None = None
+    geography: Excerpt | None = None
+    economics: Excerpt | None = None
+    message: Excerpt | None = None
+    tone: Excerpt | None = None
+
+    def to_internal(self, text: str) -> NaturalLanguageContextProjection:
+        projection = NaturalLanguageContextProjection(facts=tuple(
+            BusinessFactCandidate(key=key, value=value)
+            for key, value in self.model_dump().items() if value is not None
+        ))
+        return validate_projection(projection, text)
+
+
+class ProviderInterpretedRequest(_StrictContract):
+    """Ephemeral provider response, never a public API or persisted DTO."""
+    intent: MarketingIntent
+    projection: ProviderContextProjection
+
+
 def validate_projection(projection: NaturalLanguageContextProjection, text: str) -> NaturalLanguageContextProjection:
     projection = NaturalLanguageContextProjection.model_validate(projection)
     if any(candidate.value not in text for candidate in projection.facts):

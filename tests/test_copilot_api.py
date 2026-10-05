@@ -217,7 +217,7 @@ def test_model_authority_injection_fails_closed_before_policy_or_execution(field
     from app.marketing_copilot.contracts import IntentKind
     model = intent_model(IntentKind.POST_GENERATION)
     raw = json.loads(model.return_value)
-    raw["projection"]["facts"] = [{"key": field, "value": "injected"}]
+    raw["projection"][field] = "injected"
     model.return_value = json.dumps(raw)
     interpreter = adapters.PublicIntentInterpreter(model)
     with pytest.raises(ProviderUnavailable) as error:
