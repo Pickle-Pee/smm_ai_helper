@@ -117,16 +117,18 @@ retain the legacy multi-URL clarification. The original Telegram message and the
 interpreter's literal-reference validation remain unchanged.
 
 An owned URL is submitted only in `owned_site_url`. Eligible API candidates are
-displayed as «На сайте указано: …» with their source, explicitly unverified. Nothing
-is preselected. The user selects statements and then presses «Подтвердить данные
-сайта». Only that action adds snapshot ID, selected statement IDs, `confirmed=true`
+displayed in one compact «Нашёл сведения о вашем бизнесе:» bullet block with
+«Всё актуально», «Исправить сведения» and «Отмена» buttons. Only «Всё актуально»
+adds snapshot ID, exactly the displayed statement IDs, `confirmed=true`
 and a bounded `tg-confirm:` SHA-256 reference derived from the callback identity.
-The backend re-acquires and validates the snapshot; it supplies authenticated
+The backend loads and validates the exact persisted PostgreSQL snapshot without
+fetching or extracting again; it supplies authenticated
 attester identity. Manual product facts remain an alternative.
 
-On `409 confirmation_changed`, the old confirmation is removed, fresh candidates
-are displayed with an empty selection and explicit reconfirmation is required.
-If fresh candidates are unavailable, the user can enter product facts manually.
+On `409 confirmation_unavailable`, the old confirmation and displayed snapshot
+are removed and the callback token is renewed. The user can enter product facts
+manually or start a new request. Recovery does not automatically reacquire and
+does not claim the website changed. A new request requires a new explicit confirmation.
 Source acquisition failures use safe Russian messages, never extraction details.
 
 ## Results, retries and cancellation

@@ -173,6 +173,17 @@ ERRORS = {
 
 
 async def error(message, state, pending, exc):
+    if exc.category == "confirmation_unavailable":
+        pending["payload"].pop("confirmation", None)
+        pending.pop("owned", None)
+        pending.pop("displayed_statement_ids", None)
+        pending["fields"] = ["product_truth"]
+        await prompt_fields(message, state, pending)
+        await send_text(message,
+            "Предыдущие сведения для подтверждения недоступны. Введите актуальные сведения о продукте вручную или начните новый запрос.",
+            reply_markup=keyboard([("Начать новый запрос", action(pending, "new")),
+                ("Отмена", action(pending, "cancel"))]))
+        return
     if exc.category == "confirmation_changed":
         pending["payload"].pop("confirmation", None)
         await send_text(message, "Содержимое сайта изменилось или повторное извлечение отличается. Подтвердите сведения заново.")

@@ -13,6 +13,9 @@ from app.module_execution.executors import ExecutorOutputError
 from app.orchestration_runtime.errors import StartIdentityConflict
 from app.product_context import OwnedSiteRequest, ConfirmedBusinessFact, ProductContextError
 from app.product_context.projection import attach_acquisition, project_confirmation
+from app.product_context.contracts import AcquisitionResult
+from app.product_context.errors import SourceOutcome
+from app.product_context.snapshot_store import OwnedSnapshotStore
 from app.services.brand_profile_service import BrandProfileService
 from app.module_registry import ToolCapability
 from . import api_contracts as dto
@@ -30,6 +33,7 @@ class CopilotAPIService:
     def __init__(self, *, sessions, copilot, acquisition, queue):
         self.sessions, self.copilot, self.acquisition, self.queue = sessions, copilot, acquisition, queue
         self.reader = GraphRunReader(sessions, copilot.graph_service)
+        self.snapshots = OwnedSnapshotStore(sessions)
 
     async def close(self):
         await self.queue.close()
@@ -52,12 +56,20 @@ class CopilotAPIService:
         try:
             async with asyncio.timeout(settings.GRAPH_TIMEOUT_SECONDS):
                 if payload.owned_site_url is not None:
-                    acquired = await self.acquisition.acquire(OwnedSiteRequest(owned_site_url=payload.owned_site_url))
+                    source = OwnedSiteRequest(owned_site_url=payload.owned_site_url)
+                    if payload.confirmation is not None:
+                        snapshot = await self.snapshots.load(owner, payload.request_key,
+                            payload.confirmation.snapshot_id, payload.owned_site_url)
+                        if snapshot is None:
+                            raise CopilotAPIError(409, "confirmation_unavailable")
+                        acquired = AcquisitionResult(source=source, outcome=SourceOutcome.ACQUIRED, snapshot=snapshot)
+                    else:
+                        acquired = await self.acquisition.acquire(source)
+                        if acquired.snapshot is not None:
+                            await self.snapshots.save(owner, payload.request_key, acquired.snapshot)
                     request = attach_acquisition(request, acquired)
                     if payload.confirmation is not None:
                         confirmation = payload.confirmation
-                        if acquired.snapshot is None or acquired.snapshot.snapshot_id != confirmation.snapshot_id:
-                            raise CopilotAPIError(409, "confirmation_changed", owned_site=owned_result(acquired, candidates=True))
                         try:
                             truth = project_confirmation(acquired.snapshot, ConfirmedBusinessFact(
                                 snapshot_id=confirmation.snapshot_id, statement_ids=tuple(confirmation.statement_ids),

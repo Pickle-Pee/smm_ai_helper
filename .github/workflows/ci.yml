@@ -114,7 +114,7 @@ jobs:
             backend python -m pytest -q --tb=short \
               tests/test_marketing_mvp_postgresql.py tests/test_workflow_provider_protocols.py tests/test_workflow_redis.py \
               tests/test_production_graph_worker.py tests/test_graph_model_adapter.py tests/test_production_worker_postgresql.py \
-              tests/test_copilot_api.py tests/test_copilot_api_postgresql.py \
+              tests/test_copilot_api.py tests/test_copilot_api_postgresql.py tests/test_owned_snapshot_postgresql.py \
               tests/test_telegram_copilot.py tests/test_telegram_copilot_postgresql.py \
               tests/test_release_hardening_postgresql.py tests/test_release_telegram.py tests/test_release_operations.py
 

@@ -107,16 +107,25 @@ Resubmit the same owned URL with business context and:
 
 This object is the `confirmation` field, not a complete execute request. Copy actual
 returned identities. `confirmed` requires the literal boolean true; 1 is not accepted.
-The API re-acquires/re-extracts the page and compares the exact snapshot identity.
-Changed or unavailable snapshots produce 409 `confirmation_changed`, with fresh
-candidates when available. Unknown/ineligible statements produce 422
+The API persists the exact server-generated snapshot in PostgreSQL before returning
+candidates. Confirmation loads that snapshot by authenticated internal owner, request
+key, snapshot identity and declared owned URL, without fetching or extracting again.
+Missing, foreign or invalid stored snapshots produce 409 `confirmation_unavailable`;
+no replacement snapshot is silently accepted. Telegram offers manual product details
+or a new request, without claiming that the website changed. Unknown/ineligible statements produce 422
 `invalid_confirmation`. Only a matching valid selection projects a confirmed fact;
 `confirmed_by` is server-generated from internal User.id. Explicit current
 product_truth, including empty/null, still takes precedence.
 
-No snapshot persistence/cache is added. Snapshot identity includes extraction as well
-as page content, so nondeterministic extraction can require reconfirmation even on an
-unchanged page. This deliberately fails closed. Reusing a key before durable start is
+Migration `20261006_0010` adds `owned_product_snapshots`, with immutable exact snapshot
+JSON, owner/request/snapshot primary key, owned URL and creation timestamp. Records
+survive backend restarts and are removed when their owner is deleted. Existing pending
+confirmations from before deployment have no record and fail closed; start a new
+request to acquire a new snapshot, or provide manual context. Apply the additive
+migration before deploying the API. Downgrade removes snapshots, so pending confirmations
+then require recovery. Snapshot and positional statement identities remain unchanged:
+the exact persisted extraction binds each statement ID to its original text/evidence.
+Reusing a key before durable start is
 permitted; after start it is subject to exact effective-plan idempotency.
 
 ## Response contracts
@@ -218,7 +227,8 @@ replay, so a changed interpreted plan also conflicts safely.
 `tests/test_copilot_api.py` covers strict DTOs, auth, safe error boundaries, confirmation
 eligibility and lazy coherent composition. `tests/test_copilot_api_postgresql.py` covers
 HTTP DIRECT/SINGLE/delegation, BrandProfile precedence, identity, ownership, idempotency,
-owned confirmation/reacquisition, and production worker completion/optional failure
+owned confirmation without reacquisition, binding failures, restart and idempotent retry,
+and production worker completion/optional failure
 using real PostgreSQL/Redis and fake provider HTTP transport. Polling checks assert
 unchanged model calls, Jobs, run timestamps and wakeups.
 

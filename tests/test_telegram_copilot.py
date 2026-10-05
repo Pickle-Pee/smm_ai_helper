@@ -103,6 +103,15 @@ def test_http_conflict_decoding(monkeypatch, category):
     assert exc.value.category == category and exc.value.owned_site.snapshot_id == "snapshot.first"
 
 
+def test_http_confirmation_unavailable_decoding_without_snapshot(monkeypatch):
+    patch_http(monkeypatch, lambda _: httpx.Response(409,
+        json=dto.ErrorResponse(code="confirmation_unavailable").model_dump(mode="json")))
+    with pytest.raises(CopilotError) as exc:
+        asyncio.run(CopilotClient().execute(123, dto.ExecuteRequest(request_key="k", message="text")))
+    assert exc.value.category == "confirmation_unavailable"
+    assert exc.value.owned_site is None
+
+
 @pytest.mark.parametrize("failure", ["network", "json", "schema", "wrong_run"])
 def test_http_network_and_malformed_response(monkeypatch, failure):
     def respond(request):
@@ -663,6 +672,51 @@ def test_correct_information_enters_existing_manual_flow(monkeypatch):
         await flow.receive(message("Новые сведения", mid=2), state)
         payload = api.execute.call_args.args[1]
         assert payload.context.product_truth == "Новые сведения" and payload.confirmation is None
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("recovery", ["manual", "new"])
+def test_unavailable_confirmation_recovers_without_reconfirmation_loop(monkeypatch, recovery):
+    api = SimpleNamespace(execute=AsyncMock(side_effect=[dto.NeedsInputResponse(code="missing",
+        alternatives=[["product_truth"]], owned_site=owned()),
+        CopilotError("confirmation_unavailable"), started()]))
+    monkeypatch.setattr(flow, "client", api)
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        await flow.receive(msg, state)
+        await click(state, msg, "own", "own")
+        msg.answer.reset_mock()
+        old = await click(state, msg, "confirm", "confirm")
+        pending = (await state.get_data())["copilot_pending"]
+        assert pending["phase"] == "fields" and pending["fields"] == ["product_truth"]
+        assert "confirmation" not in pending["payload"]
+        assert "owned" not in pending and "displayed_statement_ids" not in pending
+        assert api.execute.await_count == 2
+        text = text_sent(msg)
+        assert "Предыдущие сведения для подтверждения недоступны" in text
+        assert "изменил" not in text and "извлечение" not in text
+        assert "Нашёл сведения" not in text
+        buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        assert buttons == ["Начать новый запрос", "Отмена"]
+        await flow.callback_action(old, state)
+        old.id = "old-confirm-redelivery"
+        await flow.callback_action(old, state)
+        assert "устарело" in old.answer.call_args.args[0]
+        await click(state, msg, "confirm", "unsupported-current-confirm")
+        assert api.execute.await_count == 2
+        original_key = api.execute.call_args.args[1].request_key
+        if recovery == "manual":
+            await flow.receive(message("У нас занятия для детей", mid=2), state)
+            payload = api.execute.call_args.args[1]
+            assert payload.context.product_truth == "У нас занятия для детей"
+            assert payload.confirmation is None and payload.request_key == original_key
+        else:
+            await click(state, msg, "new", "new")
+            await flow.receive(message("Новая стратегия", mid=2), state)
+            payload = api.execute.call_args.args[1]
+            assert payload.request_key != original_key and payload.confirmation is None
+            assert payload.owned_site_url is None
+        assert api.execute.await_count == 3
     asyncio.run(check())
 
 

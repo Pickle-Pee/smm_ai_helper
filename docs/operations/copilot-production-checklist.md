@@ -118,7 +118,10 @@ One model HTTP attempt per graph JobExecution attempt × at most three attempts 
 Backoff is 5/10 seconds. Source rejection may consume an attempt without a model call.
 Intent interpretation and owned-site extraction are separate pre-run single-attempt
 calls; they are not part of the graph's per-Job budget. Owned-site confirmation
-reacquires/extracts the snapshot. A changed snapshot requires fresh confirmation.
+loads the exact server-generated PostgreSQL snapshot without another extraction.
+Apply migration `20261006_0010` before API rollout. Pre-rollout or missing snapshots
+return `confirmation_unavailable`; the caller must provide manual context or start
+a new request with a new explicit confirmation.
 
 Workers never hold a DB transaction during provider execution. SIGTERM cancels active
 I/O and closes owned resources without marking a Job failed merely for shutdown.

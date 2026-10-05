@@ -11,6 +11,8 @@ import httpx
 import pytest
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.models import BrandProfile, MarketingRun, OrchestrationPlanRecord, User
@@ -266,7 +268,7 @@ def test_strategy_http_real_stores_fake_transport_worker_and_readonly_polling(mv
     asyncio.run(check())
 
 
-def test_owned_confirmation_reacquires_and_rejects_stale_or_unknown_statement(mvp_database, monkeypatch):
+def test_owned_confirmation_survives_restart_and_changed_extraction(mvp_database, monkeypatch):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
@@ -288,32 +290,99 @@ def test_owned_confirmation_reacquires_and_rejects_stale_or_unknown_statement(mv
                 request["confirmation"] = dict(snapshot_id=owned["snapshot_id"], statement_ids=[candidate["statement_id"]], confirmed=True, reference="I verified this product capability")
                 bad = copy.deepcopy(request)
                 bad["confirmation"]["statement_ids"] = ["statement.unknown"]
-                assert (await client.post("/copilot/execute", headers=headers(actor), json=bad)).status_code == 422
+                invalid = await client.post("/copilot/execute", headers=headers(actor), json=bad)
+                assert invalid.status_code == 422 and invalid.json()["code"] == "invalid_confirmation"
                 page["title"] = "Changed page"
-                stale = await client.post("/copilot/execute", headers=headers(actor), json=request)
-                assert stale.status_code == 409 and stale.json()["code"] == "confirmation_changed", stale.text
-                page["title"] = "Acme"
-                response = await client.post("/copilot/execute", headers=headers(actor), json=request)
-                assert response.status_code == 202, response.text
-                assert site.analyze_url.await_count == extractor.await_count == 4
-                run, _, _ = await state(mvp_database, response.json()["run_id"])
-                async with mvp_database() as session:
-                    saved = await session.get(OrchestrationPlanRecord, (run.run_id, 1))
-                    serialized = json.dumps(saved.compiled_plan_json)
-                    assert "confirmed_business_fact" in serialized and f"user:{run.user_id}" in serialized
-                    def truth_values(value):
-                        if isinstance(value, dict):
-                            if value.get("input_key") == "product_truth":
-                                yield value["value"]
-                            for child in value.values():
-                                yield from truth_values(child)
-                        elif isinstance(value, list):
-                            for child in value:
-                                yield from truth_values(child)
-                    truths = list(truth_values(saved.compiled_plan_json))
-                    assert truths and all("We are" not in json.dumps(truth) for truth in truths)
+                extractor.return_value = extraction([])
+            # Fresh engine and API have no shared in-memory acquisition state.
+            engine = create_async_engine(mvp_database.kw["bind"].url, poolclass=NullPool)
+            try:
+                restarted = configured(async_sessionmaker(engine, expire_on_commit=False),
+                    IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor)
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(restarted)), base_url="http://test") as client:
+                    response = await client.post("/copilot/execute", headers=headers(actor), json=request)
+                    replay = await client.post("/copilot/execute", headers=headers(actor), json=request)
+                    assert replay.status_code == 202 and replay.json()["run_id"] == response.json()["run_id"]
+            finally:
+                await engine.dispose()
+            assert response.status_code == 202, response.text
+            assert site.analyze_url.await_count == extractor.await_count == 1
+            run, jobs, _ = await state(mvp_database, response.json()["run_id"])
+            assert len(jobs) == 1  # Only the graph's ready root is queued at start.
+            async with mvp_database() as session:
+                saved = await session.get(OrchestrationPlanRecord, (run.run_id, 1))
+                serialized = json.dumps(saved.compiled_plan_json)
+                assert PRODUCT in serialized and "Changed page" not in serialized
+                assert "confirmed_business_fact" in serialized and f"user:{run.user_id}" in serialized
+                def truth_values(value):
+                    if isinstance(value, dict):
+                        if value.get("input_key") == "product_truth":
+                            yield value["value"]
+                        for child in value.values():
+                            yield from truth_values(child)
+                    elif isinstance(value, list):
+                        for child in value:
+                            yield from truth_values(child)
+                truths = list(truth_values(saved.compiled_plan_json))
+                assert truths and all("We are" not in json.dumps(truth) for truth in truths)
         finally:
             await remove_actor(mvp_database, actor)
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("mismatch", ["actor", "request_key", "source", "snapshot", "missing", "unknown_statement", "nonconfirmable"])
+def test_owned_confirmation_binding_and_statement_security(mvp_database, monkeypatch, mismatch):
+    from app.models import OwnedProductSnapshotRecord
+    from app.product_context import OwnedSiteRequest, OwnedProductEvidenceService
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        page = {"ok": True, "url": OWN, "final_url": OWN, "title": "Acme",
+                "main_text_excerpt": "\n".join([PRODUCT, AUDIENCE, JOB, PRICE, LEADER])}
+        site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
+        extractor = AsyncMock(return_value=extraction())
+        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor)
+        request = payload(owned_site_url=OWN, context={"business_goal": "Increase bookings", "relevant_alternative": "Spreadsheets"})
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+                initial = await client.post("/copilot/execute", headers=headers(actor), json=request)
+                assert initial.status_code == 200, initial.text
+                owned = initial.json()["owned_site"]
+                request["confirmation"] = dict(snapshot_id=owned["snapshot_id"],
+                    statement_ids=[owned["candidates"][0]["statement_id"]], confirmed=True, reference="Verified")
+                target_actor = actor
+                if mismatch == "actor":
+                    target_actor += 1
+                elif mismatch == "request_key":
+                    request["request_key"] = uuid.uuid4().hex
+                elif mismatch == "source":
+                    request["owned_site_url"] = "https://other-owned.example/product"
+                elif mismatch == "snapshot":
+                    request["confirmation"]["snapshot_id"] = "snapshot.missing"
+                elif mismatch == "missing":
+                    async with mvp_database() as session, session.begin():
+                        owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
+                        await session.execute(delete(OwnedProductSnapshotRecord).where(OwnedProductSnapshotRecord.owner_id == owner))
+                elif mismatch == "unknown_statement":
+                    request["confirmation"]["statement_ids"] = ["statement.unknown"]
+                else:
+                    acquired = await OwnedProductEvidenceService(analyzer=site, extractor=extractor).acquire(OwnedSiteRequest(owned_site_url=OWN))
+                    request["confirmation"]["statement_ids"] = [next(s.statement_id for s in acquired.snapshot.statements if s.text == LEADER)]
+                site.analyze_url.reset_mock()
+                extractor.reset_mock()
+                rejected = await client.post("/copilot/execute", headers=headers(target_actor), json=request)
+                expected = 422 if mismatch in {"unknown_statement", "nonconfirmable"} else 409
+                code = "invalid_confirmation" if expected == 422 else "confirmation_unavailable"
+                assert rejected.status_code == expected and rejected.json()["code"] == code, rejected.text
+                site.analyze_url.assert_not_awaited()
+                extractor.assert_not_awaited()
+                api.queue.wake.assert_not_awaited()
+                async with mvp_database() as session:
+                    owners = select(User.id).where(User.telegram_id.in_([actor, actor + 1]))
+                    assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id.in_(owners)))).all()
+        finally:
+            await remove_actor(mvp_database, actor)
+            await remove_actor(mvp_database, actor + 1)
     asyncio.run(check())
 
 

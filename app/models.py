@@ -60,6 +60,20 @@ class User(Base):
     )
 
 
+class OwnedProductSnapshotRecord(Base):
+    """Immutable server-generated evidence awaiting explicit caller confirmation."""
+    __tablename__ = "owned_product_snapshots"
+    __table_args__ = (CheckConstraint("jsonb_typeof(snapshot_json) = 'object'",
+                                     name="ck_owned_snapshot_object"),)
+
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    owned_site_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
