@@ -21,6 +21,24 @@ from bot.copilot_flow import CopilotStates, receive
 
 router = Router()
 ACTION_STORE: Dict[str, Dict[str, str]] = {}
+ACTION_LABEL_MAX_CHARS = 30
+
+
+def _short_action_label(text: str, limit: int = ACTION_LABEL_MAX_CHARS) -> str:
+    """Fit a display label while preserving complete words where possible."""
+    if limit < 0:
+        raise ValueError("Action label limit must be non-negative")
+    if limit == 0:
+        return ""
+
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+
+    prefix_length = limit - 1
+    boundary = text.rfind(" ", 0, prefix_length + 1)
+    prefix = text[:boundary] if boundary > 0 else text[:prefix_length]
+    return prefix.rstrip(" ,.;:!?") + "…"
 
 
 def _make_action_key(user_id: int, text: str) -> str:
@@ -44,7 +62,7 @@ def _actions_keyboard(user_id: int, actions: Any):
             continue
         key = _make_action_key(user_id, text)
         store[key] = text
-        kb.button(text=text[:30], callback_data=f"action:{key}")
+        kb.button(text=_short_action_label(text), callback_data=f"action:{key}")
 
     kb.adjust(1)
     return kb.as_markup() if store else None
