@@ -108,21 +108,55 @@ async def prompt_fields(message, state, pending, *, grouped=False):
     await send_text(message, text, reply_markup=keyboard([("Отмена", action(pending, "cancel"))]))
 
 
+CONFIRMATION_LIMIT = 3500  # UTF-16 units, matching send_text's single-message limit.
+CONFIRMATION_CANDIDATE_LIMIT = 8
+
+
 def confirmation_keyboard(pending):
-    selected = pending["selected"]
-    buttons = [(f"{'✓' if i in selected else '○'} Утверждение {i + 1}", action(pending, f"select.{i}"))
-               for i in range(len(pending["owned"]["candidates"]))]
-    return keyboard([*buttons, ("Подтвердить данные сайта", action(pending, "confirm")),
-        ("Ввести сведения вручную", action(pending, "manual")), ("Отмена", action(pending, "cancel"))])
+    return keyboard([("Всё актуально", action(pending, "confirm")),
+        ("Исправить сведения", action(pending, "manual")), ("Отмена", action(pending, "cancel"))])
+
+
+def confirmation_block(owned):
+    """Render whole observations only; never confirm an omitted or shortened claim."""
+    heading = "Нашёл сведения о вашем бизнесе:"
+    footer = "Если всё актуально, подтвердите данные. Если что-то изменилось — введите сведения вручную."
+    omitted = "Показана часть сведений сайта. Подтверждение относится только к пунктам выше."
+    units = lambda text: len(text.encode("utf-16-le")) // 2
+    displayed, lines = [], []
+    # Reserve the omission notice even when all candidates happen to fit.
+    budget = CONFIRMATION_LIMIT - units(heading + "\n\n" + omitted + "\n\n" + footer)
+    for candidate in owned.candidates:
+        line = "\n• " + " ".join(candidate.statement.split())
+        if not candidate.statement.strip() or len(displayed) >= CONFIRMATION_CANDIDATE_LIMIT:
+            continue
+        if units(line) > budget:
+            continue
+        displayed.append(candidate.statement_id)
+        lines.append(line)
+        budget -= units(line)
+    text = heading + "".join(lines)
+    if len(displayed) < len(owned.candidates):
+        text += "\n\n" + omitted
+    text += "\n\n" + footer
+    sources = {candidate.source_url for candidate in owned.candidates if candidate.statement_id in displayed}
+    if len(sources) == 1:
+        source = "\n\nИсточник: " + next(iter(sources))
+        if units(text + source) <= CONFIRMATION_LIMIT:
+            text += source
+    return text, displayed
 
 
 async def prompt_confirmation(message, state, pending, owned):
-    pending.update(owned=owned.model_dump(mode="json"), selected=[], phase="confirmation")
+    text, displayed = confirmation_block(owned)
+    if not owned.snapshot_id or not displayed:
+        pending["payload"].pop("confirmation", None)
+        pending["fields"] = ["product_truth"]
+        await prompt_fields(message, state, pending)
+        return
+    pending.update(owned=owned.model_dump(mode="json"), displayed_statement_ids=displayed, phase="confirmation")
     await save(state, pending, renew=True)
-    for i, candidate in enumerate(owned.candidates, 1):
-        await send_text(message, f"{i}. На сайте указано: {candidate.statement}\nИсточник: {candidate.source_url}")
-    await send_text(message, "Это утверждения сайта, а не проверенные факты. Выберите только те, которые можете подтвердить, затем нажмите «Подтвердить данные сайта».",
-                    reply_markup=confirmation_keyboard(pending))
+    await send_text(message, text, reply_markup=confirmation_keyboard(pending))
 
 
 ERRORS = {
@@ -299,25 +333,17 @@ async def callback_action(callback, state):
         else:
             await execute(message, callback.from_user.id, state, pending)
     elif pending["phase"] == "confirmation":
-        if re.fullmatch(r"select\.[0-9]{1,2}", name):
-            index = int(name.split(".")[1])
-            if index >= len(pending["owned"]["candidates"]):
-                return
-            selected = pending["selected"]
-            selected.remove(index) if index in selected else selected.append(index)
-            await save(state, pending)
-            await message.edit_reply_markup(reply_markup=confirmation_keyboard(pending))
-        elif name == "manual":
+        if name == "manual":
             pending["payload"].pop("confirmation", None)
             pending["fields"] = ["product_truth"]
             await prompt_fields(message, state, pending)
         elif name == "confirm":
-            if not pending["selected"]:
-                await send_text(message, "Сначала выберите хотя бы одно утверждение или введите сведения вручную.")
+            if not pending.get("displayed_statement_ids"):
+                await send_text(message, "Введите сведения вручную или начните новый запрос: /new")
                 return
             pending["payload"]["confirmation"] = {
                 "snapshot_id": pending["owned"]["snapshot_id"],
-                "statement_ids": [pending["owned"]["candidates"][i]["statement_id"] for i in sorted(pending["selected"])],
+                "statement_ids": pending["displayed_statement_ids"],
                 "confirmed": True,
                 "reference": "tg-confirm:" + hashlib.sha256(callback.id.encode()).hexdigest(),
             }
