@@ -348,12 +348,26 @@ def test_polling_safe_statuses_and_fixed_run_isolation(mvp_database, monkeypatch
                     run = await session.get(MarketingRun, rid)
                     run.status = status
                     run.error = "SECRET provider response and stack trace"
+                    run.state_json = {"private_diagnostic": "PRIVATE_STATE_SENTINEL"}
                     session.add(MarketingRun(run_id="c" * 64, user_id=run.user_id, workflow_type="fixed.workflow.v1", status="queued"))
                 public = await client.get(started.json()["status_url"], headers=headers(actor))
                 assert public.status_code == 200 and public.json()["status"] == status.upper(), public.text
                 assert "SECRET" not in public.text
+                assert "PRIVATE_STATE_SENTINEL" not in public.text
                 if code:
-                    assert public.json()["failure"]["code"] == code and public.json()["failure"]["actions"]
+                    expected_failure = {
+                        "context_required": {
+                            "code": "context_required",
+                            "message": "Additional context or an accessible source is required.",
+                            "actions": ["Review the supplied context and sources, then submit a new request key."],
+                        },
+                        "result_unavailable": {
+                            "code": "result_unavailable",
+                            "message": "The request could not be completed.",
+                            "actions": ["Contact support with the run ID or submit a new request key."],
+                        },
+                    }
+                    assert public.json()["failure"] == expected_failure[code]
                 else:
                     assert public.json()["failure"] is None
                 assert (await client.get("/copilot/runs/" + "c" * 64, headers=headers(actor))).status_code == 404

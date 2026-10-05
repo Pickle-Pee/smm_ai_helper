@@ -290,6 +290,86 @@ def test_every_status_has_safe_presentation(status, text):
     assert text in "\n".join(render.run(result))
 
 
+PUBLIC_FAILURES = {
+    "result_unavailable": {
+        "message": "The request could not be completed.",
+        "actions": ["Contact support with the run ID or submit a new request key."],
+    },
+    "context_required": {
+        "message": "Additional context or an accessible source is required.",
+        "actions": ["Review the supplied context and sources, then submit a new request key."],
+    },
+}
+
+
+def recovery_response(status, code, *, alternate=False):
+    failure = None if code is None else {
+        "code": code,
+        **({"message": "Alternative public wording.", "actions": ["Alternative public recovery action."]}
+           if alternate else PUBLIC_FAILURES[code]),
+    }
+    return dto.RunResponse.model_validate_json(json.dumps({"run_id": RID, "status": status, "failure": failure}))
+
+
+@pytest.mark.parametrize("status,code", [
+    ("FAILED", "result_unavailable"), ("FAILED", None), ("FAILED", "context_required"),
+    ("BLOCKED", "context_required"), ("BLOCKED", None), ("BLOCKED", "result_unavailable"),
+])
+def test_workflow_recovery_state_matrix_is_safe_and_status_specific(status, code):
+    sections = render.run(recovery_response(status, code))
+    text = "\n".join(sections)
+    assert "/new" in text
+    if status == "FAILED":
+        assert "Не удалось завершить запрос." in text
+        assert "Нужно уточнить" not in text and "дополнительные сведения" not in text
+    else:
+        assert "Нужно уточнить запрос." in text
+        assert "Не удалось завершить" not in text
+    if status == "FAILED" and code == "result_unavailable":
+        assert "Начните новый запрос: /new" in sections
+        assert sections[-1] == f"Если ошибка повторяется, передайте поддержке ID запуска:\n{RID}"
+        assert text.count(RID) == 1
+    else:
+        assert RID not in text and "поддержке" not in text
+    if status == "BLOCKED" and code == "context_required":
+        assert "Нужны дополнительные сведения или доступный источник." in text
+        assert "Проверьте сведения и источники" in text
+    elif status == "BLOCKED":
+        assert "дополнительные сведения" not in text
+    for values in PUBLIC_FAILURES.values():
+        assert values["message"] not in text
+        assert all(action not in text for action in values["actions"])
+    assert all(term not in text.lower() for term in (
+        "request key", "job_id", "execution_id", "executor", "node_id", "traceback", "provider", "database",
+        "context_required", "result_unavailable", "<b>", "`", "[run]",
+    ))
+
+
+@pytest.mark.parametrize("status,code", [("FAILED", "result_unavailable"), ("BLOCKED", "context_required")])
+def test_workflow_recovery_depends_on_code_not_public_wording(status, code):
+    canonical = render.run(recovery_response(status, code))
+    alternative = render.run(recovery_response(status, code, alternate=True))
+    assert alternative == canonical
+    assert "Alternative public" not in "\n".join(alternative)
+
+
+def test_failed_and_blocked_recovery_remain_distinct():
+    assert render.run(recovery_response("FAILED", "result_unavailable")) != render.run(
+        recovery_response("BLOCKED", "context_required"))
+
+
+@pytest.mark.parametrize("status,code", [("FAILED", "result_unavailable"), ("BLOCKED", "context_required")])
+def test_workflow_recovery_status_handler_sends_plain_text(monkeypatch, status, code):
+    result = recovery_response(status, code)
+    api = SimpleNamespace(run=AsyncMock(return_value=result))
+    monkeypatch.setattr(flow, "client", api)
+    callback = SimpleNamespace(data=flow.run_callback(RID), from_user=SimpleNamespace(id=123),
+        message=message(), answer=AsyncMock())
+    asyncio.run(check_status(callback))
+    assert [call.args[0] for call in callback.message.answer.call_args_list] == render.run(result)
+    assert all(call.kwargs["parse_mode"] is None for call in callback.message.answer.call_args_list)
+
+
 CREATOR_LIMITATION = (
     "Text post and creative hypotheses only; no image/video generation, "
     "platform-current compliance or performance validation."

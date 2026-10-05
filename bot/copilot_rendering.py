@@ -112,9 +112,21 @@ def run(value: dto.RunResponse) -> list[str]:
     if value.status == dto.RunStatus.RUNNING:
         return ["Стратегия собирается."]
     if value.status == dto.RunStatus.FAILED:
-        return ["Не удалось завершить запрос. Можно попробовать снова."]
+        if value.failure and value.failure.code == "result_unavailable":
+            return [
+                "Не удалось завершить запрос.",
+                "Начните новый запрос: /new",
+                f"Если ошибка повторяется, передайте поддержке ID запуска:\n{value.run_id}",
+            ]
+        return ["Не удалось завершить запрос. Начните новый запрос: /new"]
     if value.status == dto.RunStatus.BLOCKED:
-        return ["Нужно уточнить запрос.", human(value.failure.message), *(human(a) for a in value.failure.actions)] if value.failure else ["Нужно уточнить запрос. Начните новый запрос: /new"]
+        if value.failure and value.failure.code == "context_required":
+            return [
+                "Нужно уточнить запрос.",
+                "Нужны дополнительные сведения или доступный источник.",
+                "Проверьте сведения и источники, затем начните новый запрос: /new",
+            ]
+        return ["Нужно уточнить запрос. Начните новый запрос: /new"]
     messages = ["Стратегия готова." if value.strategy else "Результат готов."]
     if value.strategy:
         for key, label in SECTIONS.items():
