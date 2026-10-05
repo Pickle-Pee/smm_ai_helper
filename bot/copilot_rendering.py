@@ -48,6 +48,7 @@ TRANSLATIONS = {
     "Review the supplied context and sources, then submit a new request key.": "Проверьте сведения и источники, затем начните новый запрос: /new",
     "Market research was not supplied.": "Источники исследования рынка не предоставлены.",
     "Competitor research was not supplied.": "Источники исследования конкурентов не предоставлены.",
+    "Text post and creative hypotheses only; no image/video generation, platform-current compliance or performance validation.": "Доступны только текстовый пост и креативные гипотезы; генерация изображений и видео, проверка актуальных требований платформ и оценка эффективности не выполняются.",
     "Only one competitor was analyzed.": "Проанализирован только один конкурент.",
     "Economics are unavailable; profitability and affordability remain unknown.": "Данных об экономике нет: прибыльность и доступность ресурсов не оценены.",
     "One competitor analysis is unavailable.": "Анализ одного из конкурентов недоступен.",

@@ -290,6 +290,43 @@ def test_every_status_has_safe_presentation(status, text):
     assert text in "\n".join(render.run(result))
 
 
+CREATOR_LIMITATION = (
+    "Text post and creative hypotheses only; no image/video generation, "
+    "platform-current compliance or performance validation."
+)
+CREATOR_LIMITATION_RU = (
+    "Доступны только текстовый пост и креативные гипотезы; генерация изображений и видео, "
+    "проверка актуальных требований платформ и оценка эффективности не выполняются."
+)
+
+
+@pytest.mark.parametrize("limitations,expected", [
+    ([CREATOR_LIMITATION], [CREATOR_LIMITATION_RU]),
+    (["Unknown provider-specific limitation."], ["Unknown provider-specific limitation."]),
+    (["Недостаточно данных"], ["Недостаточно данных"]),
+    ([CREATOR_LIMITATION, "Недостаточно данных"], [CREATOR_LIMITATION_RU, "Недостаточно данных"]),
+    (["Text post and creative hypotheses only; custom limitation."],
+     ["Text post and creative hypotheses only; custom limitation."]),
+    ([CREATOR_LIMITATION, CREATOR_LIMITATION], [CREATOR_LIMITATION_RU]),
+    (["<b>text</b> [text](https://example.com) * _ #"],
+     ["<b>text</b> [text](https://example.com) * _ #"]),
+])
+def test_creator_post_limitations_use_exact_translation_and_preserve_unknown(limitations, expected):
+    post = dto.Post(headline="Заголовок поста", body="Текст поста", cta="Попробуйте", limitations=limitations)
+    sections = render.module(post)
+    assert sections == [post.headline, post.body, "Призыв к действию\n" + post.cta,
+                        "⚠ Ограничения\n" + "\n".join("• " + value for value in expected)]
+    if CREATOR_LIMITATION in limitations:
+        assert CREATOR_LIMITATION not in "\n".join(sections)
+
+
+def test_creator_limitation_source_matches_telegram_translation_contract():
+    from app.module_execution.executors.creator import CreatorExecutor
+
+    assert CreatorExecutor.limitation == CREATOR_LIMITATION
+    assert render.human(CreatorExecutor.limitation) == CREATOR_LIMITATION_RU
+
+
 def test_strategy_nine_sections_experiments_coverage_and_long_markup_safe():
     from bot.rendering import split_text
     strategy = dto.Strategy(**{key: dto.StrategySection(text="<b>🙂 & [text](url)\n" * 190, items=["Действие"]) for key in render.SECTIONS})
