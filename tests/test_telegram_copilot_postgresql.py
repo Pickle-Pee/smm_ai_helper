@@ -13,6 +13,7 @@ from app.config import settings
 from app.models import BrandProfile, MarketingRun, User
 from app.marketing_copilot.contracts import IntentKind
 from app.orchestration_runtime.worker import ModuleGraphWorker
+from app.product_context import SnapshotField
 from bot import copilot_flow as flow
 from bot.copilot_client import CopilotClient
 from bot.handlers.copilot import check_status
@@ -21,7 +22,7 @@ from tests.test_copilot_api import application
 from tests.test_copilot_api_postgresql import CONTEXT, configured, remove_actor
 from tests.test_graph_postgresql import state as graph_state
 from tests.test_module_executors import analyzer
-from tests.test_product_context import OWN, PRODUCT, AUDIENCE, JOB, PRICE, LEADER, extraction
+from tests.test_product_context import OWN, PRODUCT, AUDIENCE, JOB, PRICE, LEADER, extraction, observation
 from tests.test_strategy_builder import StrategyModel
 from tests.test_telegram_copilot import message, context, click, text_sent
 
@@ -181,10 +182,15 @@ def test_telegram_strategy_duplicate_jobs_worker_status_foreign_owner(mvp_databa
 def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatch):
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
+        feature = "Automatic appointment reminders are included."
         page = {"ok": True, "url": OWN, "final_url": OWN, "title": "Acme",
-                "main_text_excerpt": "\n".join([PRODUCT, AUDIENCE, JOB, PRICE, LEADER])}
+                "main_text_excerpt": "\n".join([PRODUCT, feature, AUDIENCE, JOB, PRICE, LEADER])}
         site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
-        extractor = AsyncMock(return_value=extraction())
+        extractor = AsyncMock(return_value=extraction([
+            observation(SnapshotField.PRODUCT, PRODUCT), observation(SnapshotField.FEATURES, feature),
+            observation(SnapshotField.AUDIENCE, AUDIENCE), observation(SnapshotField.JOB, JOB),
+            observation(SnapshotField.PRICING, PRICE), observation(SnapshotField.POSITIONING, LEADER),
+        ]))
         api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor,
                          module_model=StrategyModel(use_parents=True))
         calls = wire(monkeypatch, api)
@@ -193,10 +199,32 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
         try:
             fsm, msg = context(actor), message(f"Собери стратегию {OWN}", actor=actor)
             await flow.receive(msg, fsm)
+            msg.answer.reset_mock()
             await click(fsm, msg, "own", "own", actor)
-            assert "На сайте указано:" in text_sent(msg)
-            await click(fsm, msg, "select.0", "select", actor)
-            await click(fsm, msg, "confirm", "confirm", actor)
+            msg.answer.assert_awaited_once()
+            block = text_sent(msg)
+            assert "Нашёл сведения о вашем бизнесе:" in block
+            assert block.count("Источник:") == 1 and block.count(OWN) == 1
+            buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+            assert buttons == ["Всё актуально", "Исправить сведения", "Отмена"]
+            pending = (await fsm.get_data())["copilot_pending"]
+            displayed_ids = pending["displayed_statement_ids"]
+            candidates = pending["owned"]["candidates"]
+            assert len(displayed_ids) == 2
+            assert displayed_ids == [c["statement_id"] for c in candidates]
+            assert [line for line in block.splitlines() if line.startswith("• ")] == [
+                "• " + " ".join(c["statement"].split()) for c in candidates]
+            assert all(term not in block for term in ("SITE_CLAIM", "CONFIRMED_BUSINESS_FACT",
+                "statement_id", "snapshot_id", "product_truth", *displayed_ids, pending["owned"]["snapshot_id"]))
+            snapshot_id = pending["owned"]["snapshot_id"]
+            confirmation_click = await click(fsm, msg, "confirm", "confirm", actor)
+            assert calls[-1].confirmation.snapshot_id == snapshot_id
+            assert calls[-1].confirmation.statement_ids == displayed_ids
+            assert calls[-1].confirmation.confirmed is True
+            assert calls[-1].confirmation.reference.startswith("tg-confirm:")
+            await flow.callback_action(confirmation_click, fsm)
+            assert len(calls) == 2
+            assert "устарело" in confirmation_click.answer.call_args.args[0]
             assert site.analyze_url.await_count == 2
             # Remaining missing alternative is collected under the original key.
             pending = (await fsm.get_data())["copilot_pending"]

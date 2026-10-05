@@ -215,7 +215,7 @@ def test_url_roles_are_explicit_bounded_and_stale_buttons_rejected(monkeypatch):
     asyncio.run(check())
 
 
-def test_confirmation_explicit_selection_changed_snapshot_and_retry(monkeypatch):
+def test_confirmation_all_current_candidates_changed_snapshot_and_replay(monkeypatch):
     api = SimpleNamespace(execute=AsyncMock(side_effect=[dto.NeedsInputResponse(code="missing",
         alternatives=[["product_truth"]], owned_site=owned()),
         CopilotError("confirmation_changed", owned_site=owned("snapshot.new", "statement.new")), started()]))
@@ -224,18 +224,18 @@ def test_confirmation_explicit_selection_changed_snapshot_and_retry(monkeypatch)
         state, msg = context(), message("Стратегия https://own.example")
         await flow.receive(msg, state)
         await click(state, msg, "own", "1")
-        assert "На сайте указано:" in text_sent(msg)
-        await click(state, msg, "confirm", "2")
-        assert api.execute.await_count == 1
-        toggle = await click(state, msg, "select.0", "3")
-        await flow.callback_action(toggle, state)
-        assert (await state.get_data())["copilot_pending"]["selected"] == [0]
-        await click(state, msg, "confirm", "4")
+        assert "Нашёл сведения о вашем бизнесе:" in text_sent(msg)
+        old = await click(state, msg, "confirm", "2")
         assert "повторное извлечение" in text_sent(msg)
         pending = (await state.get_data())["copilot_pending"]
-        assert pending["selected"] == [] and "confirmation" not in pending["payload"]
-        await click(state, msg, "select.0", "5")
-        await click(state, msg, "confirm", "6")
+        assert pending["displayed_statement_ids"] == ["statement.new"]
+        assert "confirmation" not in pending["payload"]
+        await flow.callback_action(old, state)
+        assert "устарело" in old.answer.call_args.args[0]
+        old.id = "different-delivery"
+        await flow.callback_action(old, state)
+        assert api.execute.await_count == 2  # Old token cannot confirm the replacement snapshot.
+        await click(state, msg, "confirm", "3")
         values = [c.args[1] for c in api.execute.call_args_list]
         assert len({v.request_key for v in values}) == 1
         assert values[1].confirmation.statement_ids == ["statement.first"]
@@ -605,4 +605,109 @@ def test_real_http_flow_terminal_output_and_transient_retry(monkeypatch, status)
             assert json.loads(calls[0].content)["request_key"] != json.loads(calls[1].content)["request_key"]
         else:
             assert len(calls) == 2 and calls[0].content == calls[1].content
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("count", [5, 30])
+def test_compact_confirmation_displays_and_confirms_exact_candidates(monkeypatch, count):
+    candidates = [dto.ConfirmationCandidate(statement_id=f"statement.fact{i}",
+        field="stated_features_capabilities", statement=f"Сведение о бизнесе {i}",
+        source_url="https://own.example") for i in range(count)]
+    result = dto.OwnedSiteResult(outcome="ACQUIRED", snapshot_id="snapshot.current", candidates=candidates)
+    api = SimpleNamespace(execute=AsyncMock(side_effect=[dto.NeedsInputResponse(code="missing",
+        alternatives=[["product_truth"]], owned_site=result), started()]))
+    monkeypatch.setattr(flow, "client", api)
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        await flow.receive(msg, state)
+        msg.answer.reset_mock()
+        await click(state, msg, "own", "own")
+        msg.answer.assert_awaited_once()
+        block = text_sent(msg)
+        buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        assert buttons == ["Всё актуально", "Исправить сведения", "Отмена"]
+        assert block.count("https://own.example") == block.count("Источник:") == 1
+        assert all(term not in block for term in ("SITE_CLAIM", "CONFIRMED_BUSINESS_FACT",
+            "site_claim", "statement_id", "snapshot_id", "product_truth", "snapshot.current", "statement.fact"))
+        displayed = candidates[:min(count, flow.CONFIRMATION_CANDIDATE_LIMIT)]
+        assert [line for line in block.splitlines() if line.startswith("• ")] == ["• " + c.statement for c in displayed]
+        if count > len(displayed):
+            assert "только к пунктам выше" in block
+        callback = await click(state, msg, "confirm", "yes")
+        confirmation = api.execute.call_args.args[1].confirmation
+        assert confirmation.statement_ids == [c.statement_id for c in displayed]
+        assert confirmation.snapshot_id == result.snapshot_id and confirmation.confirmed is True
+        assert confirmation.reference.startswith("tg-confirm:")
+        await flow.callback_action(callback, state)
+        assert api.execute.await_count == 2
+        assert "устарело" in callback.answer.call_args.args[0]
+    asyncio.run(check())
+
+
+def test_correct_information_enters_existing_manual_flow(monkeypatch):
+    api = SimpleNamespace(execute=AsyncMock(side_effect=[dto.NeedsInputResponse(code="missing",
+        alternatives=[["product_truth"]], owned_site=owned()), started()]))
+    monkeypatch.setattr(flow, "client", api)
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        await flow.receive(msg, state)
+        await click(state, msg, "own", "own")
+        old = await click(state, msg, "manual", "manual")
+        pending = (await state.get_data())["copilot_pending"]
+        assert pending["phase"] == "fields" and pending["fields"] == ["product_truth"]
+        assert "confirmation" not in pending["payload"]
+        old.data = old.data.replace(":manual", ":confirm")
+        old.id = "stale-confirm"
+        await flow.callback_action(old, state)
+        assert api.execute.await_count == 1
+        await flow.receive(message("Новые сведения", mid=2), state)
+        payload = api.execute.call_args.args[1]
+        assert payload.context.product_truth == "Новые сведения" and payload.confirmation is None
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("changed", [False, True])
+@pytest.mark.parametrize("statements", [[], [" "], ["🙂" * 2000]])
+def test_no_displayable_confirmation_falls_back_to_manual(monkeypatch, changed, statements):
+    result = dto.OwnedSiteResult(outcome="ACQUIRED", snapshot_id="snapshot.empty", candidates=[
+        dto.ConfirmationCandidate(statement_id=f"statement.{i}", field="stated_product_service",
+            statement=text, source_url="https://own.example") for i, text in enumerate(statements)])
+    responses = [dto.NeedsInputResponse(code="missing", alternatives=[["product_truth"]], owned_site=owned()),
+        CopilotError("confirmation_changed", owned_site=result)] if changed else [
+        dto.NeedsInputResponse(code="missing", alternatives=[["product_truth"]], owned_site=result)]
+    api = SimpleNamespace(execute=AsyncMock(side_effect=responses))
+    monkeypatch.setattr(flow, "client", api)
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        await flow.receive(msg, state)
+        await click(state, msg, "own", "own")
+        if changed:
+            await click(state, msg, "confirm", "confirm")
+        pending = (await state.get_data())["copilot_pending"]
+        assert pending["phase"] == "fields" and pending["fields"] == ["product_truth"]
+        assert "confirmation" not in pending["payload"]
+        assert "свойства продукта" in msg.answer.call_args.args[0]
+    asyncio.run(check())
+
+
+def test_confirmation_length_budget_preserves_whole_statements(monkeypatch):
+    candidates = [dto.ConfirmationCandidate(statement_id=f"statement.{i}", field="stated_product_service",
+        statement=text, source_url="https://own.example/" + "x" * 1900)
+        for i, text in enumerate(["🙂" * 2000, "Полный день " + "🙂" * 700, "Питание " + "🙂" * 700, "Есть пробный день"])]
+    result = dto.OwnedSiteResult(outcome="ACQUIRED", snapshot_id="snapshot.long", candidates=candidates)
+    api = SimpleNamespace(execute=AsyncMock(side_effect=[dto.NeedsInputResponse(code="missing",
+        alternatives=[["product_truth"]], owned_site=result), started()]))
+    monkeypatch.setattr(flow, "client", api)
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        await flow.receive(msg, state)
+        msg.answer.reset_mock()
+        await click(state, msg, "own", "own")
+        msg.answer.assert_awaited_once()
+        block = text_sent(msg)
+        assert len(block.encode("utf-16-le")) // 2 <= 3500
+        assert [line for line in block.splitlines() if line.startswith("• ")] == ["• " + c.statement for c in candidates[1:]]
+        assert block.count("Источник:") <= 1
+        await click(state, msg, "confirm", "confirm")
+        assert api.execute.call_args.args[1].confirmation.statement_ids == [c.statement_id for c in candidates[1:]]
     asyncio.run(check())
