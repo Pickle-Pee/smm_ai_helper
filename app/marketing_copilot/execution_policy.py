@@ -54,13 +54,12 @@ class ExecutionPolicy:
         if intent.kind is IntentKind.UNSUPPORTED:
             return conversation(ReasonCode.UNSUPPORTED_INTENT)
         # Provider confidence is advisory; only server-owned intent/context gates route execution.
+        # Calculation metadata is advisory too; only the allowlisted kind selects the tool.
         if intent.kind is IntentKind.LEAD_FUNNEL_CALCULATION:
-            if not intent.deterministic_calculation_required or intent.external_evidence_required:
+            if intent.external_evidence_required:
                 return conversation(ReasonCode.UNSUPPORTED_COMBINATION)
             return decision(ExecutionMode.DIRECT_TOOL, ReasonCode.DETERMINISTIC_CALCULATION,
                             tool_key="lead_funnel_calculator_v1")
-        if intent.deterministic_calculation_required:
-            return conversation(ReasonCode.UNSUPPORTED_COMBINATION)
         if intent.kind is IntentKind.CONVERSATION:
             return conversation(ReasonCode.CONVERSATION_REQUEST)
         if intent.kind in _MODULES:
