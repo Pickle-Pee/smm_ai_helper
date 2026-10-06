@@ -74,6 +74,21 @@ class OwnedProductSnapshotRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class InterpretedRequestRecord(Base):
+    """First validated meaning wins for each immutable exact-message revision."""
+    __tablename__ = "copilot_interpretations"
+    __table_args__ = (
+        CheckConstraint("jsonb_typeof(interpretation_json) = 'object'", name="ck_copilot_interpretation_object"),
+        CheckConstraint("message_fingerprint ~ '^[0-9a-f]{64}$'", name="ck_copilot_message_fingerprint"),
+    )
+
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    message_fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    interpretation_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Task(Base):
     __tablename__ = "tasks"
 

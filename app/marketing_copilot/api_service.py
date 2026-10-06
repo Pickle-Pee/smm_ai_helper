@@ -26,6 +26,7 @@ from .presentation import owned_result, module_presentation, calculation_present
 from .provider_adapters import expected_provider_failure
 from .run_reader import GraphRunReader
 from .observability import stage_timing
+from .interpretation_store import InterpretationStore
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class CopilotAPIService:
         self.sessions, self.copilot, self.acquisition, self.queue = sessions, copilot, acquisition, queue
         self.reader = GraphRunReader(sessions, copilot.graph_service)
         self.snapshots = OwnedSnapshotStore(sessions)
+        self.interpretations = InterpretationStore(sessions)
 
     async def close(self):
         await self.queue.close()
@@ -84,8 +86,19 @@ class CopilotAPIService:
                         # Explicit current product_truth (even empty) outranks confirmation.
                         if "product_truth" not in payload.context.model_fields_set:
                             request = replace(request, current_request=(*request.current_request, truth))
+                with stage_timing("intent_interpretation_load", request_key=payload.request_key, user_id=owner):
+                    interpreted = await self.interpretations.load(owner, payload.request_key, payload.message)
+                source = "persisted"
+                if interpreted is None:
+                    with stage_timing("intent_interpretation_provider", request_key=payload.request_key, user_id=owner):
+                        interpreted = await self.copilot.interpreter.interpret_request(payload.message)
+                    with stage_timing("intent_interpretation_save", request_key=payload.request_key, user_id=owner):
+                        interpreted = await self.interpretations.save(owner, payload.request_key, payload.message, interpreted)
+                    source = "provider"
+                log.info("Copilot interpretation source=%s request_key=%s user_id=%s",
+                         source, payload.request_key, owner)
                 with stage_timing("core_execute", request_key=payload.request_key, user_id=owner):
-                    result = await self.copilot.execute(request)
+                    result = await self.copilot.execute(request, interpreted=interpreted)
         except StartIdentityConflict as exc:
             raise CopilotAPIError(409, "request_conflict") from exc
         except ExecutorOutputError as exc:

@@ -21,7 +21,7 @@ from .application_contracts import (
     Clarification, CopilotExecutionResult, CopilotRequest, ResultKind, WorkflowStarted,
 )
 from .context_resolver import ContextEntry
-from .context_projection import merge_projected_context
+from .context_projection import InterpretedRequest, merge_projected_context, validate_interpreted_request
 from .contracts import CopilotContractError, ExecutionMode, IntentKind, ReasonCode
 from .observability import stage_timing
 
@@ -46,12 +46,14 @@ class MarketingCopilotService:
         self.metadata, self.dispatcher, self.evaluator = metadata, dispatcher, evaluator
         self.graph_service, self.tools = graph_service, tools
 
-    async def execute(self, request: CopilotRequest) -> CopilotExecutionResult:
+    async def execute(self, request: CopilotRequest, *, interpreted: InterpretedRequest | None = None) -> CopilotExecutionResult:
         if type(request) is not CopilotRequest:
             raise CopilotContractError("Expected CopilotRequest")
         request.__post_init__()
-        with stage_timing("intent_interpretation", request_key=request.request_id, user_id=request.actor_id):
-            interpreted = await self.interpreter.interpret_request(request.message)
+        if interpreted is None:
+            with stage_timing("intent_interpretation", request_key=request.request_id, user_id=request.actor_id):
+                interpreted = await self.interpreter.interpret_request(request.message)
+        interpreted = validate_interpreted_request(interpreted, request.message)
         intent = interpreted.intent
         entries = list(merge_projected_context(source_entries(request.current_request),
                                               interpreted.projection, request.message))

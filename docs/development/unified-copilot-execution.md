@@ -49,8 +49,9 @@ in the current message. Non-null slots convert in canonical order to internal
 `BusinessFactCandidate` entries. Null/absent facts create no context entry. Semantic
 keys cannot repeat structurally; duplicate raw JSON properties still fail closed.
 Unknown properties, non-string values and invented excerpts fail closed. The old
-provider `facts` array is rejected; public API DTOs and persisted state are unchanged,
-so no data migration is needed. No repair or second extraction call is made. The public provider adapter maps invalid combined
+provider `facts` array is rejected; public API DTOs remain unchanged. The production
+HTTP adapter persists the validated internal interpretation before executing it. No repair
+or second extraction call is made. The public provider adapter maps invalid combined
 output to the existing provider-unavailable response.
 
 `message -> bounded candidates -> server validation -> AuthorizedContextFact ->
@@ -76,7 +77,8 @@ model-invented values; semantic classification of an excerpt still depends on th
 model and is not an independent fact check. A supplied post topic can populate
 `message` without inventing a value proposition. Positioning clarification lists the
 actual missing typed inputs. The existing Telegram field-answer path and a complete
-prose rewrite can fill those gaps without FSM changes or persistence of projections.
+prose rewrite can fill those gaps without FSM changes. An unchanged message reuses
+its persisted interpretation; a changed message creates a new interpretation revision.
 Logs contain only merged field names/counts, never values, messages or raw responses.
 
 Regression tests use deterministic structured-provider doubles with real resolver,
@@ -153,13 +155,27 @@ requires an explicit URL plus SITE_FETCH. POSITIONING runs alone when the existi
 policy finds sufficient positioning facts; it does not initiate research.
 Metadata-only proposals fail closed without an AgentRunner, TaskPipelineService or
 fixed MarketingExecutors fallback. No DB graph rows, Redis wakeups or provider retries
-are created by the synchronous path. Transport/timeouts become a typed limitation;
+are created by the synchronous path. The production HTTP adapter does persist its
+validated interpretation, including for synchronous and clarification results.
+Transport/timeouts become a typed limitation;
 invalid executor contracts still raise internal errors rather than successful output.
 
 Module IDs, evidence and claim IDs are stable for the same actor, request key and
-plan using the existing executor identity builder. This is not synchronous persistence
-or a promise of deduplicated provider effects. Different model interpretations may
-produce different plans/identities.
+plan using the existing executor identity builder. The production HTTP adapter binds
+one immutable validated `InterpretedRequest` winner to the internal owner, request key
+and SHA-256 revision of the exact message bytes. It loads that winner before calling
+the interpreter, or saves a newly validated interpretation before core execution.
+Concurrent misses may both call the provider; the save returns the persisted winner
+and every caller executes that winner. A changed message has a distinct revision;
+context, confirmation and current source observations are still resolved per request.
+Only intent and bounded projection are stored, never execution bindings or raw provider
+output. Public clients cannot inject an interpretation or projection.
+
+This is interpretation durability, not full HTTP idempotency or exactly-once provider
+execution. Module execution and acquisition may repeat, and workflow identity still
+uses its existing compiled-plan conflict rules. Persisted interpretations are validated
+again on load and corruption fails closed. Logs expose stage timings and whether the
+interpretation came from persistence or the provider, without message/projection values.
 
 ## Quality boundary and durable path
 
@@ -207,7 +223,8 @@ finish and worker. Existing architecture tests allow only the explicit new inter
 consumers; current guards permit the dedicated production HTTP composition while
 forbidding direct execution or database imports from Telegram.
 
-No migration is added; head remains `20260917_0009`. No live paid providers are needed.
+Interpretation durability adds migration `20261006_0011` after `20261006_0010`.
+No live paid providers are needed. Historical validation before this change follows:
 Task E verification executed locally: focused execution/regression suites **632 passed**;
 final tools/application unit checks **53 passed**; complete Linux Python 3.11 suite with
 disposable PostgreSQL 15 and Redis **1170 passed, zero skips**. `python -m compileall app bot`,
@@ -216,9 +233,9 @@ no new upgrade operations. Existing deprecation warnings remain.
 
 Limitations: three executable modules in the default internal 1.1 composition (six
 in explicit production 1.2), narrow deterministic text grammar, no arbitrary artifact
-hydration, no durable pre-run clarification, no generic synthesis or push delivery, and
-no synchronous idempotency persistence. Provider failures are not retried by this
-application service. Quality Gates validate structural provenance, not semantic truth.
+hydration, no durable pre-run clarification response, no generic synthesis or push
+delivery, and no complete synchronous response idempotency persistence. Provider
+failures are not retried by this application service. Quality Gates validate structural provenance, not semantic truth.
 
 Manual internal verification: compose an intent fake, module fake, safe analyzer fake
 and shared executor registry; supply a CREATOR request with its scoped inputs and
