@@ -4,6 +4,7 @@ import hashlib
 import re
 import secrets
 
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -200,9 +201,15 @@ async def error(message, state, pending, exc):
     await send_text(message, ERRORS[exc.category], reply_markup=keyboard(buttons))
 
 
-async def execute(message, actor, state, pending):
+async def execute(message, actor, state, pending, *, processing_text=None):
     pending["phase"] = "execute"
     await save(state, pending, renew=True)
+    if processing_text is not None:
+        try:
+            await message.edit_text(processing_text, parse_mode=None, reply_markup=None)
+        except TelegramAPIError:
+            await error(message, state, pending, CopilotError("unavailable"))
+            return
     try:
         payload = dto.ExecuteRequest.model_validate(pending["payload"])
         response = await client.execute(actor, payload)
@@ -305,6 +312,16 @@ async def reset(message, state, *, cancel=False):
         await send_text(message, "Запрос отменён." if cancel else "Напишите новый запрос одним сообщением.")
 
 
+async def consume_keyboard(message, state, pending):
+    await save(state, pending, renew=True)
+    try:
+        await message.edit_reply_markup(reply_markup=None)
+    except TelegramAPIError:
+        await error(message, state, pending, CopilotError("invalid_state"))
+        return False
+    return True
+
+
 async def callback_action(callback, state):
     message = callback.message
     if message is None or message.chat.type != "private":
@@ -318,9 +335,15 @@ async def callback_action(callback, state):
     await callback.answer()
     name = pieces[2]
     if name in {"new", "cancel"}:
+        await finish(state)
+        try:
+            await message.edit_reply_markup(reply_markup=None)
+        except TelegramAPIError:
+            pass  # The request is finished; reset still sends a usable next step.
         await reset(message, state, cancel=name == "cancel")
     elif name == "retry" and pending["phase"] == "retry":
-        await execute(message, callback.from_user.id, state, pending)
+        await execute(message, callback.from_user.id, state, pending,
+            processing_text="Запрос принят. Продолжаю анализ…")
     elif pending["phase"] == "urls" and name in {"own", "competitor", "market", "skip"}:
         url = pending["urls"][0]
         payload = pending["payload"]
@@ -340,13 +363,22 @@ async def callback_action(callback, state):
         pending["classified_urls"].append(url)
         pending["urls"].pop(0)
         if pending["urls"]:
+            if not await consume_keyboard(message, state, pending):
+                return
             await prompt_urls(message, state, pending)
         else:
-            await execute(message, callback.from_user.id, state, pending)
+            if name != "own":
+                if not await consume_keyboard(message, state, pending):
+                    return
+            await execute(message, callback.from_user.id, state, pending,
+                processing_text="Проверяю сайт и извлекаю сведения…" if name == "own" else None)
     elif pending["phase"] == "confirmation":
         if name == "manual":
             pending["payload"].pop("confirmation", None)
             pending["fields"] = ["product_truth"]
+            pending["phase"] = "fields"
+            if not await consume_keyboard(message, state, pending):
+                return
             await prompt_fields(message, state, pending)
         elif name == "confirm":
             if not pending.get("displayed_statement_ids"):
@@ -358,7 +390,8 @@ async def callback_action(callback, state):
                 "confirmed": True,
                 "reference": "tg-confirm:" + hashlib.sha256(callback.id.encode()).hexdigest(),
             }
-            await execute(message, callback.from_user.id, state, pending)
+            await execute(message, callback.from_user.id, state, pending,
+                processing_text="Подтверждение принято. Продолжаю анализ…")
 
 
 async def status(message, actor, run_id):

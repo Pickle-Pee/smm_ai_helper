@@ -1,6 +1,7 @@
 """Telegram -> typed HTTP adapter regressions; Telegram/providers are offline."""
 import asyncio
 import ast
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +11,8 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from aiogram.exceptions import TelegramNetworkError
+from aiogram.methods import EditMessageText
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -25,7 +28,8 @@ RID = "ab" * 32
 
 def message(text="Собери стратегию", mid=1, actor=123):
     return SimpleNamespace(text=text, message_id=mid, from_user=SimpleNamespace(id=actor),
-        chat=SimpleNamespace(id=actor, type="private"), entities=[], answer=AsyncMock(), edit_reply_markup=AsyncMock())
+        chat=SimpleNamespace(id=actor, type="private"), entities=[], answer=AsyncMock(),
+        edit_reply_markup=AsyncMock(), edit_text=AsyncMock())
 
 
 def context(actor=123):
@@ -764,4 +768,174 @@ def test_confirmation_length_budget_preserves_whole_statements(monkeypatch):
         assert block.count("Источник:") <= 1
         await click(state, msg, "confirm", "confirm")
         assert api.execute.call_args.args[1].confirmation.statement_ids == [c.statement_id for c in candidates[1:]]
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("name,text", [
+    ("own", "Проверяю сайт и извлекаю сведения…"),
+    ("confirm", "Подтверждение принято. Продолжаю анализ…"),
+    ("retry", "Запрос принят. Продолжаю анализ…"),
+])
+def test_callback_pending_transition_precedes_execute(monkeypatch, name, text):
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        api = SimpleNamespace(execute=AsyncMock(side_effect=CopilotError("temporary")))
+        monkeypatch.setattr(flow, "client", api)
+        await flow.receive(msg, state)
+        if name == "confirm":
+            api.execute.side_effect = None
+            api.execute.return_value = dto.NeedsInputResponse(code="missing",
+                alternatives=[["product_truth"]], owned_site=owned())
+            await click(state, msg, "own", "setup-own")
+        elif name == "retry":
+            await click(state, msg, "own", "setup-own")
+        pending = (await state.get_data())["copilot_pending"]
+        old_token = pending["token"]
+        callback = SimpleNamespace(data=flow.action(pending, name), id="accepted",
+            from_user=SimpleNamespace(id=123), message=msg, answer=AsyncMock())
+        msg.edit_text.reset_mock()
+        async def edited(*args, **kwargs):
+            callback.answer.assert_awaited_once_with()
+            active = (await state.get_data())["copilot_pending"]
+            assert active["token"] != old_token and active["phase"] == "execute"
+        msg.edit_text.side_effect = edited
+        async def execute(actor, payload):
+            msg.edit_text.assert_awaited_once_with(text, parse_mode=None, reply_markup=None)
+            assert actor == 123 and payload.owned_site_url == "https://own.example"
+            assert payload.request_key == "tg:123:123:1"
+            if name == "confirm":
+                assert payload.confirmation.model_dump() == {
+                    "snapshot_id": "snapshot.first", "statement_ids": ["statement.first"],
+                    "confirmed": True,
+                    "reference": "tg-confirm:" + hashlib.sha256(b"accepted").hexdigest(),
+                }
+            else:
+                assert payload.confirmation is None
+            raise CopilotError("temporary")
+        api.execute = AsyncMock(side_effect=execute)
+        await flow.callback_action(callback, state)
+        assert "Сервис временно недоступен" in text_sent(msg)
+        buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        assert buttons == ["Повторить", "Начать новый запрос", "Отмена"]
+        callback.id = "fresh-telegram-click"
+        await flow.callback_action(callback, state)
+        api.execute.assert_awaited_once()
+        assert callback.answer.call_args.args == ("Действие устарело. Начните новый запрос: /new",)
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("name", ["own", "competitor", "market", "skip", "manual", "new", "cancel"])
+def test_accepted_callback_removes_original_keyboard(monkeypatch, name):
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example https://next.example")
+        api = SimpleNamespace(execute=AsyncMock(return_value=started()))
+        monkeypatch.setattr(flow, "client", api)
+        await flow.receive(msg, state)
+        if name == "manual":
+            pending = (await state.get_data())["copilot_pending"]
+            await flow.prompt_confirmation(msg, state, pending, owned())
+        pending = (await state.get_data())["copilot_pending"]
+        old_token = pending["token"]
+        async def remove(**kwargs):
+            active = (await state.get_data())["copilot_pending"]
+            assert active is None or active["token"] != old_token
+        msg.edit_reply_markup.side_effect = remove
+        old = await click(state, msg, name)
+        msg.edit_reply_markup.assert_awaited_once_with(reply_markup=None)
+        api.execute.assert_not_awaited()
+        if name == "manual":
+            assert "свойства продукта" in text_sent(msg)
+        old.id = "fresh-click"
+        await flow.callback_action(old, state)
+        assert "устарело" in old.answer.call_args.args[0]
+        msg.edit_reply_markup.assert_awaited_once()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("name", ["own", "competitor", "market"])
+def test_rejected_role_keeps_current_keyboard_and_token(monkeypatch, name):
+    async def check():
+        state, msg = context(), message("Стратегия https://new.example")
+        api = SimpleNamespace(execute=AsyncMock(return_value=started()))
+        monkeypatch.setattr(flow, "client", api)
+        await flow.receive(msg, state)
+        pending = (await state.get_data())["copilot_pending"]
+        if name == "own":
+            pending["payload"]["owned_site_url"] = "https://previous.example"
+        else:
+            key = "competitor_urls" if name == "competitor" else "market_source_urls"
+            pending["payload"][key] = [f"https://source{i}.example" for i in range(3)]
+        await flow.save(state, pending)
+        old_token = pending["token"]
+        await click(state, msg, name)
+        assert (await state.get_data())["copilot_pending"]["token"] == old_token
+        msg.edit_reply_markup.assert_not_awaited()
+        msg.edit_text.assert_not_awaited()
+        api.execute.assert_not_awaited()
+        await click(state, msg, "skip", "correct-choice")
+        msg.edit_reply_markup.assert_awaited_once_with(reply_markup=None)
+        api.execute.assert_awaited_once()
+    asyncio.run(check())
+
+
+def test_pending_edit_failure_does_not_execute_or_reactivate_old_token(monkeypatch):
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example")
+        api = SimpleNamespace(execute=AsyncMock(return_value=started()))
+        monkeypatch.setattr(flow, "client", api)
+        await flow.receive(msg, state)
+        pending = (await state.get_data())["copilot_pending"]
+        old = SimpleNamespace(data=flow.action(pending, "own"), id="first",
+            from_user=SimpleNamespace(id=123), message=msg, answer=AsyncMock())
+        msg.edit_text.side_effect = TelegramNetworkError(method=EditMessageText(text="pending"),
+            message="Telegram edit failed")
+        await flow.callback_action(old, state)
+        api.execute.assert_not_awaited()
+        active = (await state.get_data())["copilot_pending"]
+        assert active["phase"] == "retry" and active["token"] != old.data.split(":")[1]
+        assert "Не удалось связаться с сервером" in text_sent(msg)
+        buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        assert buttons == ["Повторить", "Начать новый запрос", "Отмена"]
+        old.id = "fresh-click"
+        await flow.callback_action(old, state)
+        assert "устарело" in old.answer.call_args.args[0]
+        api.execute.assert_not_awaited()
+        msg.edit_text.side_effect = None
+        await click(state, msg, "retry", "retry-after-edit-failure")
+        api.execute.assert_awaited_once()
+        assert api.execute.call_args.args[1].owned_site_url == "https://own.example"
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("name", ["own", "competitor", "market", "skip", "manual", "new", "cancel"])
+def test_short_callback_edit_failure_provides_recovery(monkeypatch, name):
+    async def check():
+        state, msg = context(), message("Стратегия https://own.example https://next.example")
+        api = SimpleNamespace(execute=AsyncMock(return_value=started()))
+        monkeypatch.setattr(flow, "client", api)
+        await flow.receive(msg, state)
+        if name == "manual":
+            await flow.prompt_confirmation(msg, state,
+                (await state.get_data())["copilot_pending"], owned())
+        msg.edit_reply_markup.side_effect = TelegramNetworkError(
+            method=EditMessageText(text="pending"), message="Telegram edit failed")
+        old = await click(state, msg, name)
+        api.execute.assert_not_awaited()
+        active = (await state.get_data())["copilot_pending"]
+        if name in {"new", "cancel"}:
+            assert active is None
+            assert ("Напишите новый запрос" if name == "new" else "Запрос отменён") in text_sent(msg)
+        else:
+            assert active["phase"] == "stopped"
+            assert active["token"] != old.data.split(":")[1]
+            buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
+            assert buttons == ["Начать новый запрос", "Отмена"]
+        old.id = "fresh-click"
+        await flow.callback_action(old, state)
+        assert "устарело" in old.answer.call_args.args[0]
+        api.execute.assert_not_awaited()
+        if active is not None:
+            await click(state, msg, "new", "new-after-failure")
+            assert (await state.get_data())["copilot_pending"] is None
+            assert "Напишите новый запрос" in text_sent(msg)
     asyncio.run(check())
