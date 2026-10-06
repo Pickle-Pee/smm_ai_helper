@@ -1,6 +1,8 @@
 """Explicit caller operation: safe fetch -> strict extraction -> published claims."""
 import hashlib
 import json
+import logging
+from collections import Counter
 from socket import gaierror
 from typing import Any, Protocol
 
@@ -9,7 +11,7 @@ import httpx
 from app.marketing_orchestrator.quality_gates.contracts import EvidenceRecord, EvidenceSourceClass
 from app.services.expert_instruction_composer import ExpertInstructionComposer
 from app.services.safe_http import UnsafeURL, validate_url
-from .contracts import (AcquisitionResult, Extraction, KnowledgeKind, OwnedProductSnapshot,
+from .contracts import (AcquisitionResult, ExtractedStatement, Extraction, KnowledgeKind, OwnedProductSnapshot,
                         OwnedSiteRequest, SnapshotField, SnapshotStatement, SourceExcerpt)
 from .errors import ExtractorUnavailableError, SourceOutcome
 from .owned_site import OwnedSiteAnalyzer, page_segments
@@ -26,11 +28,22 @@ def identity(prefix, *parts):
     return prefix + "_" + hashlib.sha256(raw.encode()).hexdigest()[:48]
 
 
+logger = logging.getLogger(__name__)
+
+
+class DuplicateExtractionKey(ValueError):
+    pass
+
+
+def invalid_json_constant(value):
+    raise ValueError("Non-JSON constant")
+
+
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("Duplicate extraction JSON key")
+            raise DuplicateExtractionKey("Duplicate extraction JSON key")
         result[key] = value
     return result
 
@@ -99,19 +112,56 @@ class OwnedProductEvidenceService:
                 response_schema=Extraction.model_json_schema())
         except (ExtractorUnavailableError, httpx.HTTPError, TimeoutError, OSError):
             return failed(SourceOutcome.CAPABILITY_UNAVAILABLE)
+        def invalid(reason, *, produced=0, accepted=0, reasons=None):
+            logger.info("owned extraction outcome=%s reason=%s produced=%d accepted=%d rejected=%d rejection_reasons=%s",
+                SourceOutcome.INVALID_EXTRACTION.value, reason, produced, accepted,
+                produced - accepted, dict(reasons or {}))
+            return failed(SourceOutcome.INVALID_EXTRACTION)
+
+        if type(raw) is not str:
+            return invalid("invalid_envelope")
+        if len(raw) > 65536:
+            return invalid("oversized_output")
         try:
-            if type(raw) is not str or len(raw) > 65536:
-                raise ValueError("Invalid extraction size")
-            json.loads(raw, object_pairs_hook=unique_object)
-            extraction = Extraction.model_validate_json(raw)
-            # An ID/quote supplied by a model is never evidence until literal match.
-            if any(not any(quote in segment for segment in segments)
-                   for item in extraction.statements for quote in item.excerpts):
-                raise ValueError("Unsupported source excerpt")
-            return AcquisitionResult(source=source, outcome=SourceOutcome.ACQUIRED,
+            envelope = json.loads(raw, object_pairs_hook=unique_object, parse_constant=invalid_json_constant)
+        except DuplicateExtractionKey:
+            return invalid("duplicate_key")
+        except (ValueError, RecursionError, UnicodeError):
+            return invalid("invalid_json")
+        if (type(envelope) is not dict or set(envelope) != {"statements"}
+                or type(envelope["statements"]) is not list
+                or len(envelope["statements"]) > 30):
+            return invalid("invalid_envelope")
+
+        candidates = envelope["statements"]
+        accepted = []
+        reasons = Counter()
+        for candidate in candidates:
+            try:
+                # JSON-mode preserves the existing strict enum/array contract.
+                item = ExtractedStatement.model_validate_json(json.dumps(candidate))
+            except (ValueError, TypeError, RecursionError, UnicodeError):
+                reasons["invalid_statement"] += 1
+                continue
+            # Check the original quotes too: contract whitespace stripping must
+            # never repair a non-literal provider excerpt into accepted evidence.
+            if (tuple(candidate["excerpts"]) != item.excerpts
+                    or any(not any(quote in segment for segment in segments)
+                           for quote in item.excerpts)):
+                reasons["unsupported_excerpt"] += 1
+                continue
+            accepted.append(item)
+        if candidates and not accepted:
+            return invalid("no_usable_statements", produced=len(candidates), reasons=reasons)
+        try:
+            extraction = Extraction(statements=tuple(accepted))
+            result = AcquisitionResult(source=source, outcome=SourceOutcome.ACQUIRED,
                 snapshot=self._snapshot(source, canonical, page.get("title", "").strip(), segments, extraction))
         except (ValueError, TypeError, RecursionError, UnicodeError):
-            return failed(SourceOutcome.INVALID_EXTRACTION)
+            return invalid("snapshot_validation", produced=len(candidates), accepted=len(accepted), reasons=reasons)
+        logger.info("owned extraction outcome=%s produced=%d accepted=%d rejected=%d rejection_reasons=%s",
+            SourceOutcome.ACQUIRED.value, len(candidates), len(accepted), len(candidates) - len(accepted), dict(reasons))
+        return result
 
     @staticmethod
     def _snapshot(source, canonical, title, segments, extraction):
