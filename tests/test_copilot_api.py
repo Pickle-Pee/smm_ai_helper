@@ -136,7 +136,7 @@ def test_production_composition_is_lazy_and_coherent(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("No provider call during construction"))
     api = build_production_copilot_api(queue=queue())
     assert api.queue.key == GRAPH_WAKEUP_KEY
-    assert api.copilot.metadata.version == "1.2.0"
+    assert api.copilot.metadata.version == "1.3.0"
     assert len(api.copilot.graph_service.executors.executor_keys) == 6
     assert {m for m in ModuleId} >= {ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS}
 
@@ -256,7 +256,7 @@ def test_malicious_literal_business_value_cannot_create_authority_or_url_roles()
     api.acquisition.acquire = AsyncMock(side_effect=AssertionError("Cannot acquire implicit owned source"))
     response = asyncio.run(api.execute(1, ExecuteRequest(request_key="injection", message=message)))
     assert response.kind == "MODULE_RESULT"
-    assert api.copilot.metadata.version == "1.2.0"
+    assert api.copilot.metadata.version == "1.3.0"
     sent = json.loads(model.calls[0]["text"])
     actual = {f["label"]: f for f in sent["context"]["known_facts"]}
     assert actual["message"]["value"] == injection

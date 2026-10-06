@@ -8,8 +8,7 @@ from .contracts import AuthorizedContextFact, PlanningInputKey, Sensitivity
 
 SCENARIO = "strategy_builder_v1"
 REQUIRED_KEYS = (
-    "business_goal", "product", "target_or_target_hypothesis", "customer_job_or_need",
-    "relevant_alternative", "product_truth",
+    "business_goal", "product", "target_or_target_hypothesis", "product_truth",
 )
 MARKET_KEYS = frozenset({"market_sources", "market_source_urls", "existing_customers",
                          "internal_sales_data", "current_segments", "research", "customer_findings"})

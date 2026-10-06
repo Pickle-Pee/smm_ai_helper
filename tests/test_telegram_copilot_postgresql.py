@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.config import settings
-from app.models import BrandProfile, MarketingRun, User
+from app.models import BrandProfile, MarketingRun, OrchestrationPlanRecord, User
 from app.marketing_copilot.contracts import IntentKind
 from app.orchestration_runtime.worker import ModuleGraphWorker
 from app.product_context import SnapshotField
@@ -184,18 +184,18 @@ def test_telegram_owned_site_confirmation_uses_persisted_snapshot(mvp_database, 
         actor = int(uuid.uuid4().hex[:12], 16)
         feature = "Automatic appointment reminders are included."
         page = {"ok": True, "url": OWN, "final_url": OWN, "title": "Acme",
-                "main_text_excerpt": "\n".join([PRODUCT, feature, AUDIENCE, JOB, PRICE, LEADER])}
+                "main_text_excerpt": "\n".join([PRODUCT, feature, AUDIENCE, PRICE, LEADER])}
         site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
         extractor = AsyncMock(return_value=extraction([
             observation(SnapshotField.PRODUCT, PRODUCT), observation(SnapshotField.FEATURES, feature),
-            observation(SnapshotField.AUDIENCE, AUDIENCE), observation(SnapshotField.JOB, JOB),
+            observation(SnapshotField.AUDIENCE, AUDIENCE),
             observation(SnapshotField.PRICING, PRICE), observation(SnapshotField.POSITIONING, LEADER),
         ]))
         api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor,
                          module_model=StrategyModel(use_parents=True))
         backend_app = application(api)
         calls = wire(monkeypatch, api, app=backend_app)
-        # Require both user scalar clarification and explicit snapshot confirmation.
+        # Strategy needs confirmed truth, but no customer job or alternative.
         await brand(mvp_database, actor, {"business_goal": "Increase bookings"})
         try:
             fsm, msg = context(actor), message(f"Собери стратегию {OWN}", actor=actor)
@@ -209,6 +209,8 @@ def test_telegram_owned_site_confirmation_uses_persisted_snapshot(mvp_database, 
             buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
             assert buttons == ["Всё актуально", "Исправить сведения", "Отмена"]
             pending = (await fsm.get_data())["copilot_pending"]
+            assert "customer_job_or_need" not in pending["fields"]
+            assert "relevant_alternative" not in pending["fields"]
             displayed_ids = pending["displayed_statement_ids"]
             candidates = pending["owned"]["candidates"]
             assert len(displayed_ids) == 2
@@ -234,17 +236,18 @@ def test_telegram_owned_site_confirmation_uses_persisted_snapshot(mvp_database, 
             assert len(calls) == 2
             assert "устарело" in confirmation_click.answer.call_args.args[0]
             assert site.analyze_url.await_count == extractor.await_count == 1
-            # Remaining missing alternative is collected under the original key.
-            pending = (await fsm.get_data())["copilot_pending"]
-            assert pending["fields"] == ["relevant_alternative"]
-            answer = message("Spreadsheets", mid=2, actor=actor)
-            await flow.receive(answer, fsm)
-            assert "Начал собирать стратегию" in text_sent(answer)
+            assert "Начал собирать стратегию" in text_sent(msg)
+            assert (await fsm.get_data())["copilot_pending"] is None
             assert len({p.request_key for p in calls}) == 1
             assert calls[-1].confirmation.confirmed is True
+            assert all(p.context.customer_job_or_need is None and p.context.relevant_alternative is None
+                       for p in calls)
             restarted_site.analyze_url.assert_not_awaited()
             restarted_extractor.assert_not_awaited()
             rid = (await fsm.get_data())["copilot_run"]["run_id"]
+            async with mvp_database() as session:
+                plan = await session.get(OrchestrationPlanRecord, (rid, 1))
+                assert plan.registry_version == "1.3.0"
             for _ in range(3):
                 assert await ModuleGraphWorker(restarted.copilot.graph_service).once()
             result = message(actor=actor)

@@ -23,7 +23,7 @@ def build_production_copilot_api(*, sessions=AsyncSessionLocal, queue=None,
     if not callable(intent_model) or not callable(extractor):
         raise ValueError("Copilot intent and owned-site extractor capabilities are required")
     copilot = build_marketing_copilot_service(intent_model=intent_model,
-        executor_registry=graph.executors, graph_service=graph.service, registry_version="1.2.0")
+        executor_registry=graph.executors, graph_service=graph.service, registry_version=graph.metadata.version)
     copilot.interpreter = PublicIntentInterpreter(intent_model)
     acquisition = OwnedProductEvidenceService(analyzer=owned_analyzer if owned_analyzer is not None else build_owned_site_analyzer(),
                                              extractor=extractor)

@@ -71,7 +71,7 @@ def copilot(kind=IntentKind.MARKETING_STRATEGY, urls=()):
     graph = SimpleNamespace(start_compiled_run=AsyncMock())
     svc = build_marketing_copilot_service(intent_model=intent_model(kind, urls),
         module_model=FakeModel(), url_analyzer=analyzer(), market_analyzer=analyzer(),
-        registry_version="1.2.0")
+        registry_version="1.3.0")
     svc.graph_service = graph
     return svc, graph
 
@@ -108,7 +108,7 @@ def test_owned_url_and_goal_recover_descriptions_but_require_confirmation_before
     svc, graph = copilot()
     output = asyncio.run(svc.execute(req))
     assert output.kind is ResultKind.NEEDS_INPUT
-    assert set(output.clarification.alternatives[0]) == {"relevant_alternative", "product_truth"}
+    assert set(output.clarification.alternatives[0]) == {"product_truth"}
     graph.start_compiled_run.assert_not_awaited()
     facts = ContextResolver().resolve(owned_site_context=req.owned_site_context).project_context
     assert {f.label for f in facts} >= {"product", "target_or_target_hypothesis", "customer_job_or_need"}

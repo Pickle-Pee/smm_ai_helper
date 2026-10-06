@@ -28,7 +28,7 @@ def queue(key=GRAPH_WAKEUP_KEY):
 def test_production_composition_six_exact_bindings_without_network(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", Mock(side_effect=AssertionError("network client at startup")))
     runtime = composition.build_production_graph_runtime(queue=queue())
-    assert runtime.metadata.version == "1.2.0"
+    assert runtime.metadata.version == "1.3.0"
     assert set(runtime.executors.executor_keys) == {
         "competitor_analysis.v1", "positioning.v1", "creator.v1",
         "market_analysis.v1", "virtual_cmo.v1", "experiments.v1",
@@ -69,7 +69,7 @@ def test_metadata_and_executor_coherence_validated(monkeypatch):
         composition.build_production_graph_runtime(queue=queue())
     old = ModuleRegistry.load("1.1.0")
     monkeypatch.setattr(ModuleRegistry, "load", lambda *args: old)
-    with pytest.raises(ValueError, match="six Registry 1.2.0"):
+    with pytest.raises(ValueError, match="six Registry 1.3.0"):
         composition.build_production_graph_runtime(queue=queue())
 
 

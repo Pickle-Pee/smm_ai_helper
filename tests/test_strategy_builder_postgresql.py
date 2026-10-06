@@ -42,7 +42,7 @@ async def setup(db, competitors=2, market=True, *, max_attempts=3):
         await session.flush()
         owner = user.id
     copilot = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY),
-        executor_registry=executors, graph_service=service, registry_version="1.2.0")
+        executor_registry=executors, graph_service=service, registry_version="1.3.0")
     request = CopilotRequest(actor_id=owner, request_id=uuid.uuid4().hex, message="Build a strategy",
         current_request=tuple(ContextEntry(f.input_key.value if f.input_key else f.label, f) for f in context.known_facts),
         available_tools=context.available_tools)
@@ -125,7 +125,7 @@ def test_strategy_full_no_market_no_competitors_and_maximum_graph(mvp_database, 
                 assert market_call["upstream_results"] == []
             async with mvp_database() as session:
                 saved = await session.get(OrchestrationPlanRecord, (rid, 1))
-                assert saved.registry_version == "1.2.0"
+                assert saved.registry_version == "1.3.0"
                 assert saved.compiled_plan_json["schema_version"] == "compiled_execution_plan.v2"
         finally:
             await cleanup(mvp_database, rid, owner)

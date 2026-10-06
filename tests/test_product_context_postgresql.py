@@ -37,7 +37,7 @@ def test_owned_context_confirmation_persistence_execution_and_source_isolation(m
             await session.flush()
             owner = user.id
         svc = build_marketing_copilot_service(intent_model=intent_model(kind, (OWN, COMPETITOR)),
-            executor_registry=executors, graph_service=graph, registry_version="1.2.0")
+            executor_registry=executors, graph_service=graph, registry_version="1.3.0")
         source_key = "competitor_urls" if kind is IntentKind.MARKETING_STRATEGY else "competitor_url"
         req = attach_acquisition(CopilotRequest(actor_id=owner, request_id=uuid.uuid4().hex,
             message=f"Build strategy using our site {OWN} and competitor {COMPETITOR}",

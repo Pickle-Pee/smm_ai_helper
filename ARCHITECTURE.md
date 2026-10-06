@@ -118,7 +118,7 @@ See `docs/task_pipeline.md` for the detailed task architecture.
 
 The semantic foundation in `app/marketing_copilot/` prepares intent, resolved context and deterministic depth proposals above the existing Chat / Tasks / fixed Workflow boundaries. Its explicitly composed `MarketingCopilotService` coordinates these proposals with deterministic tools, synchronous modules and durable graph start. The dedicated `/copilot` HTTP adapter below connects this service to production graph Jobs; Telegram accesses this boundary through the Copilot HTTP adapter. An explicitly injected model callback may interpret text into strict `MarketingIntent`; it cannot supply an executor, Job type or execution binding. A pure policy selects CONVERSATION, DIRECT_TOOL, SINGLE_MODULE or WORKFLOW using allowlisted mappings and Registry metadata. These selections are proposals, never execution authorization.
 
-Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > owned-site published observations > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its executable composition explicitly requires Registry 1.2.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
+Its context resolver returns the existing `PlanningContext`, preserving source provenance and the precedence current explicit request > owned-site published observations > project/run > BrandProfile > conversation fallback. Saved artifacts remain upstream references/findings. The adapter maps only module/workflow proposals to the unchanged `RequestInterpretation` selector contract. `strategy_builder_v1` is a supported bounded planning scenario; its production executable composition uses Registry 1.3.0 and compiled plan v2. See [unified request foundation](docs/development/unified-request-contracts.md) for contracts, input/authorization boundaries and limitations.
 
 `app/marketing_orchestrator/` is a deterministic, side-effect-free internal planning boundary:
 
@@ -167,9 +167,9 @@ The request reuses the Orchestrator's immutable `ContextPacket`. Complete predec
 
 Python dependencies point from this execution package to declarative `module_registry` types, Orchestrator context contracts and Quality Gates result contracts. Module Registry no longer imports legacy `AgentRegistry` or checks runtime implementation availability. Neither planning nor Quality Gates imports the new execution package.
 
-Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-only and rejecting every binding. Registry resources 1.0.0 and 1.1.0 remain unchanged. Explicit `ModuleRegistry.load("1.1.0")` provides exactly three approved exact bindings: `COMPETITOR_ANALYSIS -> competitor_analysis.v1`, `POSITIONING -> positioning.v1`, and `CREATOR -> creator.v1`, all using `module_executor.v1`. The other twelve descriptors remain metadata-only in 1.1.0. Explicit 1.2.0 adds `MARKET_ANALYSIS -> market_analysis.v1`, `VIRTUAL_CMO -> virtual_cmo.v1`, and `EXPERIMENTS -> experiments.v1`, also exact `module_executor.v1`; nine modules remain metadata-only. Descriptor metadata is identical across all three versions. Unknown versions and non-approved binding sets fail closed.
+Registry `1.0.0` remains the current default, byte-for-byte unchanged, metadata-only and rejecting every binding. Registry resources 1.0.0 and 1.1.0 remain unchanged. Explicit `ModuleRegistry.load("1.1.0")` provides exactly three approved exact bindings: `COMPETITOR_ANALYSIS -> competitor_analysis.v1`, `POSITIONING -> positioning.v1`, and `CREATOR -> creator.v1`, all using `module_executor.v1`. The other twelve descriptors remain metadata-only in 1.1.0. Explicit 1.2.0 adds `MARKET_ANALYSIS -> market_analysis.v1`, `VIRTUAL_CMO -> virtual_cmo.v1`, and `EXPERIMENTS -> experiments.v1`, also exact `module_executor.v1`; nine modules remain metadata-only. Descriptor metadata is identical across those three versions. Registry 1.3.0 preserves the six 1.2 bindings and changes only POSITIONING inputs: product, audience and product_truth required; customer job and alternative preferred strategic seeds. Unknown versions and non-approved binding sets fail closed.
 
-The separate `app/module_execution/executors/` package supplies three implementations in its unchanged default 1.1 composition, or six when the factory receives `registry_version="1.2.0"`, with injected single-attempt model and source-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
+The separate `app/module_execution/executors/` package supplies three implementations in its unchanged default 1.1 composition, or six when the factory receives `registry_version="1.2.0"` or `"1.3.0"`, with injected single-attempt model and source-analysis capabilities. They use ExpertInstructionComposer, strict bounded structured outputs, scoped inputs, first-party/public-page provenance and confidence-capped predecessor lineage. Missing inputs/tools or unsupported assets return typed BLOCKED results. They construct Quality Gates contracts but never run its evaluator; evaluation remains the outer caller's concern. There are no mutable global production registrations.
 
 The executable registry and implementations are consumed explicitly by the Copilot application service and durable graph runtime, including its production worker lane. The dedicated Copilot API uses this application composition; Telegram and MarketingWorkflowService do not consume the registry. `AgentRegistry`/`AgentRunner` and fixed `MarketingExecutors` remain in place. The optional cache-free UrlAnalyzer composition opts into propagating fetch errors; legacy callers retain their existing failure behavior. The generic Orchestrator stays `PLANNING_ONLY`. See [first module executors](docs/development/first-module-executors.md) and [module execution foundation](docs/development/module-execution-foundation.md).
 
@@ -228,12 +228,12 @@ The production HTTP adapter below adds ingress without a schema migration. See
 ### Internal durable module graph execution
 
 `app/orchestration_runtime/` compiles validated planning-only plans using explicit
-Registry 1.1.0 or 1.2.0 and an injected executor registry. The immutable approved execution-version set contains exactly these two versions. Compilation persists the exact version; reload loads that version, never upgrades a 1.1 plan. Metadata compatibility still requires exact equality to planning Registry 1.0 after removing availability/bindings. The first executable vertical is
+Registry 1.1.0, 1.2.0 or 1.3.0 and an injected executor registry. The immutable approved execution-version set contains exactly these three versions. Compilation persists the exact version; reload loads that version, never upgrades a 1.1 plan. Metadata compatibility requires exact equality to planning Registry 1.0 after removing availability/bindings, except the exact canonical 1.3 POSITIONING input delta. The first executable vertical is
 `competitive_positioning_v1`: COMPETITOR_ANALYSIS -> POSITIONING. The existing
 `new_positioning_v1` is outside the runtime-owned immutable `EXECUTABLE_SCENARIOS`
 allowlist, which contains exactly `explicit_single_module_v1`,
 `competitive_positioning_v1`, and `strategy_builder_v1`. Planning support does not grant execution permission;
-MARKET_ANALYSIS is bound only in explicit Registry 1.2.0; binding availability does not authorize new scenarios.
+MARKET_ANALYSIS is bound in explicit Registry 1.2.0 and 1.3.0; binding availability does not authorize new scenarios.
 
 Immutable `compiled_execution_plan.v1` revisions live in `orchestration_plans`,
 owned by MarketingRun (`orchestration_graph.v1`). Ready nodes become distinct
@@ -265,7 +265,7 @@ Redis wakeup hints
    └ smm:orchestration:wakeups:v1 → graph lanes
 ```
 
-The explicit production composition loads Registry 1.2.0 and all six exact
+The explicit production API and worker composition loads Registry 1.3.0 and all six exact
 executors, validates capabilities/coherence before loops, and uses the existing
 safe public URL analyzer for competitor and market sources. Its model adapter
 uses the existing Responses transport with an opt-in bounded single-request
@@ -285,7 +285,7 @@ See [production graph worker](docs/development/production-graph-worker.md).
 
 ### Internal bounded Strategy Builder
 
-Explicit Registry 1.2 composition starts `strategy_builder_v1`: optional root
+Production Registry 1.3 composition starts `strategy_builder_v1`: optional root
 MARKET_ANALYSIS and zero to three independent COMPETITOR_ANALYSIS nodes run in
 parallel, then required POSITIONING -> required VIRTUAL_CMO -> optional EXPERIMENTS.
 Only explicitly supplied market/competitor sources create research nodes. The

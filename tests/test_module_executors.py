@@ -23,7 +23,7 @@ from app.module_execution.executors import (
     build_module_executor_registry, validate_executor_coherence,
 )
 from app.module_execution.executors.common import clamp_confidence
-from app.module_execution.executors.positioning import POSITIONING_INPUTS
+from app.module_execution.executors.positioning import POSITIONING_INPUTS, POSITIONING_SEEDS
 from app.module_registry import ModuleId, ModuleRegistry, ToolCapability
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,7 +42,7 @@ def facts_for_module(module):
     if module is ModuleId.COMPETITOR_ANALYSIS:
         return (fact("competitor_url", "https://competitor.example/page"),)
     if module is ModuleId.POSITIONING:
-        return tuple(fact(key) for key in POSITIONING_INPUTS)
+        return tuple(fact(key) for key in (*POSITIONING_INPUTS, *POSITIONING_SEEDS))
     return (fact("product"), fact("target_or_target_hypothesis"), fact("message"), fact("asset_format", "text_post"))
 
 
@@ -332,12 +332,112 @@ def test_positioning_cannot_present_differentiation_as_verified(name, kind):
                  FakeModel(lambda r, d: r["outputs"][0].update(kind=kind)))
 
 
-def test_positioning_rtb_cannot_be_supported_by_target_instead_of_product_truth():
+@pytest.mark.parametrize("name", ["RTB", "value_proposition", "positioning_statement", "offer"])
+def test_positioning_product_claim_cannot_be_supported_by_target_instead_of_product_truth(name):
     def wrong_support(result, data):
         target = next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"] == "target_or_target_hypothesis")
         result["outputs"][0]["evidence_ids"] = [target]
     with pytest.raises(ExecutorOutputError):
-        dispatch(request(ModuleId.POSITIONING, outputs=("RTB",)), FakeModel(wrong_support))
+        dispatch(request(ModuleId.POSITIONING, outputs=(name,)), FakeModel(wrong_support))
+
+
+@pytest.mark.parametrize("missing", [("customer_job_or_need",), ("relevant_alternative",), POSITIONING_SEEDS])
+def test_positioning_missing_seeds_execute_and_preserve_machine_limitations(missing):
+    facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label not in missing)
+    model = FakeModel()
+    result = dispatch(request(ModuleId.POSITIONING, facts=facts), model)
+    assert len(model.calls) == 1
+    assert result.normalized_result.module_status is ModuleResultStatus.PASS_WITH_LIMITATIONS
+    sent = json.loads(model.calls[0]["text"])
+    assert not set(missing) & {f["label"] for f in sent["context"]["known_facts"]}
+    for seed in missing:
+        assert any(seed in text and "hypotheses requiring validation" in text for text in result.payload["limitations"])
+        limitation = next(l for l in result.normalized_result.limitations if seed in l.description)
+        assert all(limitation.limitation_id in c.limitation_ids for c in result.normalized_result.claims)
+
+
+def test_positioning_supplied_seeds_remain_visible_as_first_party_context():
+    model = FakeModel()
+    dispatch(request(ModuleId.POSITIONING), model)
+    data = json.loads(model.calls[0]["text"])
+    for seed in POSITIONING_SEEDS:
+        evidence = next(e for e in data["local_evidence"] if e["input_key"] == seed)
+        assert evidence["value"] == seed + " supplied value"
+        assert evidence["source_class"] == "FIRST_PARTY"
+        assert any(f["label"] == seed and f["value"] == evidence["value"] for f in data["context"]["known_facts"])
+
+
+@pytest.mark.parametrize("missing", [("customer_job_or_need",), ("relevant_alternative",), POSITIONING_SEEDS])
+def test_positioning_reserves_bounded_limitation_slots_and_can_be_presented(missing):
+    from app.marketing_copilot.presentation import module_presentation
+    from app.module_execution.executors.common import plain
+    from app.module_execution.executors.schemas import PositioningOutput
+
+    facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label not in missing)
+    provider_limits = [f"Provider limitation {i}" for i in range(12)]
+    result = dispatch(request(ModuleId.POSITIONING, facts=facts),
+                      FakeModel(lambda r, d: r.update(limitations=provider_limits)))
+    payload = plain(result.payload)
+    assert len(payload["limitations"]) == 12
+    wire = PositioningOutput.model_validate_json(json.dumps(payload))
+    assert wire.model_dump(mode="json") == payload
+    assert all(any(seed in text for text in wire.limitations) for seed in missing)
+    assert all(text in wire.limitations for text in provider_limits[:12 - len(missing)])
+    presented = module_presentation(result)
+    assert all(any(seed in text for text in presented.limitations) for seed in missing)
+    assert len(presented.findings) == len(result.normalized_result.claims)
+    for seed in missing:
+        limitation = next(l for l in result.normalized_result.limitations if seed in l.description)
+        assert all(limitation.limitation_id in c.limitation_ids for c in result.normalized_result.claims)
+
+
+def test_positioning_provider_double_derives_missing_seeds_through_http_adapter(monkeypatch):
+    from app.orchestration_runtime.model_adapter import production_model_call
+    from tests.positioning_provider import PositioningProvider
+    from tests.test_graph_model_adapter import install_transport
+
+    provider = PositioningProvider()
+    install_transport(monkeypatch, provider)
+    invocation = request(ModuleId.POSITIONING, facts=tuple(fact(key) for key in POSITIONING_INPUTS))
+    result = asyncio.run(PositioningExecutor(model_call=production_model_call).execute(invocation))
+    guarded = {"JTBD_frame", "demand_context", "category", "frame_of_reference", "points_of_parity"}
+    assert len(provider.calls) == 1
+    assert all(s["kind"] == "HYPOTHESIS" for s in result.payload["outputs"] if s["output_name"] in guarded)
+    assert len(result.normalized_result.claims) == len(invocation.expected_outputs)
+
+
+@pytest.mark.parametrize("seed,name", [
+    ("customer_job_or_need", "JTBD_frame"), ("customer_job_or_need", "demand_context"),
+    ("relevant_alternative", "category"), ("relevant_alternative", "frame_of_reference"),
+    ("relevant_alternative", "points_of_parity"),
+])
+@pytest.mark.parametrize("kind", ["OBSERVATION", "INFERENCE", "RECOMMENDATION"])
+def test_positioning_missing_seed_rejects_unmarked_reasoning(seed, name, kind):
+    facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != seed)
+    with pytest.raises(ExecutorOutputError):
+        dispatch(request(ModuleId.POSITIONING, facts=facts, outputs=(name,)),
+                 FakeModel(lambda r, d: r["outputs"][0].update(kind=kind)))
+
+
+@pytest.mark.parametrize("parent_kind,parent_output,allowed", [
+    ("OBSERVATION", "JTBD_frame", True), ("HYPOTHESIS", "JTBD_frame", False),
+    ("INFERENCE", "JTBD_frame", False), ("OBSERVATION", "target", False),
+])
+def test_positioning_missing_seed_requires_matching_factual_parent(parent_kind, parent_output, allowed):
+    parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)),
+                      FakeModel(lambda r, d: r["outputs"][0].update(kind=parent_kind)))
+    facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != "customer_job_or_need")
+    req = request(ModuleId.POSITIONING, facts=facts, outputs=("JTBD_frame",),
+                  identity="child.positioning", upstream=(UpstreamExecutionResult(producer_node_id="parent", result=parent),))
+    model = FakeModel(lambda r, d: r["outputs"][0].update(kind="OBSERVATION"), use_parents=True)
+    if allowed:
+        result = dispatch(req, model)
+        claim = result.normalized_result.claims[0]
+        assert claim.parent_claim_ids == (parent.normalized_result.claims[0].claim_id,)
+        assert any("customer_job_or_need" in l.description for l in result.normalized_result.limitations)
+    else:
+        with pytest.raises(ExecutorOutputError):
+            dispatch(req, model)
 
 
 def test_competitor_observation_cannot_use_first_party_evidence_only():

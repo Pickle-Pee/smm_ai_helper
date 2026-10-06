@@ -293,7 +293,7 @@ def test_executable_registry_is_explicit_and_preserves_all_canonical_metadata():
     assert hashlib.sha256(normalized).hexdigest() == EXECUTABLE_SHA256
 
 
-@pytest.mark.parametrize("version", ["1.3.0", "2.0.0", "../1.0.0", "", "latest"])
+@pytest.mark.parametrize("version", ["1.4.0", "2.0.0", "../1.0.0", "", "latest"])
 def test_unapproved_registry_versions_fail_closed(version):
     with pytest.raises(ModuleRegistryError):
         ModuleRegistry.load(version)
@@ -307,6 +307,59 @@ def test_unapproved_registry_versions_fail_closed(version):
 def test_v11_rejects_every_nonapproved_binding_set(mutation):
     raw = executable_mapping()
     row = descriptor(raw, "CREATOR")
+    if mutation == "extra":
+        descriptor(raw, "MENTOR").update(availability_status="execution_bound", execution_binding=copy.deepcopy(row["execution_binding"]))
+    elif mutation == "missing":
+        row.update(availability_status="metadata_only", execution_binding=None)
+    else:
+        row["execution_binding"]["executor_key" if mutation == "key" else "contract_version"] = "unapproved.v2"
+    with pytest.raises(ModuleRegistryError, match="approved"):
+        ModuleRegistry.from_mapping(raw)
+
+
+def test_hypothesis_registry_has_only_the_approved_positioning_input_delta():
+    from app.module_registry import HYPOTHESIS_REGISTRY_VERSION, InputRequirement
+
+    before = ModuleRegistry.load("1.2.0")
+    after = ModuleRegistry.load(HYPOTHESIS_REGISTRY_VERSION)
+    assert after.version == "1.3.0"
+    assert tuple(d.module_id.value for d in after.descriptors) == EXPECTED_IDS
+    assert {d.module_id: d.execution_binding for d in after.descriptors if d.execution_binding} == {
+        d.module_id: d.execution_binding for d in before.descriptors if d.execution_binding
+    }
+    assert sum(d.execution_binding is not None for d in after.descriptors) == 6
+    from dataclasses import replace
+    for old, new in zip(before.descriptors, after.descriptors):
+        if new.module_id is ModuleId.POSITIONING:
+            assert new.inputs[InputRequirement.REQUIRED] == ("product", "target_or_target_hypothesis", "product_truth")
+            assert new.inputs[InputRequirement.PREFERRED] == (
+                "customer_job_or_need", "relevant_alternative.",
+                *tuple(v for v in old.inputs[InputRequirement.PREFERRED] if v != "product_truth"),
+            )
+            assert replace(new, inputs=old.inputs) == old
+        else:
+            assert new == old
+
+
+@pytest.mark.parametrize(("version", "checksum"), [
+    ("1.0.0", "fbc9ec4ecb278ef27e33afb3baa72630149ed296dfc360190d32c0d594766077"),
+    ("1.1.0", "580f8bf71635e65019c7c6e77e9828c1b1ba2f89d51820c9c1c394f664dccf17"),
+    ("1.2.0", "ae566041af3c50d7d1b14dfd0fae1d25424e325ae42ad1096adcfc8293eabec7"),
+])
+def test_historical_registry_resource_bytes_are_immutable(version, checksum):
+    assert hashlib.sha256(files("app.module_registry").joinpath(f"v{version}.json").read_bytes()).hexdigest() == checksum
+
+
+def test_hypothesis_registry_normalized_checksum():
+    raw = json.loads(files("app.module_registry").joinpath("v1.3.0.json").read_text(encoding="utf-8"))
+    normalized = json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    assert hashlib.sha256(normalized).hexdigest() == "ceb54954cab04328483f7f758ceeb348bd99b91fec12d4af9d4b72429e166cac"
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing", "key", "version"])
+def test_hypothesis_registry_rejects_nonapproved_binding_inventory(mutation):
+    raw = json.loads(files("app.module_registry").joinpath("v1.3.0.json").read_text(encoding="utf-8"))
+    row = descriptor(raw, "EXPERIMENTS")
     if mutation == "extra":
         descriptor(raw, "MENTOR").update(availability_status="execution_bound", execution_binding=copy.deepcopy(row["execution_binding"]))
     elif mutation == "missing":

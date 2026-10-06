@@ -6,13 +6,41 @@ from app.marketing_orchestrator.contracts import (
     OrchestrationPlan, PlanningStatus, PlanningStopCondition, Sensitivity, StructuralValidity,
 )
 from app.marketing_orchestrator.validation import PlanValidator
-from app.module_registry import EXECUTION_REGISTRY_VERSIONS, ModuleAvailabilityStatus, ModuleId, ModuleRegistry
+from app.module_registry import (
+    EXECUTION_REGISTRY_VERSIONS, HYPOTHESIS_REGISTRY_VERSION, INTELLIGENCE_REGISTRY_VERSION,
+    ModuleAvailabilityStatus, ModuleId, ModuleRegistry,
+)
 from app.module_execution.contracts import MODULE_EXECUTION_CONTRACT_VERSION
 from .contracts import CompiledExecutionNode, CompiledExecutionPlan, EXECUTABLE_SCENARIOS, PLAN_SCHEMA, validate_identity
 from .contracts import (CompiledExecutionPlanV2, CompiledExecutionNodeV2, CompiledDependency,
                         NodeFailureMode, DependencyMode, PLAN_SCHEMA_V2, optional)
 from .errors import CompilationError, RuntimeContractError
 from .serialization import bounded, fingerprint
+
+
+# Persisted strategy versions retain their own first-party input contracts.
+_STRATEGY_KEYS_BY_REGISTRY = {
+    INTELLIGENCE_REGISTRY_VERSION: (
+        "business_goal", "product", "target_or_target_hypothesis", "customer_job_or_need",
+        "relevant_alternative", "product_truth",
+    ),
+    HYPOTHESIS_REGISTRY_VERSION: (
+        "business_goal", "product", "target_or_target_hypothesis", "product_truth",
+    ),
+}
+
+
+def _canonical_metadata(descriptor, registry_version, baseline):
+    metadata = replace(descriptor, availability_status=ModuleAvailabilityStatus.METADATA_ONLY,
+                       execution_binding=None)
+    if registry_version == HYPOTHESIS_REGISTRY_VERSION and descriptor.module_id is ModuleId.POSITIONING:
+        # Only the new canonical POSITIONING inputs may depart from the foundation.
+        approved = ModuleRegistry.load(HYPOTHESIS_REGISTRY_VERSION).get(ModuleId.POSITIONING)
+        if metadata.inputs != approved.inputs:
+            raise CompilationError("descriptor input metadata mismatch")
+        metadata = replace(metadata, inputs=baseline.get(ModuleId.POSITIONING).inputs)
+    if metadata != baseline.get(descriptor.module_id):
+        raise CompilationError("descriptor metadata mismatch")
 
 
 def _binding(node, registry, executors=None):
@@ -72,9 +100,9 @@ def validate_compiled_plan(plan, executors=None):
     if plan.scenario_key == "explicit_single_module_v1" and (len(plan.nodes) != 1 or edges):
         raise CompilationError("invalid single-module topology")
     if plan.scenario_key == "strategy_builder_v1":
-        from app.marketing_orchestrator.strategy import strategy_topology, REQUIRED_KEYS, key, nonempty
-        if type(plan) is not CompiledExecutionPlanV2 or plan.registry_version != "1.2.0":
-            raise CompilationError("strategy requires explicit Registry 1.2 and compiled v2")
+        from app.marketing_orchestrator.strategy import strategy_topology, key, nonempty
+        if type(plan) is not CompiledExecutionPlanV2 or plan.registry_version not in _STRATEGY_KEYS_BY_REGISTRY:
+            raise CompilationError("strategy requires approved strategy Registry and compiled v2")
         if not set(plan.limitations) <= {"market_research_not_supplied", "competitor_research_not_supplied", "economics_unavailable"}:
             raise CompilationError("unknown strategy planning limitation")
         strategy_topology(plan.nodes, plan.dependencies)
@@ -82,7 +110,7 @@ def validate_compiled_plan(plan, executors=None):
             required = node.module_id in {ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO}
             if optional(node) == required:
                 raise CompilationError("invalid strategy failure policy")
-            expected = REQUIRED_KEYS[1:] if node.module_id is ModuleId.POSITIONING else (
+            expected = _STRATEGY_KEYS_BY_REGISTRY[plan.registry_version][1:] if node.module_id is ModuleId.POSITIONING else (
                 ("business_goal", "product") if node.module_id is ModuleId.VIRTUAL_CMO else ())
             known = {key(f) for f in (*node.context_packet.known_facts, *node.context_packet.relevant_project_context) if nonempty(f.value)}
             if not set(expected) <= known or node.context_packet.upstream_findings:
@@ -120,16 +148,14 @@ class PlanCompiler:
             raise CompilationError("source plan is not validated")
         if plan.scenario_key not in EXECUTABLE_SCENARIOS:
             raise CompilationError("scenario is not authorized for execution")
-        if plan.scenario_key == "strategy_builder_v1" and self.registry.version != "1.2.0":
-            raise CompilationError("strategy requires explicit Registry 1.2")
+        if plan.scenario_key == "strategy_builder_v1" and self.registry.version not in _STRATEGY_KEYS_BY_REGISTRY:
+            raise CompilationError("strategy requires approved strategy Registry")
         baseline = ModuleRegistry.load("1.0.0")
         PlanValidator(baseline).validate(plan)
         nodes = []
         for node in plan.nodes:
             descriptor = self.registry.get(node.module_id)
-            if replace(descriptor, availability_status=ModuleAvailabilityStatus.METADATA_ONLY,
-                       execution_binding=None) != baseline.get(node.module_id):
-                raise CompilationError("descriptor metadata mismatch")
+            _canonical_metadata(descriptor, self.registry.version, baseline)
             if node.quality_gate != descriptor.quality_gate:
                 raise CompilationError("quality gate metadata mismatch")
             if any(not i.present and i.classification.value in {"REQUIRED", "BLOCKING"} for i in node.scoped_inputs):
