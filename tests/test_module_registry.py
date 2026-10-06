@@ -342,12 +342,14 @@ def test_hypothesis_registry_has_only_the_approved_positioning_input_delta():
 
 
 @pytest.mark.parametrize(("version", "checksum"), [
-    ("1.0.0", "fbc9ec4ecb278ef27e33afb3baa72630149ed296dfc360190d32c0d594766077"),
-    ("1.1.0", "580f8bf71635e65019c7c6e77e9828c1b1ba2f89d51820c9c1c394f664dccf17"),
-    ("1.2.0", "ae566041af3c50d7d1b14dfd0fae1d25424e325ae42ad1096adcfc8293eabec7"),
+    ("1.0.0", "7458b942e533b5f2d2360b5975533f1f3f457053802524c769b526141942eebb"),
+    ("1.1.0", "250608e98cf920af7cf05330ee346ff27dca692e232582d2b66c6b4b877b0555"),
+    ("1.2.0", "d4c325cdd238ef0197b39810ca8e426a4dfa7bffe17e2b87d06c61bbac4f5298"),
 ])
 def test_historical_registry_resource_bytes_are_immutable(version, checksum):
-    assert hashlib.sha256(files("app.module_registry").joinpath(f"v{version}.json").read_bytes()).hexdigest() == checksum
+    resource = files("app.module_registry").joinpath(f"v{version}.json").read_bytes()
+    # Git checkout may use CRLF on Windows; compare the canonical LF bytes.
+    assert hashlib.sha256(resource.replace(b"\r\n", b"\n")).hexdigest() == checksum
 
 
 def test_hypothesis_registry_normalized_checksum():
