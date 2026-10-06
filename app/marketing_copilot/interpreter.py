@@ -17,6 +17,16 @@ The semantic intent describes meaning only. Never choose an executor, tool key, 
 execution permission or binding. Do not return reasoning, chain-of-thought or extra fields.
 POST_GENERATION means writing a post; TEXT_EDITING means revising existing text.
 LEAD_FUNNEL_CALCULATION means a deterministic lead/funnel calculation from supplied inputs.
+Set deterministic_calculation_required=true only when the PRIMARY requested output
+is an explicit deterministic lead/funnel calculation from supplied numeric inputs.
+Do not set it merely because a broader marketing request mentions profit or profitability
+goals, revenue targets, ROI goals, growth targets, budgets, numeric KPIs, deadlines,
+desired lead/customer counts or other quantitative business objectives.
+"Рассчитай, сколько лидов получим при бюджете 10000 и CPL 500" means
+LEAD_FUNNEL_CALCULATION with deterministic_calculation_required=true.
+"Составь маркетинговую стратегию, чтобы выйти в плюс" means
+MARKETING_STRATEGY with deterministic_calculation_required=false.
+This boolean is advisory semantic metadata, never execution authority.
 POSITIONING means positioning/USP from existing context; COMPARATIVE_POSITIONING requires
 several market/competitor analyses. MARKETING_STRATEGY is a broader strategy request.
 Set ambiguous=true when the requested work is unclear; use UNSUPPORTED for unlisted meanings.

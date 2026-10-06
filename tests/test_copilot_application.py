@@ -23,8 +23,9 @@ from tests.graph_fakes import source_plan
 
 
 def intent_model(kind, urls=(), *, facts=None, **kwargs):
+    kwargs.setdefault("deterministic_calculation_required", kind is IntentKind.LEAD_FUNNEL_CALCULATION)
     return AsyncMock(return_value=json.dumps({"intent": intent(kind, provided_urls=urls,
-        deterministic_calculation_required=kind is IntentKind.LEAD_FUNNEL_CALCULATION, **kwargs).model_dump(mode="json"),
+        **kwargs).model_dump(mode="json"),
         "projection": facts or {}}))
 
 
@@ -143,9 +144,11 @@ def test_direct_vertical_never_dispatches_or_starts_work():
     svc.dispatcher.dispatch.assert_not_awaited()
 
 
-def test_natural_ruble_lead_request_returns_direct_result_without_clarification():
+@pytest.mark.parametrize("calculation_required", [False, True])
+def test_natural_ruble_lead_request_returns_direct_result_without_clarification(calculation_required):
     model = FakeModel()
-    ingress = intent_model(IntentKind.LEAD_FUNNEL_CALCULATION)
+    ingress = intent_model(IntentKind.LEAD_FUNNEL_CALCULATION,
+                           deterministic_calculation_required=calculation_required)
     svc = build_marketing_copilot_service(intent_model=ingress, module_model=model)
     output = run(svc, "Рассчитай количество лидов при бюджете 10000 ₽ и CPL 500 ₽")
     assert output.decision.mode is ExecutionMode.DIRECT_TOOL

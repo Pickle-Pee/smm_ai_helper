@@ -261,7 +261,7 @@ def test_interpreter_validates_request_before_model_call(request_text):
 
 
 @pytest.mark.parametrize("kind,options,mode,selector", [
-    (IntentKind.LEAD_FUNNEL_CALCULATION, {"deterministic_calculation_required": True}, ExecutionMode.DIRECT_TOOL, "lead_funnel_calculator_v1"),
+    (IntentKind.LEAD_FUNNEL_CALCULATION, {}, ExecutionMode.DIRECT_TOOL, "lead_funnel_calculator_v1"),
     (IntentKind.POST_GENERATION, {}, ExecutionMode.SINGLE_MODULE, ModuleId.CREATOR),
     (IntentKind.TEXT_EDITING, {}, ExecutionMode.SINGLE_MODULE, ModuleId.COPY_EDITOR),
     (IntentKind.COMPETITOR_ANALYSIS, {"external_evidence_required": True}, ExecutionMode.SINGLE_MODULE, ModuleId.COMPETITOR_ANALYSIS),
@@ -270,12 +270,19 @@ def test_interpreter_validates_request_before_model_call(request_text):
     (IntentKind.MARKETING_STRATEGY, {}, ExecutionMode.WORKFLOW, "strategy_builder_v1"),
 ])
 @pytest.mark.parametrize("confidence", [0.0, 0.66, 0.69, 1.0])
-def test_deterministic_policy_expected_cases(kind, options, mode, selector, confidence):
+@pytest.mark.parametrize("calculation_required", [False, True])
+def test_deterministic_policy_expected_cases(kind, options, mode, selector, confidence, calculation_required):
     policy = ExecutionPolicy()
-    decision = policy.decide(intent(kind, confidence=confidence, **options), positioning_context())
+    semantic = intent(kind, confidence=confidence, deterministic_calculation_required=calculation_required, **options)
+    decision = policy.decide(semantic, positioning_context())
     assert decision.mode is mode
     assert (decision.tool_key or decision.module_id or decision.scenario_key) == selector
-    assert decision == policy.decide(intent(kind, confidence=confidence, **options), positioning_context())
+    assert decision == policy.decide(semantic, positioning_context())
+    advisory_variant = semantic.model_copy(update={"deterministic_calculation_required": not calculation_required})
+    other = policy.decide(advisory_variant, positioning_context())
+    assert decision.model_dump(exclude={"intent"}) == other.model_dump(exclude={"intent"})
+    if kind is IntentKind.LEAD_FUNNEL_CALCULATION:
+        assert decision.reason_codes == (ReasonCode.DETERMINISTIC_CALCULATION,)
     assert all(d.execution_binding is None for d in ModuleRegistry.load().descriptors)
 
 
@@ -285,13 +292,13 @@ def test_deterministic_policy_expected_cases(kind, options, mode, selector, conf
     (intent(IntentKind.CONVERSATION), ReasonCode.CONVERSATION_REQUEST),
     (intent(IntentKind.POSITIONING), ReasonCode.POSITIONING_CONTEXT_MISSING),
     (intent(IntentKind.POSITIONING, external_evidence_required=True), ReasonCode.EXTERNAL_EVIDENCE_REQUIRED),
-    (intent(IntentKind.LEAD_FUNNEL_CALCULATION), ReasonCode.UNSUPPORTED_COMBINATION),
-    (intent(IntentKind.LEAD_FUNNEL_CALCULATION, deterministic_calculation_required=True, external_evidence_required=True), ReasonCode.UNSUPPORTED_COMBINATION),
-    (intent(deterministic_calculation_required=True), ReasonCode.UNSUPPORTED_COMBINATION),
+    (intent(IntentKind.LEAD_FUNNEL_CALCULATION, external_evidence_required=True), ReasonCode.UNSUPPORTED_COMBINATION),
 ])
 @pytest.mark.parametrize("confidence", [0.0, 0.66, 0.69, 1.0])
-def test_ambiguous_unsupported_or_insufficient_requests_are_non_executing(semantic, reason, confidence):
-    semantic = MarketingIntent.model_validate({**semantic.model_dump(), "confidence": confidence})
+@pytest.mark.parametrize("calculation_required", [False, True])
+def test_ambiguous_unsupported_or_insufficient_requests_are_non_executing(semantic, reason, confidence, calculation_required):
+    semantic = MarketingIntent.model_validate({**semantic.model_dump(), "confidence": confidence,
+                                              "deterministic_calculation_required": calculation_required})
     decision = ExecutionPolicy().decide(semantic, PlanningContext())
     assert decision.mode is ExecutionMode.CONVERSATION
     assert reason in decision.reason_codes
@@ -541,6 +548,30 @@ https://yandex.ru/maps/org/littl_fit/168712003593?si=b3fwd1df69wpnp465qcyd4zx4r
 У нас есть карточки на картах, группа в ВК
 Пропиши стратегию маркетинговую, как нам заполнить две возрастные группы 1,5-3 года и 3-6 лет
 И выйти в плюс по прибыли"""
+
+
+def test_production_strategy_stray_calculation_flag_reaches_planner_without_invented_goal():
+    semantic = intent(IntentKind.MARKETING_STRATEGY, confidence=0.74, ambiguous=False,
+        external_evidence_required=True, deterministic_calculation_required=True, business_goal=None,
+        decision_goal="выйти в плюс по прибыли до нового года и заполнить группы",
+        requested_output="Пропиши стратегию маркетинговую, как нам заполнить две возрастные группы 1,5-3 года и 3-6 лет и выйти в плюс по прибыли")
+    wire = ProviderInterpretedRequest(intent=semantic, projection=ProviderContextProjection(
+        product="садик частный",
+        target_or_target_hypothesis="две возрастные группы 1,5-3 года и 3-6 лет"))
+    interpreted = asyncio.run(MarketingIntentInterpreter(AsyncMock(return_value=wire.model_dump_json()))
+                             .interpret_request(PRODUCTION_STRATEGY_REQUEST))
+    context = ContextResolver().resolve(current_request=merge_projected_context(
+        (), interpreted.projection, PRODUCTION_STRATEGY_REQUEST))
+    decision = ExecutionPolicy().decide(interpreted.intent, context)
+    assert decision.mode is ExecutionMode.WORKFLOW
+    assert decision.scenario_key == "strategy_builder_v1"
+    assert decision.tool_key is decision.module_id is None
+    assert decision.reason_codes == (ReasonCode.STRATEGY_WORKFLOW_REQUEST, ReasonCode.EXTERNAL_EVIDENCE_REQUIRED)
+    request, resolved = OrchestratorAdapter().adapt(decision, context)
+    assert request.business_goal == "UNSPECIFIED"
+    plan = MarketingOrchestratorPlanner().plan(request, resolved)
+    assert {q.input_key.value for q in plan.blocking_questions} == {
+        "business_goal", "customer_job_or_need", "relevant_alternative", "product_truth"}
 
 
 def test_production_strategy_wire_contract_cannot_repeat_semantic_keys(monkeypatch):

@@ -41,11 +41,10 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
         message = PRODUCTION_STRATEGY_REQUEST
-        provider = intent_model(IntentKind.MARKETING_STRATEGY, confidence=0.66,
-            ambiguous=False, external_evidence_required=True, facts={
-                "business_goal": "нужно до нового года выйти в плюс", "product": "садик частный",
-                "target_or_target_hypothesis": "две возрастные группы 1,5-3 года и 3-6 лет",
-                "geography": "Садик в анкудиноваке (Нижегородская область)"})
+        provider = intent_model(IntentKind.MARKETING_STRATEGY, confidence=0.74,
+            ambiguous=False, external_evidence_required=True, deterministic_calculation_required=True, facts={
+                "product": "садик частный",
+                "target_or_target_hypothesis": "две возрастные группы 1,5-3 года и 3-6 лет"})
         initial_meaning = provider.return_value
         ambiguous = await intent_model(IntentKind.MARKETING_STRATEGY, ambiguous=True)()
         provider.side_effect = [initial_meaning, ambiguous]
@@ -61,14 +60,17 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
             initial = await execute(api, actor, request)
             assert initial.status_code == 200 and initial.json()["kind"] == "NEEDS_INPUT", initial.text
             assert {key for group in initial.json()["alternatives"] for key in group} == {
-                "customer_job_or_need", "relevant_alternative", "product_truth"}
+                "business_goal", "customer_job_or_need", "relevant_alternative", "product_truth"}
             assert "request_context" not in initial.text
             owned = initial.json()["owned_site"]
             assert owned["candidates"]
             async with mvp_database() as session:
                 owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
             persisted = await api.interpretations.load(owner, request["request_key"], message)
-            assert persisted.intent.confidence == 0.66
+            assert persisted.intent.confidence == 0.74
+            assert persisted.intent.deterministic_calculation_required
+            assert persisted.intent.business_goal is None
+            assert {fact.key for fact in persisted.projection.facts} == {"product", "target_or_target_hypothesis"}
             assert not persisted.intent.ambiguous
             snapshot = await api.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN)
             assert snapshot is not None
@@ -85,12 +87,13 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
                 missing = confirmed.json()
                 assert missing["kind"] == "NEEDS_INPUT"
                 assert {key for group in missing["alternatives"] for key in group} == {
-                    "customer_job_or_need", "relevant_alternative"}
+                    "business_goal", "customer_job_or_need", "relevant_alternative"}
                 assert "request_context" not in confirmed.text
                 assert missing["owned_site"]["snapshot_id"] == owned["snapshot_id"]
                 assert await restarted.interpretations.load(owner, request["request_key"], message) == persisted
                 assert await restarted.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN) == snapshot
-                request["context"] = {"customer_job_or_need": "Reduce scheduling time",
+                request["context"] = {"business_goal": "Fill both age groups and reach profitability",
+                                      "customer_job_or_need": "Reduce scheduling time",
                                       "relevant_alternative": "Manual spreadsheets"}
                 started = await execute(restarted, actor, request)
                 assert started.status_code == 202, started.text
