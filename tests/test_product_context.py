@@ -405,3 +405,95 @@ def test_real_html_redirect_uses_final_url_and_only_literal_excerpts(monkeypatch
     assert visited == [OWN, final]
     assert result.snapshot.canonical_url == final
     assert all(e.page_url == final for e in result.snapshot.evidence)
+
+
+@pytest.mark.parametrize("bad", [
+    observation(SnapshotField.PRODUCT, "Unsupported secret quote"),
+    dict(field=SnapshotField.PRODUCT.value, kind="BROKEN", text=PRODUCT, excerpts=[PRODUCT]),
+    dict(field=SnapshotField.PRICING.value, kind="INFERENCE", text="Cheap", excerpts=[PRODUCT]),
+    dict(field=SnapshotField.GEOGRAPHY.value, kind="INFERENCE", text="Global", excerpts=[PRODUCT]),
+    dict(field=SnapshotField.PRODUCT.value, kind="OBSERVATION", text="Changed", excerpts=[PRODUCT]),
+    observation(SnapshotField.PRODUCT, PRODUCT, statement_id="owned_model_id"),
+    observation(SnapshotField.PRODUCT, PRODUCT + " "),
+    observation(SnapshotField.PRODUCT, PRODUCT.replace(" ", "  ")),
+    None,
+])
+def test_invalid_statement_drops_without_changing_snapshot_identity_or_confirmation(bad, caplog):
+    valid = observation(SnapshotField.PRODUCT, PRODUCT)
+    with caplog.at_level("INFO", logger="app.product_context.service"):
+        result, model, _ = acquisition(raw=extraction([bad, valid]))
+    baseline = acquisition(raw=extraction([valid]))[0].snapshot
+    assert result.outcome is SourceOutcome.ACQUIRED
+    assert result.snapshot == baseline
+    model.assert_awaited_once()
+    assert "accepted=1 rejected=1" in caplog.text
+    assert PRODUCT not in caplog.text and "Unsupported secret quote" not in caplog.text
+    snapshot = result.snapshot
+    confirmation = ConfirmedBusinessFact(snapshot_id=snapshot.snapshot_id,
+        statement_ids=(snapshot.statements[0].statement_id,), confirmed_by="owner", confirmation_reference="yes")
+    assert project_confirmation(snapshot, confirmation).fact.value["trust"] == "confirmed_business_fact"
+    assert snapshot.trust is TrustKind.SITE_CLAIM
+    # Even a valid identity from a separately accepted extraction is foreign.
+    other = acquisition(raw=extraction([observation(SnapshotField.AUDIENCE, AUDIENCE)]))[0].snapshot
+    with pytest.raises(ProductContextError):
+        project_confirmation(snapshot, confirmation.model_copy(update={
+            "statement_ids": (other.statements[0].statement_id,)}))
+
+
+def test_six_valid_one_unsupported_preserves_only_accepted_evidence(caplog):
+    valid = json.loads(extraction())["statements"] + [observation(SnapshotField.PROOF, PRODUCT)]
+    with caplog.at_level("INFO", logger="app.product_context.service"):
+        result, _, _ = acquisition(raw=extraction(valid + [observation(SnapshotField.PRODUCT, "Secret unsupported")]))
+    assert result.outcome is SourceOutcome.ACQUIRED
+    assert len(result.snapshot.statements) == 6
+    assert result.snapshot == acquisition(raw=extraction(valid))[0].snapshot
+    assert all(e.excerpt != "Secret unsupported" for e in result.snapshot.evidence)
+    assert "produced=7 accepted=6 rejected=1" in caplog.text
+    assert "unsupported_excerpt" in caplog.text
+    assert "Secret unsupported" not in caplog.text
+
+
+@pytest.mark.parametrize("raw,reason", [
+    ('{"statements": [], "statements": []}', "duplicate_key"),
+    ('{"statements": [{"text":"a", "text":"b"}]}', "duplicate_key"),
+    ('not JSON', "invalid_json"),
+    ('x' * 65537, "oversized_output"),
+    ('[]', "invalid_envelope"),
+    ('{"statements": {}}', "invalid_envelope"),
+    ('{"statements": [], "extra": 1}', "invalid_envelope"),
+    (extraction([None] * 31), "invalid_envelope"),
+    (extraction([None]), "no_usable_statements"),
+], ids=["duplicate", "nested-duplicate", "json", "size", "array", "map", "extra", "count", "unusable"])
+def test_whole_extraction_failure_logs_safe_reason(raw, reason, caplog):
+    with caplog.at_level("INFO", logger="app.product_context.service"):
+        result, _, _ = acquisition(raw=raw)
+    assert result.outcome is SourceOutcome.INVALID_EXTRACTION
+    assert result.snapshot is None
+    assert "reason=" + reason in caplog.text
+    assert raw not in caplog.text
+
+
+def test_empty_valid_extraction_preserves_unknown_snapshot():
+    result, _, _ = acquisition(raw=extraction([]))
+    assert result.outcome is SourceOutcome.ACQUIRED
+    assert result.snapshot.statements == ()
+    assert not project_snapshot(result.snapshot)
+    assert any("stated_product_service" in text for text in result.snapshot.unknowns)
+
+
+def test_snapshot_validation_failure_logs_only_reason(monkeypatch, caplog):
+    def fail(*args):
+        raise ValueError("private page content")
+    monkeypatch.setattr(OwnedProductEvidenceService, "_snapshot", fail)
+    with caplog.at_level("INFO", logger="app.product_context.service"):
+        result, _, _ = acquisition()
+    assert result.outcome is SourceOutcome.INVALID_EXTRACTION
+    assert "reason=snapshot_validation" in caplog.text
+    assert "private page content" not in caplog.text
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_non_json_constants_fail_whole_response(constant):
+    raw = '{"statements": ' + json.dumps([observation(SnapshotField.PRODUCT, PRODUCT)]) + ', "extra": ' + constant + '}'
+    result, _, _ = acquisition(raw=raw)
+    assert result.outcome is SourceOutcome.INVALID_EXTRACTION

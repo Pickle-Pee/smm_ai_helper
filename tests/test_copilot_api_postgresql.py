@@ -268,14 +268,19 @@ def test_strategy_http_real_stores_fake_transport_worker_and_readonly_polling(mv
     asyncio.run(check())
 
 
-def test_owned_confirmation_survives_restart_and_changed_extraction(mvp_database, monkeypatch):
+@pytest.mark.parametrize("partial", [False, True], ids=["valid", "partial-invalid"])
+def test_owned_confirmation_survives_restart_and_changed_extraction(mvp_database, monkeypatch, partial):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
         page = {"ok": True, "url": OWN, "final_url": OWN, "title": "Acme",
                 "main_text_excerpt": "\n".join([PRODUCT, AUDIENCE, JOB, PRICE, LEADER])}
         site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
-        extractor = AsyncMock(return_value=extraction())
+        statements = json.loads(extraction())["statements"]
+        if partial:
+            statements.append(dict(field="stated_product_service", kind="OBSERVATION",
+                text="Unsupported private claim", excerpts=["Unsupported private claim"]))
+        extractor = AsyncMock(return_value=extraction(statements))
         api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor)
         request = payload(owned_site_url=OWN, context={"business_goal": "Increase bookings", "relevant_alternative": "Spreadsheets"})
         try:
