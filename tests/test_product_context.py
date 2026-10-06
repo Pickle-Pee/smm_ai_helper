@@ -1,6 +1,7 @@
 """Owned-page acquisition and internal Copilot regressions, all providers faked."""
 import asyncio
 import json
+import logging
 from pathlib import Path
 from dataclasses import replace
 from types import SimpleNamespace
@@ -407,6 +408,17 @@ def test_real_html_redirect_uses_final_url_and_only_literal_excerpts(monkeypatch
     assert all(e.page_url == final for e in result.snapshot.evidence)
 
 
+@pytest.fixture
+def extraction_diagnostics(caplog, monkeypatch):
+    # Other integration tests invoke Alembic fileConfig, which disables existing
+    # application loggers. Capture this logger directly and restore all settings.
+    logger = logging.getLogger("app.product_context.service")
+    monkeypatch.setattr(logger, "disabled", False)
+    monkeypatch.setattr(logger, "propagate", False)
+    monkeypatch.setattr(logger, "handlers", [caplog.handler])
+    return caplog
+
+
 @pytest.mark.parametrize("bad", [
     observation(SnapshotField.PRODUCT, "Unsupported secret quote"),
     dict(field=SnapshotField.PRODUCT.value, kind="BROKEN", text=PRODUCT, excerpts=[PRODUCT]),
@@ -418,7 +430,8 @@ def test_real_html_redirect_uses_final_url_and_only_literal_excerpts(monkeypatch
     observation(SnapshotField.PRODUCT, PRODUCT.replace(" ", "  ")),
     None,
 ])
-def test_invalid_statement_drops_without_changing_snapshot_identity_or_confirmation(bad, caplog):
+def test_invalid_statement_drops_without_changing_snapshot_identity_or_confirmation(bad, extraction_diagnostics):
+    caplog = extraction_diagnostics
     valid = observation(SnapshotField.PRODUCT, PRODUCT)
     with caplog.at_level("INFO", logger="app.product_context.service"):
         result, model, _ = acquisition(raw=extraction([bad, valid]))
@@ -440,7 +453,8 @@ def test_invalid_statement_drops_without_changing_snapshot_identity_or_confirmat
             "statement_ids": (other.statements[0].statement_id,)}))
 
 
-def test_six_valid_one_unsupported_preserves_only_accepted_evidence(caplog):
+def test_six_valid_one_unsupported_preserves_only_accepted_evidence(extraction_diagnostics):
+    caplog = extraction_diagnostics
     valid = json.loads(extraction())["statements"] + [observation(SnapshotField.PROOF, PRODUCT)]
     with caplog.at_level("INFO", logger="app.product_context.service"):
         result, _, _ = acquisition(raw=extraction(valid + [observation(SnapshotField.PRODUCT, "Secret unsupported")]))
@@ -464,7 +478,8 @@ def test_six_valid_one_unsupported_preserves_only_accepted_evidence(caplog):
     (extraction([None] * 31), "invalid_envelope"),
     (extraction([None]), "no_usable_statements"),
 ], ids=["duplicate", "nested-duplicate", "json", "size", "array", "map", "extra", "count", "unusable"])
-def test_whole_extraction_failure_logs_safe_reason(raw, reason, caplog):
+def test_whole_extraction_failure_logs_safe_reason(raw, reason, extraction_diagnostics):
+    caplog = extraction_diagnostics
     with caplog.at_level("INFO", logger="app.product_context.service"):
         result, _, _ = acquisition(raw=raw)
     assert result.outcome is SourceOutcome.INVALID_EXTRACTION
@@ -481,7 +496,8 @@ def test_empty_valid_extraction_preserves_unknown_snapshot():
     assert any("stated_product_service" in text for text in result.snapshot.unknowns)
 
 
-def test_snapshot_validation_failure_logs_only_reason(monkeypatch, caplog):
+def test_snapshot_validation_failure_logs_only_reason(monkeypatch, extraction_diagnostics):
+    caplog = extraction_diagnostics
     def fail(*args):
         raise ValueError("private page content")
     monkeypatch.setattr(OwnedProductEvidenceService, "_snapshot", fail)
