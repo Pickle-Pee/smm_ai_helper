@@ -267,6 +267,7 @@ def test_owned_site_snapshot_is_never_input_to_request_projection_or_implicit_co
     api._identity_context = AsyncMock(return_value=(1, ()))
     api.acquisition.acquire = AsyncMock(return_value=acquired)
     payload = ExecuteRequest(request_key="owned-boundary", message=message, owned_site_url=OWN)
+    api.snapshots.save = AsyncMock()
     if fabricated_truth:
         with pytest.raises(ProviderUnavailable):
             asyncio.run(api.execute(1, payload))

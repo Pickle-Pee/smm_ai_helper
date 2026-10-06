@@ -27,9 +27,9 @@ from tests.test_strategy_builder import StrategyModel
 from tests.test_telegram_copilot import message, context, click, text_sent
 
 
-def wire(monkeypatch, api):
+def wire(monkeypatch, api, *, app=None):
     original = httpx.AsyncClient
-    app = application(api)
+    app = app or application(api)
     calls = []
     def factory(**kwargs):
         return original(transport=httpx.ASGITransport(app=app), **kwargs)
@@ -179,7 +179,7 @@ def test_telegram_strategy_duplicate_jobs_worker_status_foreign_owner(mvp_databa
     asyncio.run(check())
 
 
-def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatch):
+def test_telegram_owned_site_confirmation_uses_persisted_snapshot(mvp_database, monkeypatch):
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
         feature = "Automatic appointment reminders are included."
@@ -193,7 +193,8 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
         ]))
         api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, owned_analyzer=site, extractor=extractor,
                          module_model=StrategyModel(use_parents=True))
-        calls = wire(monkeypatch, api)
+        backend_app = application(api)
+        calls = wire(monkeypatch, api, app=backend_app)
         # Require both user scalar clarification and explicit snapshot confirmation.
         await brand(mvp_database, actor, {"business_goal": "Increase bookings"})
         try:
@@ -217,6 +218,13 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
             assert all(term not in block for term in ("SITE_CLAIM", "CONFIRMED_BUSINESS_FACT",
                 "statement_id", "snapshot_id", "product_truth", *displayed_ids, pending["owned"]["snapshot_id"]))
             snapshot_id = pending["owned"]["snapshot_id"]
+            # Replace backend composition after preview and make reacquisition fail.
+            restarted_site = SimpleNamespace(analyze_url=AsyncMock(side_effect=AssertionError("confirmation must not fetch")))
+            restarted_extractor = AsyncMock(side_effect=AssertionError("confirmation must not extract"))
+            restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY,
+                owned_analyzer=restarted_site, extractor=restarted_extractor,
+                module_model=StrategyModel(use_parents=True))
+            backend_app.state.copilot_api = restarted
             confirmation_click = await click(fsm, msg, "confirm", "confirm", actor)
             assert calls[-1].confirmation.snapshot_id == snapshot_id
             assert calls[-1].confirmation.statement_ids == displayed_ids
@@ -225,7 +233,7 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
             await flow.callback_action(confirmation_click, fsm)
             assert len(calls) == 2
             assert "устарело" in confirmation_click.answer.call_args.args[0]
-            assert site.analyze_url.await_count == 2
+            assert site.analyze_url.await_count == extractor.await_count == 1
             # Remaining missing alternative is collected under the original key.
             pending = (await fsm.get_data())["copilot_pending"]
             assert pending["fields"] == ["relevant_alternative"]
@@ -234,9 +242,11 @@ def test_telegram_owned_site_confirmation_reacquisition(mvp_database, monkeypatc
             assert "Начал собирать стратегию" in text_sent(answer)
             assert len({p.request_key for p in calls}) == 1
             assert calls[-1].confirmation.confirmed is True
+            restarted_site.analyze_url.assert_not_awaited()
+            restarted_extractor.assert_not_awaited()
             rid = (await fsm.get_data())["copilot_run"]["run_id"]
             for _ in range(3):
-                assert await ModuleGraphWorker(api.copilot.graph_service).once()
+                assert await ModuleGraphWorker(restarted.copilot.graph_service).once()
             result = message(actor=actor)
             await flow.status(result, actor, rid)
             assert "Стратегический диагноз" in text_sent(result) and "Эксперименты" in text_sent(result)
