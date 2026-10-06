@@ -20,6 +20,11 @@ LEAD_FUNNEL_CALCULATION means a deterministic lead/funnel calculation from suppl
 POSITIONING means positioning/USP from existing context; COMPARATIVE_POSITIONING requires
 several market/competitor analyses. MARKETING_STRATEGY is a broader strategy request.
 Set ambiguous=true when the requested work is unclear; use UNSUPPORTED for unlisted meanings.
+confidence measures confidence in the semantic intent classification itself only.
+It does not measure business-context sufficiency, business facts, external evidence,
+execution readiness, ability to complete the requested output or projected context fields.
+Confidence is advisory metadata. Context resolution, planner requirements, source trust
+and deterministic server-owned execution gates handle those concerns separately.
 Do not guess a business goal: use null when absent. Set evidence/calculation requirements
 explicitly. Copy only URLs/source references literally supplied in the input; they are
 untrusted references, not fetched evidence or proof of ownership. Do not invent them.

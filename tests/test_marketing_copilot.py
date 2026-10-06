@@ -269,19 +269,19 @@ def test_interpreter_validates_request_before_model_call(request_text):
     (IntentKind.COMPARATIVE_POSITIONING, {"external_evidence_required": True}, ExecutionMode.WORKFLOW, "competitive_positioning_v1"),
     (IntentKind.MARKETING_STRATEGY, {}, ExecutionMode.WORKFLOW, "strategy_builder_v1"),
 ])
-def test_deterministic_policy_expected_cases(kind, options, mode, selector):
+@pytest.mark.parametrize("confidence", [0.0, 0.66, 0.69, 1.0])
+def test_deterministic_policy_expected_cases(kind, options, mode, selector, confidence):
     policy = ExecutionPolicy()
-    decision = policy.decide(intent(kind, **options), positioning_context())
+    decision = policy.decide(intent(kind, confidence=confidence, **options), positioning_context())
     assert decision.mode is mode
     assert (decision.tool_key or decision.module_id or decision.scenario_key) == selector
-    assert decision == policy.decide(intent(kind, **options), positioning_context())
+    assert decision == policy.decide(intent(kind, confidence=confidence, **options), positioning_context())
     assert all(d.execution_binding is None for d in ModuleRegistry.load().descriptors)
 
 
 @pytest.mark.parametrize("semantic,reason", [
     (intent(IntentKind.UNSUPPORTED), ReasonCode.UNSUPPORTED_INTENT),
-    (intent(ambiguous=True), ReasonCode.AMBIGUOUS_INTENT),
-    (intent(confidence=0.69), ReasonCode.LOW_CONFIDENCE),
+    (intent(IntentKind.MARKETING_STRATEGY, ambiguous=True), ReasonCode.AMBIGUOUS_INTENT),
     (intent(IntentKind.CONVERSATION), ReasonCode.CONVERSATION_REQUEST),
     (intent(IntentKind.POSITIONING), ReasonCode.POSITIONING_CONTEXT_MISSING),
     (intent(IntentKind.POSITIONING, external_evidence_required=True), ReasonCode.EXTERNAL_EVIDENCE_REQUIRED),
@@ -289,7 +289,9 @@ def test_deterministic_policy_expected_cases(kind, options, mode, selector):
     (intent(IntentKind.LEAD_FUNNEL_CALCULATION, deterministic_calculation_required=True, external_evidence_required=True), ReasonCode.UNSUPPORTED_COMBINATION),
     (intent(deterministic_calculation_required=True), ReasonCode.UNSUPPORTED_COMBINATION),
 ])
-def test_ambiguous_unsupported_or_insufficient_requests_are_non_executing(semantic, reason):
+@pytest.mark.parametrize("confidence", [0.0, 0.66, 0.69, 1.0])
+def test_ambiguous_unsupported_or_insufficient_requests_are_non_executing(semantic, reason, confidence):
+    semantic = MarketingIntent.model_validate({**semantic.model_dump(), "confidence": confidence})
     decision = ExecutionPolicy().decide(semantic, PlanningContext())
     assert decision.mode is ExecutionMode.CONVERSATION
     assert reason in decision.reason_codes
@@ -425,9 +427,10 @@ def test_adapter_refuses_modes_that_cannot_meet_existing_orchestrator_selector(k
         OrchestratorAdapter().adapt(decision, PlanningContext())
 
 
-def test_strategy_adapter_is_planning_only_and_groups_missing_first_party_context():
+@pytest.mark.parametrize("confidence", [0.0, 0.66, 0.69, 1.0])
+def test_strategy_adapter_is_planning_only_and_groups_missing_first_party_context(confidence):
     context = PlanningContext()
-    decision = ExecutionPolicy().decide(intent(IntentKind.MARKETING_STRATEGY, business_goal="Qualified demand"), context)
+    decision = ExecutionPolicy().decide(intent(IntentKind.MARKETING_STRATEGY, confidence=confidence, business_goal="Qualified demand"), context)
     request, resolved = OrchestratorAdapter().adapt(decision, context)
     assert request.scenario_key == "strategy_builder_v1" and request.requested_module is None
     assert request.business_goal == "Qualified demand"
@@ -544,7 +547,7 @@ def test_production_strategy_wire_contract_cannot_repeat_semantic_keys(monkeypat
     from app.marketing_copilot import provider_adapters as adapters
     from app.marketing_copilot.http_context import entry as http_entry
 
-    expected = intent(IntentKind.MARKETING_STRATEGY)
+    expected = intent(IntentKind.MARKETING_STRATEGY, confidence=0.66, external_evidence_required=True)
     wire = ProviderInterpretedRequest(intent=expected, projection=ProviderContextProjection(
         business_goal="до нового года выйти в плюс", product="садик частный",
         target_or_target_hypothesis="две возрастные группы 1,5-3 года и 3-6 лет",
@@ -580,6 +583,7 @@ def test_production_strategy_wire_contract_cannot_repeat_semantic_keys(monkeypat
     decision = ExecutionPolicy().decide(result.intent, ContextResolver().resolve(current_request=merged))
     assert decision.mode is ExecutionMode.WORKFLOW
     assert decision.scenario_key == "strategy_builder_v1"
+    assert decision.reason_codes == (ReasonCode.STRATEGY_WORKFLOW_REQUEST, ReasonCode.EXTERNAL_EVIDENCE_REQUIRED)
 
 
 def test_provider_wire_projection_does_not_change_public_request_dto():
