@@ -74,6 +74,14 @@ class ProviderInterpretedRequest(_StrictContract):
     projection: ProviderContextProjection
 
 
+def validate_interpreted_request(interpreted: InterpretedRequest, text: str) -> InterpretedRequest:
+    interpreted = InterpretedRequest.model_validate(interpreted)
+    validate_projection(interpreted.projection, text)
+    if any(ref not in text for ref in (*interpreted.intent.provided_urls, *interpreted.intent.source_references)):
+        raise CopilotContractError("Intent references must be supplied in the request")
+    return interpreted
+
+
 def validate_projection(projection: NaturalLanguageContextProjection, text: str) -> NaturalLanguageContextProjection:
     projection = NaturalLanguageContextProjection.model_validate(projection)
     if any(candidate.value not in text for candidate in projection.facts):

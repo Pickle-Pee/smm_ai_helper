@@ -35,6 +35,18 @@ def headers(actor=1234):
     return {"authorization": "Bearer api-test", "x-telegram-user-id": str(actor)}
 
 
+class FakeInterpretationStore:
+    """Immutable in-memory winner scoped to the same identity as persistence."""
+    def __init__(self):
+        self.values = {}
+
+    async def load(self, owner, request_key, message):
+        return self.values.get((owner, request_key, message))
+
+    async def save(self, owner, request_key, message, interpreted):
+        return self.values.setdefault((owner, request_key, message), interpreted)
+
+
 def queue():
     return SimpleNamespace(key=GRAPH_WAKEUP_KEY, wake=AsyncMock(), close=AsyncMock())
 
@@ -57,7 +69,7 @@ def test_auth_rejects_before_application(monkeypatch, authorization, actor):
 
 
 @pytest.mark.parametrize("extra", [
-    {"actor_id": 1}, {"module_id": "CREATOR"}, {"executor_key": "creator.v1"},
+    {"interpreted": {}}, {"interpretation": {}}, {"projection": {}}, {"actor_id": 1}, {"module_id": "CREATOR"}, {"executor_key": "creator.v1"},
     {"scenario_key": "strategy_builder_v1"}, {"registry_version": "1.2.0"}, {"mode": "WORKFLOW"},
     {"message": "x" * 12001}, {"message": "  "}, {"message": "bad\x00"}, {"message": "bad\ud800"},
     {"request_key": "unsafe\nkey"}, {"context": {"product": {"nested": "forbidden"}}},
@@ -163,6 +175,7 @@ def test_natural_ruble_lead_http_request_returns_calculation(monkeypatch):
     ingress = intent_model(IntentKind.LEAD_FUNNEL_CALCULATION)
     api = build_production_copilot_api(intent_model=ingress, module_model=model, analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     async def check():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
             response = await client.post("/copilot/execute", headers=headers(), json={
@@ -194,6 +207,7 @@ def test_natural_creator_http_request_and_explicit_precedence(monkeypatch, conte
     ingress = intent_model(IntentKind.POST_GENERATION, facts=CREATOR_FACTS)
     api = build_production_copilot_api(intent_model=ingress, module_model=model, analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, brand_entries({"product": "Brand product"})))
+    api.interpretations = FakeInterpretationStore()
     async def check():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
             response = await client.post("/copilot/execute", headers=headers(), json={
@@ -238,6 +252,7 @@ def test_malicious_literal_business_value_cannot_create_authority_or_url_roles()
     api = build_production_copilot_api(intent_model=intent_model(IntentKind.POST_GENERATION,
         urls=("https://example.com",), facts=facts), module_model=model, analyzer=site, queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     api.acquisition.acquire = AsyncMock(side_effect=AssertionError("Cannot acquire implicit owned source"))
     response = asyncio.run(api.execute(1, ExecuteRequest(request_key="injection", message=message)))
     assert response.kind == "MODULE_RESULT"
@@ -265,6 +280,7 @@ def test_owned_site_snapshot_is_never_input_to_request_projection_or_implicit_co
     model = FakeModel()
     api = build_production_copilot_api(intent_model=ingress, module_model=model, analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     api.acquisition.acquire = AsyncMock(return_value=acquired)
     payload = ExecuteRequest(request_key="owned-boundary", message=message, owned_site_url=OWN)
     api.snapshots.save = AsyncMock()
@@ -288,6 +304,7 @@ def test_production_strategy_paraphrase_reaches_policy_and_planning_over_http(mo
     ingress = intent_model(IntentKind.MARKETING_STRATEGY, facts=facts)
     api = build_production_copilot_api(intent_model=ingress, module_model=FakeModel(), analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     api.copilot.policy.decide = Mock(wraps=api.copilot.policy.decide)
     api.copilot.planner.plan = Mock(wraps=api.copilot.planner.plan)
     async def check():
@@ -309,7 +326,7 @@ def test_production_strategy_paraphrase_reaches_policy_and_planning_over_http(mo
     assert actual.get("geography") == (explicit or None)
     assert facts["geography"] not in actual.values()
     timings = [record.args for record in caplog.records if record.name == "app.marketing_copilot.observability"]
-    assert {args[0] for args in timings} == {"identity_context", "intent_interpretation", "core_execute"}
+    assert {args[0] for args in timings} == {"identity_context", "intent_interpretation_load", "intent_interpretation_provider", "intent_interpretation_save", "core_execute"}
     assert all(args[1] >= 0 and args[2] == "production-grounding" and args[4] == "success" for args in timings)
     assert PRODUCTION_STRATEGY_REQUEST not in caplog.text and facts["geography"] not in caplog.text
 
@@ -323,6 +340,7 @@ def test_owned_stage_timings_follow_acquisition_or_exact_snapshot_reuse(confirme
     api = build_production_copilot_api(intent_model=intent_model(IntentKind.CONVERSATION),
                                      module_model=FakeModel(), analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     api.acquisition.acquire = AsyncMock(return_value=acquired)
     api.snapshots.save = AsyncMock()
     api.snapshots.load = AsyncMock(return_value=acquired.snapshot)
@@ -337,7 +355,7 @@ def test_owned_stage_timings_follow_acquisition_or_exact_snapshot_reuse(confirme
         assert asyncio.run(api.execute(1, payload)).kind == "CONVERSATION"
     stages = [r.args[0] for r in caplog.records if r.name == "app.marketing_copilot.observability"]
     owned_stages = ["owned_snapshot_load"] if confirmed else ["owned_acquisition", "owned_snapshot_save"]
-    assert stages == ["identity_context", *owned_stages, "intent_interpretation", "core_execute"]
+    assert stages == ["identity_context", *owned_stages, "intent_interpretation_load", "intent_interpretation_provider", "intent_interpretation_save", "core_execute"]
     assert "PRIVATE" not in caplog.text and OWN not in caplog.text
     if confirmed:
         api.snapshots.load.assert_awaited_once_with(1, "timed-owned", acquired.snapshot.snapshot_id, OWN)
@@ -352,11 +370,12 @@ def test_failed_interpretation_stage_logs_safe_type_and_preserves_503(caplog):
     api = build_production_copilot_api(intent_model=AsyncMock(return_value="PRIVATE INVALID PROVIDER BODY"),
                                      module_model=FakeModel(), analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     with caplog.at_level("INFO", logger="app.marketing_copilot.observability"):
         with pytest.raises(ProviderUnavailable):
             asyncio.run(api.execute(1, ExecuteRequest(request_key="timed-failure", message="PRIVATE MESSAGE")))
     failed = [r.args for r in caplog.records if r.name == "app.marketing_copilot.observability" and r.args[4] == "failed"]
-    assert {args[0] for args in failed} == {"intent_interpretation", "core_execute"}
+    assert {args[0] for args in failed} == {"intent_interpretation_provider"}
     assert all(args[5] == "ProviderUnavailable" and args[1] >= 0 for args in failed)
     assert "PRIVATE" not in caplog.text
 
@@ -383,6 +402,7 @@ def test_direct_module_output_failure_is_terminal_and_transport_failure_is_tempo
     api = build_production_copilot_api(intent_model=intent_model(IntentKind.POST_GENERATION, facts=CREATOR_FACTS),
         module_model=model, analyzer=analyzer(), queue=queue())
     api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
     terminal = failure == "schema" or isinstance(failure, OutputFailureStage)
     async def check():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
@@ -393,3 +413,25 @@ def test_direct_module_output_failure_is_terminal_and_transport_failure_is_tempo
         assert "PRIVATE_SENTINEL" not in response.text
     asyncio.run(check())
     model.assert_awaited_once()
+
+
+def test_persisted_interpretation_reuse_logs_safe_source_and_skips_provider(caplog):
+    from tests.test_copilot_application import intent_model
+    from app.marketing_copilot.contracts import IntentKind
+    ingress = intent_model(IntentKind.CONVERSATION)
+    api = build_production_copilot_api(intent_model=ingress,
+                                     module_model=FakeModel(), analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    api.interpretations = FakeInterpretationStore()
+    payload = ExecuteRequest(request_key="safe-reuse", message="PRIVATE MESSAGE")
+    async def check():
+        assert (await api.execute(1, payload)).kind == "CONVERSATION"
+        caplog.clear()
+        assert (await api.execute(1, payload)).kind == "CONVERSATION"
+    with caplog.at_level("INFO", logger="app.marketing_copilot"):
+        asyncio.run(check())
+    ingress.assert_awaited_once()
+    stages = [r.args[0] for r in caplog.records if r.name == "app.marketing_copilot.observability"]
+    assert stages == ["identity_context", "intent_interpretation_load", "core_execute"]
+    assert "source=persisted" in caplog.text
+    assert "PRIVATE" not in caplog.text

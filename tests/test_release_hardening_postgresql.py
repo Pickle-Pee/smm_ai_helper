@@ -301,9 +301,15 @@ def test_single_timeout_is_bounded_safe_and_never_starts_graph(mvp_database, mon
         api = configured(mvp_database, IntentKind.POST_GENERATION, module_model=provider)
         monkeypatch.setattr(settings, "GRAPH_TIMEOUT_SECONDS", .05)
         try:
+            request = payload()
+            # Prepare durable continuation outside the executor timeout budget;
+            # this test must reach the blocked module provider before cancellation.
+            owner, _ = await api._identity_context(actor)
+            interpreted = await api.copilot.interpreter.interpret_request(request["message"])
+            await api.interpretations.save(owner, request["request_key"], request["message"], interpreted)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
                 async with asyncio.timeout(5):
-                    result = await client.post("/copilot/execute", headers=headers(actor), json=payload())
+                    result = await client.post("/copilot/execute", headers=headers(actor), json=request)
                 assert entered.is_set() and result.status_code == 503
                 assert result.json()["code"] == "temporarily_unavailable"
                 assert (await client.get("/copilot/runs", headers=headers(actor))).json()["items"] == []
