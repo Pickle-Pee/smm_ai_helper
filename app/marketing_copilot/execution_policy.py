@@ -53,8 +53,7 @@ class ExecutionPolicy:
             return conversation(ReasonCode.AMBIGUOUS_INTENT)
         if intent.kind is IntentKind.UNSUPPORTED:
             return conversation(ReasonCode.UNSUPPORTED_INTENT)
-        if intent.confidence < 0.7:
-            return conversation(ReasonCode.LOW_CONFIDENCE)
+        # Provider confidence is advisory; only server-owned intent/context gates route execution.
         if intent.kind is IntentKind.LEAD_FUNNEL_CALCULATION:
             if not intent.deterministic_calculation_required or intent.external_evidence_required:
                 return conversation(ReasonCode.UNSUPPORTED_COMBINATION)

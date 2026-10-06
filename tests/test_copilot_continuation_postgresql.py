@@ -19,6 +19,7 @@ from tests.postgresql_support import mvp_database
 from tests.test_copilot_api import application, headers, queue
 from tests.test_copilot_api_postgresql import remove_actor
 from tests.test_copilot_application import intent_model
+from tests.test_marketing_copilot import PRODUCTION_STRATEGY_REQUEST
 from tests.test_module_executors import FakeModel, analyzer
 from tests.test_product_context import OWN, PRODUCT, AUDIENCE, JOB, PRICE, LEADER, extraction
 
@@ -39,10 +40,12 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
 
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
-        message = "Build marketing strategy. Grow bookings. Appointment software for small clinics."
-        provider = intent_model(IntentKind.MARKETING_STRATEGY, facts={
-            "business_goal": "Grow bookings", "product": "Appointment software",
-            "target_or_target_hypothesis": "small clinics"})
+        message = PRODUCTION_STRATEGY_REQUEST
+        provider = intent_model(IntentKind.MARKETING_STRATEGY, confidence=0.66,
+            ambiguous=False, external_evidence_required=True, facts={
+                "business_goal": "нужно до нового года выйти в плюс", "product": "садик частный",
+                "target_or_target_hypothesis": "две возрастные группы 1,5-3 года и 3-6 лет",
+                "geography": "Садик в анкудиноваке (Нижегородская область)"})
         initial_meaning = provider.return_value
         ambiguous = await intent_model(IntentKind.MARKETING_STRATEGY, ambiguous=True)()
         provider.side_effect = [initial_meaning, ambiguous]
@@ -57,7 +60,18 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
             api = composed(mvp_database, provider, owned_analyzer=site, extractor=extractor)
             initial = await execute(api, actor, request)
             assert initial.status_code == 200 and initial.json()["kind"] == "NEEDS_INPUT", initial.text
+            assert {key for group in initial.json()["alternatives"] for key in group} == {
+                "customer_job_or_need", "relevant_alternative", "product_truth"}
+            assert "request_context" not in initial.text
             owned = initial.json()["owned_site"]
+            assert owned["candidates"]
+            async with mvp_database() as session:
+                owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
+            persisted = await api.interpretations.load(owner, request["request_key"], message)
+            assert persisted.intent.confidence == 0.66
+            assert not persisted.intent.ambiguous
+            snapshot = await api.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN)
+            assert snapshot is not None
             request["confirmation"] = dict(snapshot_id=owned["snapshot_id"],
                 statement_ids=[owned["candidates"][0]["statement_id"]], confirmed=True, reference="Verified")
 
@@ -73,6 +87,9 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
                 assert {key for group in missing["alternatives"] for key in group} == {
                     "customer_job_or_need", "relevant_alternative"}
                 assert "request_context" not in confirmed.text
+                assert missing["owned_site"]["snapshot_id"] == owned["snapshot_id"]
+                assert await restarted.interpretations.load(owner, request["request_key"], message) == persisted
+                assert await restarted.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN) == snapshot
                 request["context"] = {"customer_job_or_need": "Reduce scheduling time",
                                       "relevant_alternative": "Manual spreadsheets"}
                 started = await execute(restarted, actor, request)
