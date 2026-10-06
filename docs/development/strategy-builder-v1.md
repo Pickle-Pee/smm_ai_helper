@@ -1,7 +1,7 @@
 # Internal Strategy Builder v1
 
 `MARKETING_STRATEGY -> strategy_builder_v1 -> PlanCompiler -> GraphExecutionService`
-is explicitly composed by the production Copilot API using Registry 1.2.0. `MarketingCopilotService` returns
+is explicitly composed by the production Copilot API using Registry 1.3.0. `MarketingCopilotService` returns
 `WORKFLOW_STARTED` after durable start; it neither executes nodes nor waits for
 completion. The production `ModuleGraphWorker` lane executes the graph. Telegram
 starts and discovers runs through the HTTP API and renders accepted artifacts;
@@ -9,8 +9,8 @@ there is no separate graph Telegram delivery queue or additional synthesis call.
 
 ## Composition and authority
 
-Pass `registry_version="1.2.0"` to `build_marketing_copilot_service`. The factory
-loads exactly `ModuleRegistry.load("1.2.0")`, composes six executors and a matching
+Pass `registry_version="1.3.0"` to `build_marketing_copilot_service`. The factory
+loads exactly `ModuleRegistry.load("1.3.0")`, composes six executors and a matching
 compiler. `url_analyzer` supplies competitor fetching; `market_analyzer` supplies
 market fetching. Both are explicitly injected safe UrlAnalyzer capabilities.
 The graph service must share the same executor registry. The default remains
@@ -24,8 +24,7 @@ remain separate. `new_positioning_v1` remains unauthorized for execution.
 ## Inputs and scoping
 
 Before durable start, caller-authorized first-party context must supply
-`business_goal`, `product`, `target_or_target_hypothesis`, `customer_job_or_need`,
-`relevant_alternative`, and `product_truth`. These may come from current text,
+`business_goal`, `product`, `target_or_target_hypothesis`, and confirmed `product_truth`. These may come from current text,
 project context or BrandProfile through the existing ContextResolver precedence.
 An explicitly interpreted business goal can supply the goal; `UNSPECIFIED`
 cannot. Empty, unauthorized and SECRET facts do not satisfy strategy requirements.
@@ -67,6 +66,34 @@ Raw `MarketingIntent.provided_urls` does not assign source roles. URL order has
 no own-site/competitor meaning. An own website alone cannot supply product truth
 or satisfy the minimum first-party inputs. There is no own-site diagnostic,
 BUSINESS_DIAGNOSTICS binding, pseudo-module or autonomous market/web search.
+
+## Positioning hypotheses and version compatibility
+
+Registry 1.3.0 preserves all fifteen modules and the six exact `module_executor.v1`
+bindings from 1.2.0. Only POSITIONING input metadata changes: product, audience and
+product truth are required; customer job and relevant alternative become preferred
+strategic seeds. Supplied seeds remain scoped context; absent seeds stay absent.
+Without a customer job, `JTBD_frame` and `demand_context` must be `HYPOTHESIS`.
+Without an alternative, `category`, `frame_of_reference` and `points_of_parity`
+must be `HYPOTHESIS`. A cited accepted OBSERVATION with the same output name and
+its own evidence may support a factual exception. Parent hypotheses cannot do so.
+Missing seeds add deterministic limitations to both payload and normalized result.
+Differentiation remains hypothetical, and RTB/product promises still require local
+`product_truth`/`existing_proof` evidence. VIRTUAL_CMO retains accepted parent lineage
+and synthesizes only HYPOTHESIS or RECOMMENDATION claims.
+
+Direct Copilot POSITIONING still requires both explicit seeds. Comparative and
+new-positioning planning requirements remain unchanged. Owned-site SITE_CLAIM
+observations require the existing explicit confirmation before product truth is
+created. Confirmation reuses the exact persisted snapshot and interpretation;
+there is no second interpretation or extraction and literal projection stays strict.
+
+API and graph worker compose the same 1.3.0 inventory. Persisted plans retain their
+own declared Registry version: 1.1/1.2 remain loadable, and a 1.2 strategy still
+requires its original six inputs. A relaxed plan cannot claim version 1.2.0.
+Compiler baseline comparison permits only the exact canonical 1.3 POSITIONING
+input delta; all other metadata, topology and failure policies stay fail closed.
+No persisted plan rewrite, public request change or migration is required.
 
 ## Fixed bounded graph
 
@@ -167,7 +194,7 @@ process recovery, Redis failure and idempotency. Existing graph tests cover old
 No migration is needed: policies live in versioned plan JSON, summary in state_json,
 and MarketingRun.status already accepts the new string. No old migration changes.
 No live paid providers are used by tests. Safe internal manual verification is to
-compose Registry 1.2 with fake capabilities, submit complete typed context, inspect
+compose Registry 1.3 with fake capabilities, submit complete typed context, inspect
 initial research Jobs, and drive ModuleGraphWorker until terminal status.
 
 Quality Gates verifies structural provenance and acceptance, not semantic truth.

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.config import settings
-from app.models import InterpretedRequestRecord, User
+from app.models import InterpretedRequestRecord, OrchestrationPlanRecord, User
 from app.marketing_copilot.contracts import IntentKind
 from app.marketing_copilot.production import build_production_copilot_api
 from tests.postgresql_support import mvp_database
@@ -43,6 +43,9 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
         message = PRODUCTION_STRATEGY_REQUEST
         provider = intent_model(IntentKind.MARKETING_STRATEGY, confidence=0.74,
             ambiguous=False, external_evidence_required=True, deterministic_calculation_required=True, facts={
+                "business_goal": "до нового года выйти в плюс",
+                "existing_proof": "У нас есть карточки на картах, группа в ВК",
+                "geography": "Садик в анкудиноваке (Нижегородская область)",
                 "product": "садик частный",
                 "target_or_target_hypothesis": "две возрастные группы 1,5-3 года и 3-6 лет"})
         initial_meaning = provider.return_value
@@ -51,8 +54,8 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
         page = {"ok": True, "url": OWN, "final_url": OWN, "title": "Acme",
                 "main_text_excerpt": "\n".join([PRODUCT, AUDIENCE, JOB, PRICE, LEADER])}
         site = SimpleNamespace(analyze_url=AsyncMock(return_value=SimpleNamespace(url_summaries=[page])))
-        # Only product truth is acquired; the strategy's remaining business
-        # requirements must survive confirmation without a generic rewrite.
+        # Goal, product and audience are known; no customer job or alternative
+        # is supplied. Only confirmation of owned product truth blocks strategy.
         extractor = AsyncMock(return_value=extraction([json.loads(extraction())["statements"][0]]))
         request = dict(request_key=uuid.uuid4().hex, message=message, owned_site_url=OWN, context={})
         try:
@@ -60,7 +63,8 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
             initial = await execute(api, actor, request)
             assert initial.status_code == 200 and initial.json()["kind"] == "NEEDS_INPUT", initial.text
             assert {key for group in initial.json()["alternatives"] for key in group} == {
-                "business_goal", "customer_job_or_need", "relevant_alternative", "product_truth"}
+                "product_truth"}
+            assert "customer_job_or_need" not in initial.text and "relevant_alternative" not in initial.text
             assert "request_context" not in initial.text
             owned = initial.json()["owned_site"]
             assert owned["candidates"]
@@ -70,7 +74,8 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
             assert persisted.intent.confidence == 0.74
             assert persisted.intent.deterministic_calculation_required
             assert persisted.intent.business_goal is None
-            assert {fact.key for fact in persisted.projection.facts} == {"product", "target_or_target_hypothesis"}
+            assert {fact.key for fact in persisted.projection.facts} == {
+                "business_goal", "existing_proof", "geography", "product", "target_or_target_hypothesis"}
             assert not persisted.intent.ambiguous
             snapshot = await api.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN)
             assert snapshot is not None
@@ -83,23 +88,20 @@ def test_owned_confirmation_reuses_interpretation_after_restart(mvp_database, mo
                 restarted = composed(async_sessionmaker(engine, expire_on_commit=False), provider,
                                      owned_analyzer=site, extractor=extractor)
                 confirmed = await execute(restarted, actor, request)
-                assert confirmed.status_code == 200, confirmed.text
-                missing = confirmed.json()
-                assert missing["kind"] == "NEEDS_INPUT"
-                assert {key for group in missing["alternatives"] for key in group} == {
-                    "business_goal", "customer_job_or_need", "relevant_alternative"}
+                assert confirmed.status_code == 202, confirmed.text
+                assert confirmed.json()["kind"] == "WORKFLOW_STARTED"
+                assert "customer_job_or_need" not in confirmed.text and "relevant_alternative" not in confirmed.text
                 assert "request_context" not in confirmed.text
-                assert missing["owned_site"]["snapshot_id"] == owned["snapshot_id"]
                 assert await restarted.interpretations.load(owner, request["request_key"], message) == persisted
                 assert await restarted.snapshots.load(owner, request["request_key"], owned["snapshot_id"], OWN) == snapshot
-                request["context"] = {"business_goal": "Fill both age groups and reach profitability",
-                                      "customer_job_or_need": "Reduce scheduling time",
-                                      "relevant_alternative": "Manual spreadsheets"}
-                started = await execute(restarted, actor, request)
-                assert started.status_code == 202, started.text
+                async with mvp_database() as session:
+                    plan = await session.get(OrchestrationPlanRecord, (confirmed.json()["run_id"], 1))
+                    assert plan.registry_version == "1.3.0"
+                    assert plan.compiled_plan_json["registry_version"] == "1.3.0"
+                    assert plan.compiled_plan_json["scenario_key"] == "strategy_builder_v1"
                 replay = await execute(restarted, actor, request)
-                assert replay.status_code == 202 and replay.json()["run_id"] == started.json()["run_id"]
-                changed = {**request, "context": {**request["context"], "customer_job_or_need": "Changed need"}}
+                assert replay.status_code == 202 and replay.json()["run_id"] == confirmed.json()["run_id"]
+                changed = {**request, "context": {"business_goal": "Changed goal"}}
                 conflict = await execute(restarted, actor, changed)
                 assert conflict.status_code == 409 and conflict.json()["code"] == "request_conflict"
             finally:

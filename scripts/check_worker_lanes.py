@@ -19,7 +19,7 @@ def assert_running():
     state = inspect_worker()
     assert state["State"]["Running"] and state["RestartCount"] == 0, "Worker stopped or restarted"
     logs = compose("logs", "--no-color", "--since", state["State"]["StartedAt"], "worker")
-    assert "Worker lanes ready fixed=2 graph=1 registry=1.2.0" in logs
+    assert "Worker lanes ready fixed=2 graph=1 registry=1.3.0" in logs
     assert "Traceback" not in logs
 
 
@@ -52,7 +52,7 @@ def main():
     assert state["ExitCode"] == 0 and not state["OOMKilled"], "Worker did not handle SIGTERM cleanly"
     compose("start", "worker")
     wait_ready()
-    print("Worker smoke passed: fixed=2 + graph=1, Registry 1.2.0, Redis loss/recovery, clean SIGTERM/restart; providers disabled.")
+    print("Worker smoke passed: fixed=2 + graph=1, Registry 1.3.0, Redis loss/recovery, clean SIGTERM/restart; providers disabled.")
 
 
 if __name__ == "__main__":

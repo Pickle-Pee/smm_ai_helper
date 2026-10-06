@@ -293,7 +293,7 @@ def test_executable_registry_is_explicit_and_preserves_all_canonical_metadata():
     assert hashlib.sha256(normalized).hexdigest() == EXECUTABLE_SHA256
 
 
-@pytest.mark.parametrize("version", ["1.3.0", "2.0.0", "../1.0.0", "", "latest"])
+@pytest.mark.parametrize("version", ["1.4.0", "2.0.0", "../1.0.0", "", "latest"])
 def test_unapproved_registry_versions_fail_closed(version):
     with pytest.raises(ModuleRegistryError):
         ModuleRegistry.load(version)
@@ -307,6 +307,63 @@ def test_unapproved_registry_versions_fail_closed(version):
 def test_v11_rejects_every_nonapproved_binding_set(mutation):
     raw = executable_mapping()
     row = descriptor(raw, "CREATOR")
+    if mutation == "extra":
+        descriptor(raw, "MENTOR").update(availability_status="execution_bound", execution_binding=copy.deepcopy(row["execution_binding"]))
+    elif mutation == "missing":
+        row.update(availability_status="metadata_only", execution_binding=None)
+    else:
+        row["execution_binding"]["executor_key" if mutation == "key" else "contract_version"] = "unapproved.v2"
+    with pytest.raises(ModuleRegistryError, match="approved"):
+        ModuleRegistry.from_mapping(raw)
+
+
+def test_hypothesis_registry_has_only_the_approved_positioning_input_delta():
+    from app.module_registry import HYPOTHESIS_REGISTRY_VERSION, InputRequirement
+    from app.module_execution.executors.positioning import POSITIONING_SEEDS
+
+    before = ModuleRegistry.load("1.2.0")
+    after = ModuleRegistry.load(HYPOTHESIS_REGISTRY_VERSION)
+    assert after.version == "1.3.0"
+    assert tuple(d.module_id.value for d in after.descriptors) == EXPECTED_IDS
+    assert {d.module_id: d.execution_binding for d in after.descriptors if d.execution_binding} == {
+        d.module_id: d.execution_binding for d in before.descriptors if d.execution_binding
+    }
+    assert sum(d.execution_binding is not None for d in after.descriptors) == 6
+    from dataclasses import replace
+    for old, new in zip(before.descriptors, after.descriptors):
+        if new.module_id is ModuleId.POSITIONING:
+            assert new.inputs[InputRequirement.REQUIRED] == ("product", "target_or_target_hypothesis", "product_truth")
+            assert new.inputs[InputRequirement.PREFERRED] == (
+                "customer_job_or_need", "relevant_alternative",
+                *tuple(v for v in old.inputs[InputRequirement.PREFERRED] if v != "product_truth"),
+            )
+            assert new.inputs[InputRequirement.PREFERRED][:len(POSITIONING_SEEDS)] == POSITIONING_SEEDS
+            assert replace(new, inputs=old.inputs) == old
+        else:
+            assert new == old
+
+
+@pytest.mark.parametrize(("version", "checksum"), [
+    ("1.0.0", "7458b942e533b5f2d2360b5975533f1f3f457053802524c769b526141942eebb"),
+    ("1.1.0", "250608e98cf920af7cf05330ee346ff27dca692e232582d2b66c6b4b877b0555"),
+    ("1.2.0", "d4c325cdd238ef0197b39810ca8e426a4dfa7bffe17e2b87d06c61bbac4f5298"),
+])
+def test_historical_registry_resource_bytes_are_immutable(version, checksum):
+    resource = files("app.module_registry").joinpath(f"v{version}.json").read_bytes()
+    # Git checkout may use CRLF on Windows; compare the canonical LF bytes.
+    assert hashlib.sha256(resource.replace(b"\r\n", b"\n")).hexdigest() == checksum
+
+
+def test_hypothesis_registry_normalized_checksum():
+    raw = json.loads(files("app.module_registry").joinpath("v1.3.0.json").read_text(encoding="utf-8"))
+    normalized = json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    assert hashlib.sha256(normalized).hexdigest() == "779acf79261e47c18dd88bc4d2448c3bfd803ea224c8f75dd9c616267e5c7dad"
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing", "key", "version"])
+def test_hypothesis_registry_rejects_nonapproved_binding_inventory(mutation):
+    raw = json.loads(files("app.module_registry").joinpath("v1.3.0.json").read_text(encoding="utf-8"))
+    row = descriptor(raw, "EXPERIMENTS")
     if mutation == "extra":
         descriptor(raw, "MENTOR").update(availability_status="execution_bound", execution_binding=copy.deepcopy(row["execution_binding"]))
     elif mutation == "missing":

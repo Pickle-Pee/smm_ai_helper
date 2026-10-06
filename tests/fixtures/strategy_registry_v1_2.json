@@ -1,0 +1,422 @@
+{
+  "schema_version": "compiled_execution_plan.v2",
+  "source_plan_id": "a6dc2f23288f761fc13918cd7fe5ca6c104f991b5435b1b39dc264a00d008c46",
+  "scenario_key": "strategy_builder_v1",
+  "registry_version": "1.2.0",
+  "nodes": [
+    {
+      "node_id": "positioning",
+      "module_id": "POSITIONING",
+      "objective": "Fill kindergarten groups",
+      "expected_outputs": [
+        "category",
+        "frame_of_reference",
+        "target",
+        "demand_context",
+        "JTBD_frame",
+        "value_proposition",
+        "differentiation",
+        "points_of_parity",
+        "points_of_difference",
+        "RTB",
+        "positioning_statement",
+        "USP_directions",
+        "offer",
+        "message_hierarchy",
+        "claim_risks",
+        "validation_plan."
+      ],
+      "context_packet": {
+        "relevant_project_context": [],
+        "known_facts": [
+          {
+            "fact_id": "fact.business_goal",
+            "label": "business_goal",
+            "value": "Explicit business_goal",
+            "input_key": "business_goal",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.customer_job_or_need",
+            "label": "customer_job_or_need",
+            "value": "Explicit customer_job_or_need",
+            "input_key": "customer_job_or_need",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product",
+            "label": "product",
+            "value": "Explicit product",
+            "input_key": "product",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_truth",
+            "label": "product_truth",
+            "value": "Explicit product_truth",
+            "input_key": "product_truth",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.relevant_alternative",
+            "label": "relevant_alternative",
+            "value": "Explicit relevant_alternative",
+            "input_key": "relevant_alternative",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_or_target_hypothesis",
+            "label": "target_or_target_hypothesis",
+            "value": "Explicit target_or_target_hypothesis",
+            "input_key": "target_or_target_hypothesis",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          }
+        ],
+        "upstream_findings": [],
+        "evidence": [],
+        "assumptions": [],
+        "confidence": 0.8,
+        "constraints": [],
+        "available_tools": [],
+        "open_questions": []
+      },
+      "dependency_node_ids": [],
+      "binding": {
+        "executor_key": "positioning.v1",
+        "contract_version": "module_executor.v1",
+        "compatibility": "exact",
+        "evidence": "Internal dispatcher tests verify exact ModuleId, declared output names, scoped required-input blocking, strict versioned payloads and existing normalized Quality Gates provenance. Single public-page analysis / first-party positioning / text creative respectively; unsupported inputs or capabilities block. No ingress integration or universal request coverage."
+      },
+      "failure_mode": "REQUIRED"
+    },
+    {
+      "node_id": "virtual_cmo",
+      "module_id": "VIRTUAL_CMO",
+      "objective": "Fill kindergarten groups",
+      "expected_outputs": [
+        "strategic_diagnosis",
+        "main_growth_constraint",
+        "strategic_priorities",
+        "trade_offs",
+        "resource_priorities",
+        "strategic_bets",
+        "roadmap",
+        "risks",
+        "decision_triggers."
+      ],
+      "context_packet": {
+        "relevant_project_context": [],
+        "known_facts": [
+          {
+            "fact_id": "fact.business_goal",
+            "label": "business_goal",
+            "value": "Explicit business_goal",
+            "input_key": "business_goal",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.customer_job_or_need",
+            "label": "customer_job_or_need",
+            "value": "Explicit customer_job_or_need",
+            "input_key": "customer_job_or_need",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product",
+            "label": "product",
+            "value": "Explicit product",
+            "input_key": "product",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_truth",
+            "label": "product_truth",
+            "value": "Explicit product_truth",
+            "input_key": "product_truth",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.relevant_alternative",
+            "label": "relevant_alternative",
+            "value": "Explicit relevant_alternative",
+            "input_key": "relevant_alternative",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_or_target_hypothesis",
+            "label": "target_or_target_hypothesis",
+            "value": "Explicit target_or_target_hypothesis",
+            "input_key": "target_or_target_hypothesis",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          }
+        ],
+        "upstream_findings": [],
+        "evidence": [],
+        "assumptions": [],
+        "confidence": 0.8,
+        "constraints": [],
+        "available_tools": [],
+        "open_questions": []
+      },
+      "dependency_node_ids": [
+        "positioning"
+      ],
+      "binding": {
+        "executor_key": "virtual_cmo.v1",
+        "contract_version": "module_executor.v1",
+        "compatibility": "exact",
+        "evidence": "Strict source-backed module payload and deterministic claim lineage; docs/development/strategy-intelligence-executors.md"
+      },
+      "failure_mode": "REQUIRED"
+    },
+    {
+      "node_id": "experiments",
+      "module_id": "EXPERIMENTS",
+      "objective": "Fill kindergarten groups",
+      "expected_outputs": [
+        "hypothesis",
+        "evidence_basis",
+        "mechanism",
+        "test_method",
+        "control",
+        "treatment",
+        "population",
+        "primary_metric",
+        "guardrails",
+        "MDE_logic",
+        "sample_logic",
+        "duration_logic",
+        "stop_rule",
+        "scale_rule",
+        "decision_tree",
+        "learning_record."
+      ],
+      "context_packet": {
+        "relevant_project_context": [],
+        "known_facts": [
+          {
+            "fact_id": "fact.business_goal",
+            "label": "business_goal",
+            "value": "Explicit business_goal",
+            "input_key": "business_goal",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.customer_job_or_need",
+            "label": "customer_job_or_need",
+            "value": "Explicit customer_job_or_need",
+            "input_key": "customer_job_or_need",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product",
+            "label": "product",
+            "value": "Explicit product",
+            "input_key": "product",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.product_truth",
+            "label": "product_truth",
+            "value": "Explicit product_truth",
+            "input_key": "product_truth",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.relevant_alternative",
+            "label": "relevant_alternative",
+            "value": "Explicit relevant_alternative",
+            "input_key": "relevant_alternative",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          },
+          {
+            "fact_id": "fact.target_or_target_hypothesis",
+            "label": "target_or_target_hypothesis",
+            "value": "Explicit target_or_target_hypothesis",
+            "input_key": "target_or_target_hypothesis",
+            "module_relevance": [],
+            "scenario_relevance": [
+              "strategy_builder_v1"
+            ],
+            "source": "BRAND_PROFILE:owner snapshot",
+            "evidence": [],
+            "confidence": 0.8,
+            "sensitivity": "INTERNAL",
+            "authorized": true
+          }
+        ],
+        "upstream_findings": [],
+        "evidence": [],
+        "assumptions": [],
+        "confidence": 0.8,
+        "constraints": [],
+        "available_tools": [],
+        "open_questions": []
+      },
+      "dependency_node_ids": [
+        "virtual_cmo"
+      ],
+      "binding": {
+        "executor_key": "experiments.v1",
+        "contract_version": "module_executor.v1",
+        "compatibility": "exact",
+        "evidence": "Strict source-backed module payload and deterministic claim lineage; docs/development/strategy-intelligence-executors.md"
+      },
+      "failure_mode": "OPTIONAL"
+    }
+  ],
+  "dependencies": [
+    {
+      "upstream_node_id": "virtual_cmo",
+      "downstream_node_id": "experiments",
+      "mode": "HARD"
+    },
+    {
+      "upstream_node_id": "positioning",
+      "downstream_node_id": "virtual_cmo",
+      "mode": "HARD"
+    }
+  ],
+  "execution_fingerprint": "97e10b3f1741995fbfee4002304df2cf5e1b44989683398db649f0b3b0d97b7f",
+  "limitations": [
+    "market_research_not_supplied",
+    "competitor_research_not_supplied",
+    "economics_unavailable"
+  ]
+}

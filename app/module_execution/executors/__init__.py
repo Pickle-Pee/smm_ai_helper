@@ -35,7 +35,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
         PositioningExecutor(model_call=model_call, composer=composer),
         CreatorExecutor(model_call=model_call, composer=composer),
     ]
-    if registry_version == "1.2.0":
+    if registry_version in {"1.2.0", "1.3.0"}:
         implementations.extend((
             MarketAnalysisExecutor(model_call=model_call, analyzer=market_analyzer, composer=composer),
             VirtualCMOExecutor(model_call=model_call, composer=composer),

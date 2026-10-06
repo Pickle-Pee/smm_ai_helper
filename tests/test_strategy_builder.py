@@ -62,11 +62,11 @@ class StrategyModel(IntelligenceModel):
 
 def strategy_executors(model=None):
     return build_module_executor_registry(model_call=model or StrategyModel(use_parents=True),
-        analyzer=analyzer(), market_analyzer=analyzer(), registry_version="1.2.0")
+        analyzer=analyzer(), market_analyzer=analyzer(), registry_version="1.3.0")
 
 
 def strategy_compiled(context=None, executors=None):
-    return PlanCompiler(ModuleRegistry.load("1.2.0"), executors or strategy_executors()).compile(strategy_plan(context))
+    return PlanCompiler(ModuleRegistry.load("1.3.0"), executors or strategy_executors()).compile(strategy_plan(context))
 
 
 @pytest.mark.parametrize("count", range(4))
@@ -78,7 +78,7 @@ def test_bounded_topology_scopes_and_policies(count, market):
     assert source.planning_status is PlanningStatus.VALIDATED
     compiled = strategy_compiled(strategy_context(urls, market))
     assert len(compiled.nodes) == count + market + 3 <= 7
-    assert compiled.schema_version == "compiled_execution_plan.v2" and compiled.registry_version == "1.2.0"
+    assert compiled.schema_version == "compiled_execution_plan.v2" and compiled.registry_version == "1.3.0"
     assert plan_from_json(plan_to_json(compiled)) == compiled
     assert [n.node_id for n in compiled.nodes[-3:]] == ["positioning", "virtual_cmo", "experiments"]
     roots = compiled.nodes[:-3]
@@ -161,11 +161,11 @@ def test_forged_strategy_policy_or_topology_rejected_even_with_valid_fingerprint
         plan_from_json(raw)
 
 
-def test_copilot_explicit_12_starts_without_executing_and_brand_profile_context_works():
+def test_copilot_explicit_13_starts_without_executing_and_brand_profile_context_works():
     executors = strategy_executors()
     graph = SimpleNamespace(executors=executors, start_compiled_run=AsyncMock())
     svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY),
-        registry_version="1.2.0", executor_registry=executors, graph_service=graph)
+        registry_version="1.3.0", executor_registry=executors, graph_service=graph)
     context = strategy_context()
     entries = tuple(ContextEntry(f.input_key.value if f.input_key else f.label, f) for f in context.known_facts)
     output = asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="strategy", message="Strategy",
@@ -178,7 +178,7 @@ def test_copilot_explicit_12_starts_without_executing_and_brand_profile_context_
 def test_own_url_is_not_product_truth_or_research_and_missing_keys_grouped():
     url = "https://my-company.example"
     svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY, (url,), business_goal=None),
-                                         registry_version="1.2.0")
+                                         registry_version="1.3.0")
     output = asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="strategy", message="Strategy " + url)))
     assert output.kind is ResultKind.NEEDS_INPUT
     assert len(output.clarification.alternatives) == 1
@@ -214,7 +214,7 @@ def test_raw_intent_urls_do_not_become_strategy_sources_with_complete_context():
     executors = strategy_executors()
     graph = SimpleNamespace(executors=executors, start_compiled_run=AsyncMock())
     svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY, (url,)),
-        registry_version="1.2.0", executor_registry=executors, graph_service=graph)
+        registry_version="1.3.0", executor_registry=executors, graph_service=graph)
     entries = tuple(ContextEntry(f.input_key.value, f) for f in strategy_context().known_facts)
     output = asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="urls", message="Strategy " + url,
                                                     current_request=entries)))
@@ -226,9 +226,47 @@ def test_invalid_competitor_scope_returns_safe_needs_input_without_start():
     executors = strategy_executors()
     graph = SimpleNamespace(executors=executors, start_compiled_run=AsyncMock())
     svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.MARKETING_STRATEGY),
-        registry_version="1.2.0", executor_registry=executors, graph_service=graph)
+        registry_version="1.3.0", executor_registry=executors, graph_service=graph)
     context = strategy_context(("https://user:secret@example.com",))
     entries = tuple(ContextEntry(f.input_key.value if f.input_key else f.label, f) for f in context.known_facts)
     output = asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="urls", message="Strategy", current_request=entries)))
     assert output.kind is ResultKind.NEEDS_INPUT and "secret" not in str(output)
     graph.start_compiled_run.assert_not_awaited()
+
+
+@pytest.mark.parametrize("missing", REQUIRED_KEYS)
+def test_each_true_strategy_blocker_still_asks_for_input(missing):
+    plan = strategy_plan(strategy_context(missing=(missing,)))
+    assert plan.planning_status is PlanningStatus.BLOCKED
+    assert [q.input_key.value for q in plan.blocking_questions] == [missing]
+
+
+def test_strategy_optional_seeds_are_absent_or_preserved_without_sentinels():
+    context = strategy_context()
+    minimal = strategy_plan(context)
+    assert minimal.planning_status is PlanningStatus.VALIDATED
+    packet = minimal.nodes[0].context_packet
+    assert not {"customer_job_or_need", "relevant_alternative"} & {f.label for f in packet.known_facts}
+    seeds = tuple(fact(k, "Explicit " + k, scenario_relevance=frozenset({SCENARIO}))
+                  for k in ("customer_job_or_need", "relevant_alternative"))
+    supplied = strategy_plan(replace(context, known_facts=(*context.known_facts, *seeds)))
+    assert set(seeds) <= set(supplied.nodes[0].context_packet.known_facts)
+
+
+@pytest.mark.parametrize("missing", [("customer_job_or_need",), ("relevant_alternative",),
+                                    ("customer_job_or_need", "relevant_alternative")])
+def test_direct_positioning_keeps_strict_policy_under_production_registry(missing):
+    from app.marketing_copilot.contracts import ReasonCode
+    model = StrategyModel()
+    executors = strategy_executors(model)
+    svc = build_marketing_copilot_service(intent_model=intent_model(IntentKind.POSITIONING),
+        registry_version="1.3.0", executor_registry=executors)
+    facts = (*strategy_context().known_facts, *(fact(k, "Supplied " + k)
+             for k in ("customer_job_or_need", "relevant_alternative") if k not in missing))
+    output = asyncio.run(svc.execute(CopilotRequest(actor_id=1, request_id="positioning", message="Positioning",
+        current_request=tuple(ContextEntry(f.input_key.value if f.input_key else f.label,
+            replace(f, module_relevance=frozenset({ModuleId.POSITIONING}))) for f in facts))))
+    assert output.kind is ResultKind.NEEDS_INPUT
+    assert output.clarification.code == ReasonCode.POSITIONING_CONTEXT_MISSING.value
+    assert set(output.clarification.alternatives[0]) == set(missing)
+    assert not model.calls

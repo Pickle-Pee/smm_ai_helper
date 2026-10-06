@@ -444,7 +444,7 @@ def test_strategy_adapter_is_planning_only_and_groups_missing_first_party_contex
     plan = MarketingOrchestratorPlanner().plan(request, resolved)
     assert plan.planning_status is PlanningStatus.BLOCKED
     assert {q.input_key.value for q in plan.blocking_questions} == {
-        "product", "target_or_target_hypothesis", "customer_job_or_need", "relevant_alternative", "product_truth"
+        "product", "target_or_target_hypothesis", "product_truth"
     }
     assert plan.execution_readiness is ExecutionReadiness.PLANNING_ONLY
 
@@ -571,7 +571,7 @@ def test_production_strategy_stray_calculation_flag_reaches_planner_without_inve
     assert request.business_goal == "UNSPECIFIED"
     plan = MarketingOrchestratorPlanner().plan(request, resolved)
     assert {q.input_key.value for q in plan.blocking_questions} == {
-        "business_goal", "customer_job_or_need", "relevant_alternative", "product_truth"}
+        "business_goal", "product_truth"}
 
 
 def test_production_strategy_wire_contract_cannot_repeat_semantic_keys(monkeypatch):
