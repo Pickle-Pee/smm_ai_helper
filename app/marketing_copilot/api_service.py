@@ -25,6 +25,7 @@ from .http_context import current_entries, brand_entries
 from .presentation import owned_result, module_presentation, calculation_presentation
 from .provider_adapters import expected_provider_failure
 from .run_reader import GraphRunReader
+from .observability import stage_timing
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class CopilotAPIService:
 
     async def execute(self, actor, payload):
         started = time.monotonic()
-        owner, brand = await self._identity_context(actor)
+        with stage_timing("identity_context", request_key=payload.request_key, user_id=None):
+            owner, brand = await self._identity_context(actor)
         request = CopilotRequest(actor_id=owner, request_id=payload.request_key, message=payload.message,
             current_request=current_entries(payload), brand_profile=brand,
             owned_site_url=payload.owned_site_url, available_tools=frozenset({ToolCapability.SITE_FETCH}))
@@ -58,15 +60,18 @@ class CopilotAPIService:
                 if payload.owned_site_url is not None:
                     source = OwnedSiteRequest(owned_site_url=payload.owned_site_url)
                     if payload.confirmation is not None:
-                        snapshot = await self.snapshots.load(owner, payload.request_key,
-                            payload.confirmation.snapshot_id, payload.owned_site_url)
-                        if snapshot is None:
-                            raise CopilotAPIError(409, "confirmation_unavailable")
+                        with stage_timing("owned_snapshot_load", request_key=payload.request_key, user_id=owner):
+                            snapshot = await self.snapshots.load(owner, payload.request_key,
+                                payload.confirmation.snapshot_id, payload.owned_site_url)
+                            if snapshot is None:
+                                raise CopilotAPIError(409, "confirmation_unavailable")
                         acquired = AcquisitionResult(source=source, outcome=SourceOutcome.ACQUIRED, snapshot=snapshot)
                     else:
-                        acquired = await self.acquisition.acquire(source)
+                        with stage_timing("owned_acquisition", request_key=payload.request_key, user_id=owner):
+                            acquired = await self.acquisition.acquire(source)
                         if acquired.snapshot is not None:
-                            await self.snapshots.save(owner, payload.request_key, acquired.snapshot)
+                            with stage_timing("owned_snapshot_save", request_key=payload.request_key, user_id=owner):
+                                await self.snapshots.save(owner, payload.request_key, acquired.snapshot)
                     request = attach_acquisition(request, acquired)
                     if payload.confirmation is not None:
                         confirmation = payload.confirmation
@@ -79,7 +84,8 @@ class CopilotAPIService:
                         # Explicit current product_truth (even empty) outranks confirmation.
                         if "product_truth" not in payload.context.model_fields_set:
                             request = replace(request, current_request=(*request.current_request, truth))
-                result = await self.copilot.execute(request)
+                with stage_timing("core_execute", request_key=payload.request_key, user_id=owner):
+                    result = await self.copilot.execute(request)
         except StartIdentityConflict as exc:
             raise CopilotAPIError(409, "request_conflict") from exc
         except ExecutorOutputError as exc:

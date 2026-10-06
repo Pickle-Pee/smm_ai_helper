@@ -55,9 +55,15 @@ class ProviderContextProjection(_StrictContract):
     tone: Excerpt | None = None
 
     def to_internal(self, text: str) -> NaturalLanguageContextProjection:
+        # Validate the entire wire shape before tolerating individual grounding failures.
+        provider = ProviderContextProjection.model_validate(self)
+        supplied = {key: value for key, value in provider.model_dump().items() if value is not None}
+        accepted = {key: value for key, value in supplied.items() if value in text}
+        log.info("Copilot provider projection accepted_fields=%s rejected_fields=%s accepted_count=%s rejected_count=%s",
+                 sorted(accepted), sorted(supplied.keys() - accepted.keys()), len(accepted), len(supplied) - len(accepted))
         projection = NaturalLanguageContextProjection(facts=tuple(
             BusinessFactCandidate(key=key, value=value)
-            for key, value in self.model_dump().items() if value is not None
+            for key, value in accepted.items()
         ))
         return validate_projection(projection, text)
 
