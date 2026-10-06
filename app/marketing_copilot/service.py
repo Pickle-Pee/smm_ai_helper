@@ -23,6 +23,7 @@ from .application_contracts import (
 from .context_resolver import ContextEntry
 from .context_projection import merge_projected_context
 from .contracts import CopilotContractError, ExecutionMode, IntentKind, ReasonCode
+from .observability import stage_timing
 
 
 def identity(*parts):
@@ -49,7 +50,8 @@ class MarketingCopilotService:
         if type(request) is not CopilotRequest:
             raise CopilotContractError("Expected CopilotRequest")
         request.__post_init__()
-        interpreted = await self.interpreter.interpret_request(request.message)
+        with stage_timing("intent_interpretation", request_key=request.request_id, user_id=request.actor_id):
+            interpreted = await self.interpreter.interpret_request(request.message)
         intent = interpreted.intent
         entries = list(merge_projected_context(source_entries(request.current_request),
                                               interpreted.projection, request.message))

@@ -2,7 +2,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -268,16 +268,97 @@ def test_owned_site_snapshot_is_never_input_to_request_projection_or_implicit_co
     api.acquisition.acquire = AsyncMock(return_value=acquired)
     payload = ExecuteRequest(request_key="owned-boundary", message=message, owned_site_url=OWN)
     api.snapshots.save = AsyncMock()
-    if fabricated_truth:
-        with pytest.raises(ProviderUnavailable):
-            asyncio.run(api.execute(1, payload))
-    else:
-        response = asyncio.run(api.execute(1, payload))
-        assert response.kind == "NEEDS_INPUT" and response.alternatives == [["product_truth"]]
-        assert response.owned_site.candidates
+    response = asyncio.run(api.execute(1, payload))
+    assert response.kind == "NEEDS_INPUT" and response.alternatives == [["product_truth"]]
+    assert response.owned_site.candidates
     assert ingress.call_args.kwargs["text"] == message
     assert PRODUCT not in ingress.call_args.kwargs["text"]
     assert not model.calls
+
+
+@pytest.mark.parametrize("explicit", [None, "EXPLICIT GEOGRAPHY", ""])
+def test_production_strategy_paraphrase_reaches_policy_and_planning_over_http(monkeypatch, explicit, caplog):
+    from tests.test_marketing_copilot import PRODUCTION_STRATEGY_REQUEST
+    from tests.test_copilot_application import intent_model
+    from app.marketing_copilot.contracts import IntentKind
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    facts = dict(business_goal="до нового года выйти в плюс", product="садик частный",
+                 target_or_target_hypothesis="две возрастные группы 1,5-3 года и 3-6 лет",
+                 geography="Анкудиновка, Нижегородская область")
+    ingress = intent_model(IntentKind.MARKETING_STRATEGY, facts=facts)
+    api = build_production_copilot_api(intent_model=ingress, module_model=FakeModel(), analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    api.copilot.policy.decide = Mock(wraps=api.copilot.policy.decide)
+    api.copilot.planner.plan = Mock(wraps=api.copilot.planner.plan)
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+            response = await client.post("/copilot/execute", headers=headers(), json={
+                "request_key": "production-grounding", "message": PRODUCTION_STRATEGY_REQUEST,
+                "context": {} if explicit is None else {"geography": explicit}})
+        # Missing positioning facts still need clarification; interpretation itself is usable.
+        assert response.status_code == 200, response.text
+        assert response.json()["kind"] == "NEEDS_INPUT"
+    with caplog.at_level("INFO", logger="app.marketing_copilot"):
+        asyncio.run(check())
+    ingress.assert_awaited_once()
+    api.copilot.planner.plan.assert_called_once()
+    semantic, context = api.copilot.policy.decide.call_args.args
+    assert semantic.kind is IntentKind.MARKETING_STRATEGY
+    actual = {fact.label: fact.value for fact in context.project_context}
+    assert actual["product"] == facts["product"] and actual["business_goal"] == facts["business_goal"]
+    assert actual.get("geography") == (explicit or None)
+    assert facts["geography"] not in actual.values()
+    timings = [record.args for record in caplog.records if record.name == "app.marketing_copilot.observability"]
+    assert {args[0] for args in timings} == {"identity_context", "intent_interpretation", "core_execute"}
+    assert all(args[1] >= 0 and args[2] == "production-grounding" and args[4] == "success" for args in timings)
+    assert PRODUCTION_STRATEGY_REQUEST not in caplog.text and facts["geography"] not in caplog.text
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_owned_stage_timings_follow_acquisition_or_exact_snapshot_reuse(confirmed, caplog):
+    from tests.test_copilot_application import intent_model
+    from tests.test_product_context import OWN
+    from app.marketing_copilot.contracts import IntentKind
+    acquired, _, _ = acquisition()
+    api = build_production_copilot_api(intent_model=intent_model(IntentKind.CONVERSATION),
+                                     module_model=FakeModel(), analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    api.acquisition.acquire = AsyncMock(return_value=acquired)
+    api.snapshots.save = AsyncMock()
+    api.snapshots.load = AsyncMock(return_value=acquired.snapshot)
+    confirmation = None
+    if confirmed:
+        statement = next(s for s in acquired.snapshot.statements if s.field in PRODUCT_TRUTH_FIELDS)
+        confirmation = dict(snapshot_id=acquired.snapshot.snapshot_id, statement_ids=[statement.statement_id],
+                            confirmed=True, reference="PRIVATE CONFIRMATION")
+    payload = ExecuteRequest(request_key="timed-owned", message="PRIVATE MESSAGE", owned_site_url=OWN,
+                             confirmation=confirmation)
+    with caplog.at_level("INFO", logger="app.marketing_copilot.observability"):
+        assert asyncio.run(api.execute(1, payload)).kind == "CONVERSATION"
+    stages = [r.args[0] for r in caplog.records if r.name == "app.marketing_copilot.observability"]
+    owned_stages = ["owned_snapshot_load"] if confirmed else ["owned_acquisition", "owned_snapshot_save"]
+    assert stages == ["identity_context", *owned_stages, "intent_interpretation", "core_execute"]
+    assert "PRIVATE" not in caplog.text and OWN not in caplog.text
+    if confirmed:
+        api.snapshots.load.assert_awaited_once_with(1, "timed-owned", acquired.snapshot.snapshot_id, OWN)
+        api.acquisition.acquire.assert_not_awaited()
+        api.snapshots.save.assert_not_awaited()
+    else:
+        api.snapshots.save.assert_awaited_once_with(1, "timed-owned", acquired.snapshot)
+        api.snapshots.load.assert_not_awaited()
+
+
+def test_failed_interpretation_stage_logs_safe_type_and_preserves_503(caplog):
+    api = build_production_copilot_api(intent_model=AsyncMock(return_value="PRIVATE INVALID PROVIDER BODY"),
+                                     module_model=FakeModel(), analyzer=analyzer(), queue=queue())
+    api._identity_context = AsyncMock(return_value=(1, ()))
+    with caplog.at_level("INFO", logger="app.marketing_copilot.observability"):
+        with pytest.raises(ProviderUnavailable):
+            asyncio.run(api.execute(1, ExecuteRequest(request_key="timed-failure", message="PRIVATE MESSAGE")))
+    failed = [r.args for r in caplog.records if r.name == "app.marketing_copilot.observability" and r.args[4] == "failed"]
+    assert {args[0] for args in failed} == {"intent_interpretation", "core_execute"}
+    assert all(args[5] == "ProviderUnavailable" and args[1] >= 0 for args in failed)
+    assert "PRIVATE" not in caplog.text
 
 
 @pytest.mark.parametrize("failure", ["schema", *OutputFailureStage, "timeout", "connect", 429, 503])

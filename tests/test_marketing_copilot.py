@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import FrozenInstanceError
 from itertools import product
 import json
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -121,8 +122,10 @@ def test_combined_interpretation_validates_literal_excerpts_in_one_call():
     assert asyncio.run(interpreter.interpret_request("Курс фотографии для начинающих")) == response
     model.assert_awaited_once()
     assert set(model.call_args.kwargs["response_schema"]["properties"]) == {"intent", "projection"}
+    assert asyncio.run(interpreter.interpret_request("Придумай продукт")).projection.facts == ()
+    # The trusted internal boundary remains strict even though provider conversion drops facts.
     with pytest.raises(CopilotContractError, match="literal"):
-        asyncio.run(interpreter.interpret_request("Придумай продукт"))
+        merge_projected_context((), response.projection, "Придумай продукт")
 
 
 @pytest.mark.parametrize("value", ["Product A", "", " ", None])
@@ -493,8 +496,7 @@ def test_every_provider_slot_requires_literal_current_request_excerpt(key):
     result = asyncio.run(interpreter.interpret_request("This is a user fact."))
     assert result.projection == projected(**{key: "user fact"})
     for text in ("Invent a fact", "User fact", "user other fact"):
-        with pytest.raises(CopilotContractError, match="literal"):
-            asyncio.run(interpreter.interpret_request(text))
+        assert asyncio.run(interpreter.interpret_request(text)).projection.facts == ()
 
 
 @pytest.mark.parametrize("projection", [{}, {key: None for key in CANONICAL_PROJECTION_FIELDS}])
@@ -588,3 +590,77 @@ def test_provider_wire_projection_does_not_change_public_request_dto():
     assert set(BusinessContext.model_fields) == (set(CANONICAL_PROJECTION_FIELDS)
                                                - {"target_or_target_hypothesis"}) | {"target"}
     assert "projection" not in ExecuteRequest.model_json_schema()["properties"]
+
+
+@pytest.mark.parametrize("mode", ["literal", "mixed", "ungrounded"])
+def test_production_projection_drops_only_ungrounded_provider_fields(mode, caplog, monkeypatch):
+    from app.marketing_copilot.provider_adapters import PublicIntentInterpreter
+    from app.marketing_copilot.http_context import entry as http_entry
+    # Match the repository's diagnostic capture pattern: Alembic roundtrip tests
+    # can disable existing loggers and replace handlers earlier in the full suite.
+    logger = logging.getLogger("app.marketing_copilot.context_projection")
+    monkeypatch.setattr(logger, "disabled", False)
+    monkeypatch.setattr(logger, "propagate", False)
+    monkeypatch.setattr(logger, "handlers", [caplog.handler])
+    values = dict(business_goal="до нового года выйти в плюс", product="садик частный",
+                  geography="Садик в анкудиноваке (Нижегородская область)")
+    expected = dict(values)
+    if mode == "mixed":
+        values["geography"] = "Анкудиновка, Нижегородская область"
+        expected.pop("geography")
+    elif mode == "ungrounded":
+        values = {key: "PRIVATE PARAPHRASE " + key for key in values}
+        expected = {}
+    wire = ProviderInterpretedRequest(intent=intent(IntentKind.MARKETING_STRATEGY),
+                                     projection=ProviderContextProjection(**values))
+    with caplog.at_level("INFO", logger="app.marketing_copilot.context_projection"):
+        result = asyncio.run(PublicIntentInterpreter(AsyncMock(return_value=wire.model_dump_json()))
+                             .interpret_request(PRODUCTION_STRATEGY_REQUEST))
+    assert result.intent == wire.intent
+    assert {fact.key: fact.value for fact in result.projection.facts} == expected
+    merged = merge_projected_context((), result.projection, PRODUCTION_STRATEGY_REQUEST)
+    context = ContextResolver().resolve(current_request=merged)
+    assert {fact.label: fact.value for fact in context.project_context} == expected
+    explicit = (http_entry("product", "EXPLICIT PRODUCT"),)
+    assert merge_projected_context(explicit, result.projection, PRODUCTION_STRATEGY_REQUEST)[0] == explicit[0]
+    assert sum(item.semantic_key == "product" for item in merge_projected_context(
+        explicit, result.projection, PRODUCTION_STRATEGY_REQUEST)) == 1
+    assert "accepted_fields=" in caplog.text and "rejected_fields=" in caplog.text
+    assert all(value not in caplog.text for value in values.values())
+
+
+@pytest.mark.parametrize("value", ["USER FACT", "user  fact", " user fact ", "user\nfact", "user fаct"])
+def test_provider_conversion_never_normalizes_or_fuzzy_matches(value):
+    # Last value uses Cyrillic а. Only exact contiguous text is accepted.
+    result = ProviderContextProjection(product=value).to_internal("user fact")
+    assert result.facts == ()
+    with pytest.raises(CopilotContractError, match="literal"):
+        merge_projected_context((), projected(product=value), "user fact")
+
+
+@pytest.mark.parametrize("raw", [
+    '{',
+    json.dumps({"intent": intent().model_dump(mode="json"), "projection": {"product": 123}}),
+    json.dumps({"intent": intent().model_dump(mode="json"), "projection": {"product": "x" * 4001}}),
+    json.dumps({"intent": {"kind": "INVALID"}, "projection": {}}),
+    ProviderInterpretedRequest(intent=intent(), projection=ProviderContextProjection()).model_dump_json()
+        .replace('"product":null', '"product":null,"product":null'),
+])
+def test_public_combined_interpreter_still_rejects_structurally_invalid_output(raw):
+    from app.marketing_copilot.provider_adapters import PublicIntentInterpreter
+    from app.marketing_copilot.api_errors import ProviderUnavailable
+    with pytest.raises(ProviderUnavailable):
+        asyncio.run(PublicIntentInterpreter(AsyncMock(return_value=raw)).interpret_request("user fact"))
+
+
+@pytest.mark.parametrize("field,value", [
+    ("provided_urls", "https://invented.example"), ("provided_urls", "file:///private"),
+    ("provided_urls", "https://user:pass@example.com"), ("source_references", "artifact:invented"),
+])
+def test_combined_provider_intent_references_still_fail_closed(field, value):
+    from app.marketing_copilot.provider_adapters import PublicIntentInterpreter
+    from app.marketing_copilot.api_errors import ProviderUnavailable
+    raw = {"intent": intent().model_dump(mode="json"), "projection": {"product": "paraphrase"}}
+    raw["intent"][field] = [value]
+    with pytest.raises(ProviderUnavailable):
+        asyncio.run(PublicIntentInterpreter(AsyncMock(return_value=json.dumps(raw))).interpret_request("post"))
