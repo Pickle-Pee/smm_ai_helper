@@ -319,6 +319,7 @@ def test_v11_rejects_every_nonapproved_binding_set(mutation):
 
 def test_hypothesis_registry_has_only_the_approved_positioning_input_delta():
     from app.module_registry import HYPOTHESIS_REGISTRY_VERSION, InputRequirement
+    from app.module_execution.executors.positioning import POSITIONING_SEEDS
 
     before = ModuleRegistry.load("1.2.0")
     after = ModuleRegistry.load(HYPOTHESIS_REGISTRY_VERSION)
@@ -333,9 +334,10 @@ def test_hypothesis_registry_has_only_the_approved_positioning_input_delta():
         if new.module_id is ModuleId.POSITIONING:
             assert new.inputs[InputRequirement.REQUIRED] == ("product", "target_or_target_hypothesis", "product_truth")
             assert new.inputs[InputRequirement.PREFERRED] == (
-                "customer_job_or_need", "relevant_alternative.",
+                "customer_job_or_need", "relevant_alternative",
                 *tuple(v for v in old.inputs[InputRequirement.PREFERRED] if v != "product_truth"),
             )
+            assert new.inputs[InputRequirement.PREFERRED][:len(POSITIONING_SEEDS)] == POSITIONING_SEEDS
             assert replace(new, inputs=old.inputs) == old
         else:
             assert new == old
@@ -355,7 +357,7 @@ def test_historical_registry_resource_bytes_are_immutable(version, checksum):
 def test_hypothesis_registry_normalized_checksum():
     raw = json.loads(files("app.module_registry").joinpath("v1.3.0.json").read_text(encoding="utf-8"))
     normalized = json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    assert hashlib.sha256(normalized).hexdigest() == "ceb54954cab04328483f7f758ceeb348bd99b91fec12d4af9d4b72429e166cac"
+    assert hashlib.sha256(normalized).hexdigest() == "779acf79261e47c18dd88bc4d2448c3bfd803ea224c8f75dd9c616267e5c7dad"
 
 
 @pytest.mark.parametrize("mutation", ["extra", "missing", "key", "version"])

@@ -405,7 +405,7 @@
         ],
         "preferred": [
           "customer_job_or_need",
-          "relevant_alternative.",
+          "relevant_alternative",
           "MARKET_ANALYSIS",
           "COMPETITOR_ANALYSIS",
           "CUSTDEV",
