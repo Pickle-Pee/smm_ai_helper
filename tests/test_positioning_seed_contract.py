@@ -134,7 +134,7 @@ def test_seed_presence_requires_authorized_nonempty_input_identity(seed, names, 
       for name in ("RTB", "value_proposition", "positioning_statement", "offer")),
 ])
 def test_semantics_remain_defense_in_depth_when_wire_validation_is_bypassed(name, rule):
-    statement = OutputStatement(output_name=name, text="PRIVATE_MODEL_TEXT", kind="INFERENCE",
+    statement = OutputStatement.model_construct(output_name=name, text="PRIVATE_MODEL_TEXT", kind="INFERENCE",
         confidence="MEDIUM", evidence_ids=[], parent_claim_ids=[])
     with pytest.raises(StatementSemanticsError) as caught:
         PositioningExecutor(model_call=None).validate_statement(statement, {}, {})

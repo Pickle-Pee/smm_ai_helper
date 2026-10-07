@@ -1,7 +1,8 @@
 """Bounded model wire schemas; technical identities are assigned by code."""
+from copy import deepcopy
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
 Reference = Annotated[str, Field(min_length=1, max_length=128)]
@@ -29,6 +30,29 @@ class OutputStatement(StrictOutput):
     confidence: Literal["UNKNOWN", "LOW", "MEDIUM", "HIGH"]
     evidence_ids: list[Reference] = Field(max_length=32)
     parent_claim_ids: list[Reference] = Field(max_length=32)
+
+    @model_validator(mode="after")
+    def require_support(self):
+        if not self.evidence_ids and not self.parent_claim_ids:
+            raise ValueError("Statement support is required")
+        return self
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler):
+        # Pydantic's model validator cannot emit this cross-field OR. Keep its
+        # wire representation here so every derived statement (including its
+        # narrower output-name/kind fields) inherits the same support floor.
+        schema = handler.resolve_ref_schema(handler(core_schema))
+        alternatives = []
+        for support_field in ("evidence_ids", "parent_claim_ids"):
+            branch = deepcopy(schema)
+            branch.pop("title", None)
+            branch["properties"][support_field]["minItems"] = 1
+            alternatives.append(branch)
+        # Each anyOf branch is a complete strict object: all fields required,
+        # no extra properties, bounded arrays. Both-nonempty matches both.
+        schema["anyOf"] = alternatives
+        return schema
 
 
 class CompetitorStatement(OutputStatement):

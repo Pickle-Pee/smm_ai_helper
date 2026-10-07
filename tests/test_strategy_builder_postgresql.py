@@ -75,11 +75,20 @@ def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_dat
             }
             assert len(artifacts) == 1 and artifacts[0].step == "positioning"
             quality = artifacts[0].payload_json["quality"]
+            from app.orchestration_runtime.serialization import result_from_json
+            result = result_from_json(artifacts[0].payload_json["execution_result"])
+            assert result.normalized_result.module_status.value == "PASS_WITH_LIMITATIONS"
+            assert len(result.normalized_result.claims) == 16
             assert len(quality["accepted_result_ids"]) == 1
             assert len(quality["accepted_claim_ids"]) == 16
             assert len(provider.calls) == 1
+            assert provider.unsupported_proposals
             assert provider.calls[0]["max_output_tokens"] == 16000
             data = json.loads(provider.calls[0]["input"][1]["content"])
+            supplied = {e["evidence_id"] for e in data["local_evidence"]}
+            assert {"business_goal", "product", "target_or_target_hypothesis", "product_truth"} <= {
+                e["input_key"] for e in data["local_evidence"]}
+            assert all(supplied.intersection(s["evidence_ids"]) for s in result.payload["outputs"])
             assert not {"customer_job_or_need", "relevant_alternative"} & {e["input_key"] for e in data["local_evidence"]}
             schema = provider.calls[0]["text"]["format"]["schema"]
             for name in ("JTBD_frame", "demand_context", "category", "frame_of_reference", "points_of_parity"):
