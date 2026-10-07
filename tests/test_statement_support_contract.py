@@ -51,25 +51,30 @@ def test_every_emitted_statement_schema_and_parser_agree(emitted_contract, local
             return field["const"] if "const" in field else field["enum"][0]
         payload = dict(output_name=literal(properties["output_name"]), text="Synthetic finding",
                        kind=literal(properties["kind"]), confidence="MEDIUM",
-                       evidence_ids=["evd_valid"] if local else [],
-                       parent_claim_ids=["clm_valid"] if parent else [])
+                       evidence_ids=[schema["$defs"].get("AllowedEvidenceId", {"enum": ["evd_unavailable"]})["enum"][0]] if local else [],
+                       parent_claim_ids=[schema["$defs"].get("AllowedParentClaimId", {"enum": ["clm_unavailable"]})["enum"][0]] if parent else [])
         if "items" in properties:
             payload["items"] = ["Synthetic priority"]
         validator = Draft202012Validator({"$defs": schema["$defs"], "$ref": f"#/$defs/{name}"})
-        assert validator.is_valid(payload) is (local or parent)
+        available_local = "AllowedEvidenceId" in schema["$defs"]
+        available_parent = "AllowedParentClaimId" in schema["$defs"]
+        assert validator.is_valid(payload) is ((local or parent) and (not local or available_local)
+                                                and (not parent or available_parent))
         if local or parent:
             assert statement_type.model_validate_json(json.dumps(payload)).model_dump() == payload
         else:
             with pytest.raises(ValidationError):
                 statement_type.model_validate_json(json.dumps(payload))
         # Strict-compatible anyOf objects preserve all inherited constraints.
-        assert len(definition["anyOf"]) == 2
-        for branch, support in zip(definition["anyOf"], ("evidence_ids", "parent_claim_ids")):
+        supports = [field for field, available in (("evidence_ids", available_local),
+                                                  ("parent_claim_ids", available_parent)) if available]
+        assert len(definition["anyOf"]) == len(supports)
+        for branch, support in zip(definition["anyOf"], supports):
             assert branch["additionalProperties"] is False
             assert set(branch["required"]) == set(properties)
             assert branch["properties"][support]["minItems"] == 1
-            assert all(branch["properties"][field]["maxItems"] == 32
-                       for field in ("evidence_ids", "parent_claim_ids"))
+            for field, available in (("evidence_ids", available_local), ("parent_claim_ids", available_parent)):
+                assert branch["properties"][field]["maxItems"] == (32 if available else 0)
         checked += 1
     assert checked
 

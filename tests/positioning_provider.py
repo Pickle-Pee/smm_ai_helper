@@ -46,6 +46,7 @@ class PositioningProvider:
         self.calls = []
         self.mutate = mutate
         self.unsupported_proposals = []
+        self.invalid_identity_proposals = []
 
     def __call__(self, request):
         body = json.loads(request.content)
@@ -69,6 +70,12 @@ class PositioningProvider:
             # generation constrained by schema, not server-side result repair.
             validator = Draft202012Validator(schema)
             candidate = dict(outputs=[statement], assumptions=[], limitations=[])
+            for field, invented in (("parent_claim_ids", "clm_invented"), ("evidence_ids", "evd_invented")):
+                proposal = {**candidate, "outputs": [{**statement, field: [invented]}]}
+                if validator.is_valid(proposal):
+                    statement[field] = [invented]
+                else:
+                    self.invalid_identity_proposals.append((name, field))
             if not statement["evidence_ids"]:
                 assert not validator.is_valid(candidate)
                 self.unsupported_proposals.append(name)
