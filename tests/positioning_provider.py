@@ -6,6 +6,7 @@ USP_directions reproduces the diagnosed class; strict generation must exclude it
 import json
 
 import httpx
+from jsonschema import Draft202012Validator
 
 
 ROWS = (
@@ -44,6 +45,7 @@ class PositioningProvider:
     def __init__(self, mutate=None):
         self.calls = []
         self.mutate = mutate
+        self.unsupported_proposals = []
 
     def __call__(self, request):
         body = json.loads(request.content)
@@ -59,10 +61,20 @@ class PositioningProvider:
             permitted = allowed_kinds(schema, name)
             kind = proposed_kind if proposed_kind in permitted else "HYPOTHESIS"
             assert kind in permitted
-            support_key = input_key if input_key in evidence else "product_truth"
-            outputs.append(dict(output_name=name, kind=kind, confidence="MEDIUM",
+            statement = dict(output_name=name, kind=kind, confidence="MEDIUM",
                 text="Synthetic supported finding for " + name,
-                evidence_ids=[evidence[support_key]], parent_claim_ids=[]))
+                evidence_ids=[evidence[input_key]] if input_key in evidence else [], parent_claim_ids=[])
+            # First propose no support when the preferred seed is absent. Only
+            # the actual strict schema may exclude that proposal; this is model
+            # generation constrained by schema, not server-side result repair.
+            validator = Draft202012Validator(schema)
+            candidate = dict(outputs=[statement], assumptions=[], limitations=[])
+            if not statement["evidence_ids"]:
+                assert not validator.is_valid(candidate)
+                self.unsupported_proposals.append(name)
+                statement["evidence_ids"] = [evidence["product_truth"]]
+            assert validator.is_valid(candidate)
+            outputs.append(statement)
         payload = dict(outputs=outputs, assumptions=[], limitations=[])
         if self.mutate:
             self.mutate(payload, data)
