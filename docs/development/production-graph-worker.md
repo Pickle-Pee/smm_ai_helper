@@ -32,9 +32,13 @@ bindings in the 1.2 inventory. No plan is upgraded during reload.
 `production_model_call` adapts the existing `app.llm.openai_text.chat` Responses
 transport with `single_attempt=True`. It sends the executor's instruction, input
 and JSON Schema with `strict=True`, the configured `DEFAULT_TEXT_MODEL_HARD`, and
-a hard maximum of 4000 output tokens. It performs one HTTP request: no internal
+a server-owned generation profile: 4000 output tokens for generic/smaller calls,
+16000 for the full 16-output POSITIONING contract. The internal enum is selected
+by the executor from requested contract outputs, never from user text. The generic
+transport cap remains 4000. It performs one HTTP request: no internal
 retry, schema fallback, budget expansion or output repair. Incomplete responses
-are terminal; empty/malformed text goes to the unchanged strict executor parser.
+are terminal; empty/invalid envelopes have a bounded provider failure reason,
+while malformed JSON text goes to the unchanged strict executor parser.
 The adapter returns text only; raw provider envelopes are never persisted or
 logged by this path. Instructions request concise findings/rationales, never
 hidden chain-of-thought. Provider-specific dependencies stay outside executors.
@@ -63,6 +67,9 @@ transient. The classifier walks explicit `__cause__` chains with cycle protectio
 for existing wrapped provider errors. An arbitrary RuntimeError, malformed
 structured output, contract violation, other HTTP status or application bug is
 terminal. Errors are persisted as existing safe codes, never raw provider data.
+All five `ModelResponseFailureReason` values are explicitly terminal, even with
+a transient chained cause. Token exhaustion does not retry an identical request.
+See [structured response diagnostics and capacity](structured-model-responses.md).
 
 Startup requires `0 < HTTP_TIMEOUT < GRAPH_TIMEOUT_SECONDS < GRAPH_LEASE_SECONDS`.
 Defaults are 60 / 300 / 330 seconds; the outer graph timeout bounds the complete

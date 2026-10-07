@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
 from app.models import JobExecution, JobStatus, MarketingRun, User
+from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.worker import MarketingWorker, main
 from app.workflows.executors import MarketingExecutors
@@ -65,7 +66,10 @@ def test_main_composition_simultaneous_fixed_and_strategy(mvp_database, monkeypa
             payload = json.loads(request.content)
             provider_calls.append(payload)
             fmt = payload["text"]["format"]
-            assert fmt["strict"] is True and payload["max_output_tokens"] == 4000
+            expected = set(json.loads(payload["input"][1]["content"])["expected_outputs"])
+            full_positioning = set(ModuleRegistry.load("1.3.0").get(ModuleId.POSITIONING).outputs)
+            assert fmt["strict"] is True
+            assert payload["max_output_tokens"] == (16000 if expected == full_positioning else 4000)
             text = await model(instruction=payload["input"][0]["content"], text=payload["input"][1]["content"],
                                response_schema=fmt["schema"])
             return httpx.Response(200, json={"status": "completed", "output_text": text})
@@ -122,6 +126,7 @@ def test_main_composition_simultaneous_fixed_and_strategy(mvp_database, monkeypa
             assert not process.done()
             _, jobs, artifacts = await state(mvp_database, rid)
             assert len(jobs) == len(artifacts) == len(model.calls) == len(provider_calls) == 5
+            assert [c["max_output_tokens"] for c in provider_calls].count(16000) == 1
             assert all(j.kind == "orchestration.module" and j.status is JobStatus.SUCCEEDED for j in jobs)
             fixed_run, fixed_jobs, _ = await state(mvp_database, fixed["run_id"])
             assert len(fixed_jobs) == 1 and fixed_jobs[0].kind == "marketing.step"

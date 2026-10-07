@@ -83,7 +83,7 @@ def test_complete_positioning_through_production_http_adapter(monkeypatch):
     output = asyncio.run(PositioningExecutor(model_call=production_model_call).execute(invocation))
     assert output.normalized_result.module_status.value == "PASS_WITH_LIMITATIONS"
     assert [s["output_name"] for s in output.payload["outputs"]] == list(invocation.expected_outputs)
-    assert len(provider.calls) == 1 and provider.calls[0]["max_output_tokens"] == 4000
+    assert len(provider.calls) == 1 and provider.calls[0]["max_output_tokens"] == 16000
     data = json.loads(provider.calls[0]["input"][1]["content"])
     proof = {e["evidence_id"] for e in data["local_evidence"] if e["input_key"] in {"product_truth", "existing_proof"}}
     for statement, claim in zip(output.payload["outputs"], output.normalized_result.claims):
@@ -106,6 +106,7 @@ def test_direct_copilot_module_result_with_production_provider_and_context_proje
     assert result.kind is ResultKind.MODULE_RESULT
     assert len(result.module_result.normalized_result.claims) == 16
     assert len(provider.calls) == 1
+    assert provider.calls[0]["max_output_tokens"] == 16000
 
 
 def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):

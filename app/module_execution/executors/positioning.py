@@ -1,6 +1,7 @@
 """Positioning from explicit product truth and optional predecessor results."""
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason, ClaimType
-from app.module_registry import ModuleId
+from app.module_registry import ModuleId, ModuleRegistry
+from app.model_generation_policy import ModuleOutputBudget
 
 from .common import (
     BaseExecutor, SemanticRule, StatementSemanticsError, blocked, facts_for,
@@ -45,6 +46,13 @@ points_of_parity must be HYPOTHESIS, including when citing accepted factual pare
 Never treat an upstream hypothesis as observed evidence. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
+
+    def output_budget_for(self, request):
+        # Preparation has checked the requested names. Only the complete
+        # server-owned contract gets extra headroom, independent of user text.
+        if set(request.expected_outputs) == set(ModuleRegistry.load("1.1.0").get(self.module_id).outputs):
+            return ModuleOutputBudget.POSITIONING_FULL
+        return ModuleOutputBudget.GENERIC
 
     def output_type_for(self, request, evidence):
         supplied = {item.input_key for item in evidence}
