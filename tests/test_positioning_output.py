@@ -139,6 +139,8 @@ def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):
     supplied = {e["evidence_id"] for e in data["local_evidence"]}
     assert all(supplied.intersection(s["evidence_ids"]) for s in result.payload["outputs"])
     assert GraphExecutionService._ready(plan, cmo, {}, {node.node_id: result})
+    from tests.test_support_identity_schema import assert_production_support_schema
+    assert_production_support_schema(provider)
     assert len(provider.calls) == 1
 
 
@@ -146,11 +148,11 @@ def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):
     (lambda p,d: p.update(private="PRIVATE_SENTINEL"), "schema_invalid"),
     (lambda p,d: p["outputs"].pop(), "output_coverage_invalid"),
     (lambda p,d: p["outputs"].append(p["outputs"][0].copy()), "output_coverage_invalid"),
-    (lambda p,d: p["outputs"][0].update(evidence_ids=["evd_unknown"]), "evidence_reference_invalid"),
-    (lambda p,d: p["outputs"][0].update(parent_claim_ids=["clm_unknown"]), "parent_reference_invalid"),
+    (lambda p,d: p["outputs"][0].update(evidence_ids=["evd_unknown"]), "schema_invalid"),
+    (lambda p,d: p["outputs"][0].update(parent_claim_ids=["clm_unknown"]), "schema_invalid"),
     (lambda p,d: p["outputs"][0].update(evidence_ids=[], parent_claim_ids=[]), "schema_invalid"),
     (lambda p,d: p["outputs"][0]["evidence_ids"].append(p["outputs"][0]["evidence_ids"][0]), "support_identity_invalid"),
-    (lambda p,d: p["outputs"][0].update(parent_claim_ids=["clm_unknown", "clm_unknown"]), "support_identity_invalid"),
+    (lambda p,d: p["outputs"][0].update(parent_claim_ids=["clm_unknown", "clm_unknown"]), "schema_invalid"),
     (lambda p,d: next(s for s in p["outputs"] if s["output_name"] == "USP_directions").update(kind="RECOMMENDATION"), "schema_invalid"),
 ])
 def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, rejection_log, mutation, stage):

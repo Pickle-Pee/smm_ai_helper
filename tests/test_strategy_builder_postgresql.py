@@ -82,6 +82,8 @@ def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_dat
             assert len(quality["accepted_result_ids"]) == 1
             assert len(quality["accepted_claim_ids"]) == 16
             assert len(provider.calls) == 1
+            from tests.test_support_identity_schema import assert_production_support_schema
+            assert_production_support_schema(provider)
             assert provider.unsupported_proposals
             assert provider.calls[0]["max_output_tokens"] == 16000
             data = json.loads(provider.calls[0]["input"][1]["content"])
