@@ -2,8 +2,14 @@
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason, ClaimType
 from app.module_registry import ModuleId
 
-from .common import BaseExecutor, blocked, facts_for, first_party_evidence, scoped_facts
-from .schemas import PositioningOutput
+from .common import (
+    BaseExecutor, SemanticRule, StatementSemanticsError, blocked, facts_for,
+    first_party_evidence, scoped_facts,
+)
+from .schemas import (
+    PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
+    PositioningWithoutSeedsOutput,
+)
 
 POSITIONING_INPUTS = ("product", "target_or_target_hypothesis", "product_truth")
 POSITIONING_SEEDS = ("customer_job_or_need", "relevant_alternative")
@@ -35,11 +41,19 @@ invent evidence IDs. customer_job_or_need and relevant_alternative are optional
 strategic seeds: use them when supplied, and otherwise derive reasoning as explicit
 HYPOTHESIS. Without customer_job_or_need, JTBD_frame and demand_context must be
 HYPOTHESIS. Without relevant_alternative, category, frame_of_reference and
-points_of_parity must be HYPOTHESIS. Only a cited accepted OBSERVATION with the
-same output name and its own evidence can independently support an exception.
+points_of_parity must be HYPOTHESIS, including when citing accepted factual parents.
 Never treat an upstream hypothesis as observed evidence. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
+
+    def output_type_for(self, request, evidence):
+        supplied = {item.input_key for item in evidence}
+        return {
+            (True, True): PositioningOutput,
+            (False, True): PositioningWithoutJobOutput,
+            (True, False): PositioningWithoutAlternativeOutput,
+            (False, False): PositioningWithoutSeedsOutput,
+        }[("customer_job_or_need" in supplied, "relevant_alternative" in supplied)]
 
     async def execute(self, request):
         early = self.prepare(request)
@@ -57,9 +71,10 @@ COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
         limitations = [_SEED_LIMITATIONS[key] for key in POSITIONING_SEEDS if key not in supplied]
         # Reserve schema-bounded slots for server-owned notices; provider output
         # may already fill every available limitation slot.
-        limit = self.output_type.model_json_schema()["properties"]["limitations"]["maxItems"]
+        output_type = type(output)
+        limit = output_type.model_json_schema()["properties"]["limitations"]["maxItems"]
         combined = list(dict.fromkeys((*limitations, *output.limitations)))[:limit]
-        output = self.output_type.model_validate({**output.model_dump(), "limitations": combined})
+        output = output_type.model_validate({**output.model_dump(), "limitations": combined})
         return super().build_result(request, output, evidence, parents)
 
     def validate_statement(self, statement, local, parents):
@@ -77,9 +92,9 @@ COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
                 for pid in statement.parent_claim_ids
             )
             if not supported:
-                raise ValueError("Missing strategic seed requires hypothesis marking or matching factual parent evidence")
+                raise StatementSemanticsError(SemanticRule.MISSING_SEED_REQUIRES_HYPOTHESIS)
         if statement.output_name in ("differentiation", "points_of_difference", "USP_directions") and statement.kind != "HYPOTHESIS":
-            raise ValueError("Differentiation requires hypothesis marking in v1")
+            raise StatementSemanticsError(SemanticRule.DIFFERENTIATION_REQUIRES_HYPOTHESIS)
         if statement.output_name in ("RTB", "value_proposition", "positioning_statement", "offer"):
             if not any(local[e].input_key in ("product_truth", "existing_proof") for e in statement.evidence_ids):
-                raise ValueError("Product claims must cite supplied product truth/proof")
+                raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)

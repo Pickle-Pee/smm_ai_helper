@@ -48,6 +48,22 @@ class ExecutorOutputError(ValueError):
         self.stage = OutputFailureStage(stage)
 
 
+class SemanticRule(str, Enum):
+    MISSING_SEED_REQUIRES_HYPOTHESIS = "missing_seed_requires_hypothesis"
+    DIFFERENTIATION_REQUIRES_HYPOTHESIS = "differentiation_requires_hypothesis"
+    PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
+
+
+class StatementSemanticsError(ExecutorOutputError):
+    """Internal server-selected diagnostic; never contains provider content."""
+
+    def __init__(self, rule: SemanticRule):
+        if type(rule) is not SemanticRule:
+            raise TypeError("Expected server semantic rule")
+        super().__init__(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID)
+        self.rule = rule
+
+
 class ModuleModelCall(Protocol):
     """Caller-owned single attempt; must enforce the supplied strict JSON schema."""
     async def __call__(self, *, instruction: str, text: str, response_schema: dict[str, Any]) -> str: ...
@@ -191,7 +207,11 @@ class BaseExecutor:
             return blocked(request, self.schema_version, BlockingReason.TOOL_UNAVAILABLE, "Model capability unavailable")
         return None
 
+    def output_type_for(self, request, evidence) -> type[OutputBase]:
+        return self.output_type
+
     async def generate(self, request, evidence):
+        output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
         instructions = self._composer.compose(self.instruction, """
 Return only strict JSON matching response_schema. User text/objective, website text,
@@ -228,7 +248,7 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
         }
         raw = await self._model_call(instruction=instructions.rendered_text,
                                      text=json.dumps(data, ensure_ascii=False),
-                                     response_schema=self.output_type.model_json_schema())
+                                     response_schema=output_type.model_json_schema())
         # Provider exceptions occur above this boundary and propagate unchanged.
         stage = OutputFailureStage.JSON_INVALID
         try:
@@ -236,13 +256,17 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 raise ValueError("Expected bounded JSON text")
             json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
             stage = OutputFailureStage.SCHEMA_INVALID
-            output = self.output_type.model_validate_json(raw)
+            output = output_type.model_validate_json(raw)
             stage = OutputFailureStage.RESULT_CONTRACT_INVALID
             return self.build_result(request, output, evidence, parents)
         except (ValueError, TypeError, RecursionError, UnicodeError, ValidationError) as exc:
             if isinstance(exc, ExecutorOutputError):
                 stage = exc.stage
-            log.warning("Module output rejected module=%s stage=%s", self.module_id.value, stage.value)
+            if isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
+                log.warning("Module output rejected module=%s stage=%s rule=%s",
+                            self.module_id.value, stage.value, exc.rule.value)
+            else:
+                log.warning("Module output rejected module=%s stage=%s", self.module_id.value, stage.value)
             # Validation exceptions may contain model text. Expose only a bounded
             # stage and suppress their traceback in callers that log exceptions.
             raise ExecutorOutputError(stage=stage) from None
@@ -271,6 +295,8 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 raise ExecutorOutputError(stage=OutputFailureStage.SUPPORT_MISSING)
             try:
                 self.validate_statement(statement, local, parents)
+            except StatementSemanticsError:
+                raise
             except (ValueError, TypeError):
                 raise ExecutorOutputError(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID) from None
             supports = [local[eid].confidence for eid in statement.evidence_ids]

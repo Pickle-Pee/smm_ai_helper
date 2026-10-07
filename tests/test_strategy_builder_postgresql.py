@@ -58,7 +58,7 @@ async def execute_node(service, rid, node):
 
 def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_database, monkeypatch):
     from app.orchestration_runtime.model_adapter import production_model_call
-    from tests.positioning_provider import PositioningProvider
+    from tests.positioning_provider import PositioningProvider, allowed_kinds
     from tests.test_graph_model_adapter import install_transport
 
     provider = PositioningProvider()
@@ -78,6 +78,11 @@ def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_dat
             assert len(quality["accepted_result_ids"]) == 1
             assert len(quality["accepted_claim_ids"]) == 16
             assert len(provider.calls) == 1
+            data = json.loads(provider.calls[0]["input"][1]["content"])
+            assert not {"customer_job_or_need", "relevant_alternative"} & {e["input_key"] for e in data["local_evidence"]}
+            schema = provider.calls[0]["text"]["format"]["schema"]
+            for name in ("JTBD_frame", "demand_context", "category", "frame_of_reference", "points_of_parity"):
+                assert allowed_kinds(schema, name) == {"HYPOTHESIS"}
         finally:
             await cleanup(mvp_database, rid, owner)
     asyncio.run(exercise())

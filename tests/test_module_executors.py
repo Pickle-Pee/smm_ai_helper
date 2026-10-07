@@ -22,7 +22,10 @@ from app.module_execution.executors import (
     CompetitorAnalysisExecutor, CreatorExecutor, ExecutorOutputError, PositioningExecutor,
     build_module_executor_registry, validate_executor_coherence,
 )
-from app.module_execution.executors.common import clamp_confidence
+from app.module_execution.executors.common import (
+    OutputFailureStage, SemanticRule, StatementSemanticsError, clamp_confidence,
+    first_party_evidence, scoped_facts,
+)
 from app.module_execution.executors.positioning import POSITIONING_INPUTS, POSITIONING_SEEDS
 from app.module_registry import ModuleId, ModuleRegistry, ToolCapability
 
@@ -414,9 +417,10 @@ def test_positioning_provider_double_derives_missing_seeds_through_http_adapter(
 @pytest.mark.parametrize("kind", ["OBSERVATION", "INFERENCE", "RECOMMENDATION"])
 def test_positioning_missing_seed_rejects_unmarked_reasoning(seed, name, kind):
     facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != seed)
-    with pytest.raises(ExecutorOutputError):
+    with pytest.raises(ExecutorOutputError) as caught:
         dispatch(request(ModuleId.POSITIONING, facts=facts, outputs=(name,)),
                  FakeModel(lambda r, d: r["outputs"][0].update(kind=kind)))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
 @pytest.mark.parametrize("parent_kind,parent_output,allowed", [
@@ -424,20 +428,31 @@ def test_positioning_missing_seed_rejects_unmarked_reasoning(seed, name, kind):
     ("INFERENCE", "JTBD_frame", False), ("OBSERVATION", "target", False),
 ])
 def test_positioning_missing_seed_requires_matching_factual_parent(parent_kind, parent_output, allowed):
+    from app.module_execution.executors.schemas import OutputStatement
     parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)),
                       FakeModel(lambda r, d: r["outputs"][0].update(kind=parent_kind)))
     facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != "customer_job_or_need")
     req = request(ModuleId.POSITIONING, facts=facts, outputs=("JTBD_frame",),
                   identity="child.positioning", upstream=(UpstreamExecutionResult(producer_node_id="parent", result=parent),))
-    model = FakeModel(lambda r, d: r["outputs"][0].update(kind="OBSERVATION"), use_parents=True)
+    evidence = first_party_evidence(req, scoped_facts(req))
+    parent_claim = parent.normalized_result.claims[0]
+    statement = OutputStatement(output_name="JTBD_frame", text="Synthetic parent-supported reasoning",
+        kind="OBSERVATION", confidence="MEDIUM", evidence_ids=[evidence[0].record.evidence_id],
+        parent_claim_ids=[parent_claim.claim_id])
+    executor = PositioningExecutor(model_call=None)
+    # The semantic exception is retained as defense in depth, but generation
+    # always requires HYPOTHESIS when the actual seed is absent.
     if allowed:
-        result = dispatch(req, model)
-        claim = result.normalized_result.claims[0]
-        assert claim.parent_claim_ids == (parent.normalized_result.claims[0].claim_id,)
-        assert any("customer_job_or_need" in l.description for l in result.normalized_result.limitations)
+        executor.validate_statement(statement, {e.record.evidence_id: e for e in evidence},
+                                    {parent_claim.claim_id: parent_claim})
     else:
-        with pytest.raises(ExecutorOutputError):
-            dispatch(req, model)
+        with pytest.raises(StatementSemanticsError) as caught:
+            executor.validate_statement(statement, {e.record.evidence_id: e for e in evidence},
+                                        {parent_claim.claim_id: parent_claim})
+        assert caught.value.rule is SemanticRule.MISSING_SEED_REQUIRES_HYPOTHESIS
+    with pytest.raises(ExecutorOutputError) as caught:
+        dispatch(req, FakeModel(lambda r, d: r["outputs"][0].update(kind="OBSERVATION"), use_parents=True))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
 def test_competitor_observation_cannot_use_first_party_evidence_only():

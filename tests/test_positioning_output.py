@@ -14,7 +14,7 @@ from app.marketing_copilot.provider_adapters import application_model_call
 from app.module_execution import ModuleExecutionRequest
 from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors import PositioningExecutor, ExecutorOutputError
-from app.module_execution.executors.common import OutputFailureStage
+from app.module_execution.executors.common import OutputFailureStage, SemanticRule, StatementSemanticsError
 from app.module_execution.executors.schemas import OutputStatement, PositioningOutput
 from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime.model_adapter import production_model_call
@@ -52,8 +52,9 @@ def test_minimal_live_failure_class_is_structurally_excluded():
     # validate_statement rejected it. Synthetic text/support, never a live dump.
     statement = OutputStatement(output_name="USP_directions", text="Test direction",
         kind="RECOMMENDATION", confidence="MEDIUM", evidence_ids=["evd_test"], parent_claim_ids=[])
-    with pytest.raises(ValueError, match="Differentiation requires hypothesis"):
+    with pytest.raises(StatementSemanticsError) as caught:
         PositioningExecutor(model_call=None).validate_statement(statement, {}, {})
+    assert caught.value.rule is SemanticRule.DIFFERENTIATION_REQUIRES_HYPOTHESIS
     schema = PositioningOutput.model_json_schema()
     for name in ("differentiation", "points_of_difference", "USP_directions"):
         assert allowed_kinds(schema, name) == {"HYPOTHESIS"}
@@ -124,6 +125,12 @@ def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):
     service.fail.assert_not_awaited()
     service.finish.assert_awaited_once()
     _, result, quality = service.finish.call_args.args
+    data = json.loads(provider.calls[0]["input"][1]["content"])
+    assert not {"customer_job_or_need", "relevant_alternative"} & {e["input_key"] for e in data["local_evidence"]}
+    schema = provider.calls[0]["text"]["format"]["schema"]
+    for name in ("JTBD_frame", "demand_context", "category", "frame_of_reference", "points_of_parity"):
+        assert allowed_kinds(schema, name) == {"HYPOTHESIS"}
+        assert next(s for s in result.payload["outputs"] if s["output_name"] == name)["kind"] == "HYPOTHESIS"
     assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
     assert GraphExecutionService._ready(plan, cmo, {}, {node.node_id: result})
     assert len(provider.calls) == 1

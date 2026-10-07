@@ -54,6 +54,29 @@ class PositioningHypothesisStatement(OutputStatement):
     kind: Literal["HYPOTHESIS"]
 
 
+class PositioningCoreStatement(OutputStatement):
+    output_name: Literal[
+        "target", "value_proposition", "RTB", "positioning_statement", "offer",
+        "message_hierarchy", "claim_risks", "validation_plan.",
+    ]
+
+
+class PositioningJobStatement(OutputStatement):
+    output_name: Literal["JTBD_frame", "demand_context"]
+
+
+class PositioningJobHypothesisStatement(PositioningJobStatement):
+    kind: Literal["HYPOTHESIS"]
+
+
+class PositioningAlternativeStatement(OutputStatement):
+    output_name: Literal["category", "frame_of_reference", "points_of_parity"]
+
+
+class PositioningAlternativeHypothesisStatement(PositioningAlternativeStatement):
+    kind: Literal["HYPOTHESIS"]
+
+
 class CreatorStatement(OutputStatement):
     output_name: Literal[
         "creative_strategy", "distinct_angles", "concepts", "hooks", "scripts", "banner_copy",
@@ -72,6 +95,21 @@ class CompetitorOutput(OutputBase):
 
 class PositioningOutput(OutputBase):
     outputs: list[PositioningStatement | PositioningHypothesisStatement] = Field(min_length=1, max_length=32)
+
+
+class PositioningWithoutJobOutput(OutputBase):
+    outputs: list[PositioningCoreStatement | PositioningJobHypothesisStatement
+                  | PositioningAlternativeStatement | PositioningHypothesisStatement] = Field(min_length=1, max_length=32)
+
+
+class PositioningWithoutAlternativeOutput(OutputBase):
+    outputs: list[PositioningCoreStatement | PositioningJobStatement
+                  | PositioningAlternativeHypothesisStatement | PositioningHypothesisStatement] = Field(min_length=1, max_length=32)
+
+
+class PositioningWithoutSeedsOutput(OutputBase):
+    outputs: list[PositioningCoreStatement | PositioningJobHypothesisStatement
+                  | PositioningAlternativeHypothesisStatement | PositioningHypothesisStatement] = Field(min_length=1, max_length=32)
 
 
 class TextPost(StrictOutput):
