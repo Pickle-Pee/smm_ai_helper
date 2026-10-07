@@ -58,12 +58,6 @@ class PositioningProvider:
                 continue
             permitted = allowed_kinds(schema, name)
             kind = proposed_kind if proposed_kind in permitted else "HYPOTHESIS"
-            missing_seed = (
-                name in {"JTBD_frame", "demand_context"} and "customer_job_or_need" not in evidence
-                or name in {"category", "frame_of_reference", "points_of_parity"} and "relevant_alternative" not in evidence
-            )
-            if missing_seed:
-                kind = "HYPOTHESIS"
             assert kind in permitted
             support_key = input_key if input_key in evidence else "product_truth"
             outputs.append(dict(output_name=name, kind=kind, confidence="MEDIUM",
