@@ -2,19 +2,108 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from enum import Enum
 from typing import Any, Dict, List, Tuple
 
 import httpx
 
 from app.config import settings, TOKEN_BUDGETS, MAX_OUTPUT_TOKENS_CAP
+from app.model_generation_policy import ModuleOutputBudget, module_output_tokens
 
 log = logging.getLogger(__name__)
 
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
+class ModelResponseFailureReason(str, Enum):
+    INCOMPLETE_MAX_OUTPUT_TOKENS = "incomplete_max_output_tokens"
+    INCOMPLETE_CONTENT_FILTER = "incomplete_content_filter"
+    INCOMPLETE_OTHER = "incomplete_other"
+    REFUSAL = "refusal"
+    INVALID_ENVELOPE = "invalid_envelope"
+
+
 class ModelResponseError(ValueError):
-    """Expected invalid/refused/incomplete provider envelope, with safe text."""
+    """Rejected provider envelope carrying only a bounded internal reason."""
+
+    def __init__(self, reason: ModelResponseFailureReason):
+        if not isinstance(reason, ModelResponseFailureReason):
+            raise TypeError("ModelResponseError requires a ModelResponseFailureReason")
+        self.reason = reason
+        super().__init__(reason.value)
+
+
+def _single_attempt_output(data: Any) -> str:
+    if not isinstance(data, dict):
+        raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+    if data.get("status") == "incomplete":
+        details = data.get("incomplete_details")
+        reason = details.get("reason") if isinstance(details, dict) else None
+        if reason == "max_output_tokens":
+            failure = ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS
+        elif reason == "content_filter":
+            failure = ModelResponseFailureReason.INCOMPLETE_CONTENT_FILTER
+        else:
+            failure = ModelResponseFailureReason.INCOMPLETE_OTHER
+        raise ModelResponseError(failure)
+    if data.get("status") not in (None, "completed"):
+        raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+
+    output = data.get("output", [])
+    if not isinstance(output, list):
+        raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+    texts: list[str] = []
+    for item in output:
+        if not isinstance(item, dict):
+            raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+        if item.get("type") != "message":
+            continue
+        blocks = item.get("content", [])
+        if not isinstance(blocks, list):
+            raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+        for block in blocks:
+            if not isinstance(block, dict):
+                raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+            # Inspect refusal before accepting the convenience output_text field.
+            if block.get("type") == "refusal":
+                raise ModelResponseError(ModelResponseFailureReason.REFUSAL)
+            if item.get("role") == "assistant" and block.get("type") == "output_text":
+                text = block.get("text")
+                if not isinstance(text, str):
+                    raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+                texts.append(text)
+    top = data.get("output_text")
+    if top is not None and not isinstance(top, str):
+        raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+    content = top.strip() if isinstance(top, str) and top.strip() else "\n".join(texts).strip()
+    if not content:
+        raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
+    return content
+
+
+def _log_response_rejection(
+    reason: ModelResponseFailureReason, model: str, budget: int, data: Any
+) -> None:
+    fields: dict[str, Any] = {
+        "reason": reason.value,
+        "model": model,
+        "max_output_tokens": budget,
+    }
+    usage = data.get("usage") if isinstance(data, dict) else None
+    if isinstance(usage, dict):
+        output_tokens = usage.get("output_tokens")
+        if type(output_tokens) is int and 0 <= output_tokens <= budget:
+            fields["output_tokens"] = output_tokens
+        details = usage.get("output_tokens_details")
+        reasoning_tokens = details.get("reasoning_tokens") if isinstance(details, dict) else None
+        reasoning_cap = fields.get("output_tokens", budget)
+        if type(reasoning_tokens) is int and 0 <= reasoning_tokens <= reasoning_cap:
+            fields["reasoning_tokens"] = reasoning_tokens
+    log.warning(
+        "Structured model response rejected " + " ".join(f"{key}=%s" for key in fields),
+        *fields.values(),
+        extra=fields,
+    )
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:
@@ -45,8 +134,7 @@ def _extract_output_text(data: Dict[str, Any]) -> str:
                 if t:
                     texts.append(t)
             elif btype == "refusal":
-                refusal = block.get("refusal") or "Model refused to answer"
-                raise ValueError(refusal)
+                raise ModelResponseError(ModelResponseFailureReason.REFUSAL)
 
     return "\n".join(texts).strip()
 
@@ -83,6 +171,7 @@ async def chat(
     task: str | None = None,
     *,
     single_attempt: bool = False,
+    output_budget: ModuleOutputBudget | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Responses API:
@@ -114,6 +203,14 @@ async def chat(
     else:
         payload["max_output_tokens"] = _clamp_budget(max(int(max_output_tokens), int(min_budget)))
 
+    if output_budget is not None:
+        # Only the strict single-call module capability may select a larger
+        # closed profile. Arbitrary max_output_tokens still uses the generic cap.
+        if (not single_attempt or response_format is None
+                or response_format.get("type") != "json_schema" or response_format.get("strict") is False):
+            raise ValueError("Module output budget requires a strict single attempt")
+        payload["max_output_tokens"] = module_output_tokens(output_budget)
+
     if response_format is not None:
         fmt = dict(response_format)
 
@@ -137,18 +234,16 @@ async def chat(
                 if single_attempt:
                     # Never log provider bodies or silently drop the response schema.
                     resp.raise_for_status()
+                    data = None
                     try:
-                        data = resp.json()
-                    except ValueError as exc:
-                        raise ModelResponseError("Invalid model response envelope") from exc
-                    if not isinstance(data, dict):
-                        raise ModelResponseError("Invalid model response envelope")
-                    if data.get("status") == "incomplete":
-                        raise ModelResponseError("Incomplete structured model response")
-                    try:
-                        content = _extract_output_text(data)
-                    except (ValueError, AttributeError, TypeError) as exc:
-                        raise ModelResponseError("Invalid or refused model response") from exc
+                        try:
+                            data = resp.json()
+                        except ValueError:
+                            raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE) from None
+                        content = _single_attempt_output(data)
+                    except ModelResponseError as exc:
+                        _log_response_rejection(exc.reason, model, payload["max_output_tokens"], data)
+                        raise exc from None
                     return content, data.get("usage", {}) or {}
 
                 if resp.status_code >= 400:

@@ -78,6 +78,7 @@ def test_positioning_production_wire_persists_artifact_and_schedules_cmo(mvp_dat
             assert len(quality["accepted_result_ids"]) == 1
             assert len(quality["accepted_claim_ids"]) == 16
             assert len(provider.calls) == 1
+            assert provider.calls[0]["max_output_tokens"] == 16000
             data = json.loads(provider.calls[0]["input"][1]["content"])
             assert not {"customer_job_or_need", "relevant_alternative"} & {e["input_key"] for e in data["local_evidence"]}
             schema = provider.calls[0]["text"]["format"]["schema"]

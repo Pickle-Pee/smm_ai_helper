@@ -4,6 +4,7 @@ import logging
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
+from app.llm.openai_text import ModelResponseError, ModelResponseFailureReason
 
 from app.module_execution import ModuleExecutorDispatcher
 from app.module_execution.acceptance import fully_accepted
@@ -15,6 +16,16 @@ from .service import evaluate_result
 
 log = logging.getLogger(__name__)
 
+# No reason here changes the execution condition of the next attempt. In
+# particular, repeating a token-exhausted request with the same budget is unsafe.
+_MODEL_RESPONSE_RETRYABLE = {
+    ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS: False,
+    ModelResponseFailureReason.INCOMPLETE_CONTENT_FILTER: False,
+    ModelResponseFailureReason.INCOMPLETE_OTHER: False,
+    ModelResponseFailureReason.REFUSAL: False,
+    ModelResponseFailureReason.INVALID_ENVELOPE: False,
+}
+
 
 def transient(exc):
     # Project transports may wrap exhausted transient errors in RuntimeError.
@@ -22,6 +33,8 @@ def transient(exc):
     seen = set()
     while exc is not None and id(exc) not in seen:
         seen.add(id(exc))
+        if isinstance(exc, ModelResponseError):
+            return _MODEL_RESPONSE_RETRYABLE.get(exc.reason, False)
         if isinstance(exc, (ExecutorOutputError, ModuleExecutionContractError, RuntimeContractError)):
             return False
         if isinstance(exc, (TimeoutError, httpx.TransportError)):

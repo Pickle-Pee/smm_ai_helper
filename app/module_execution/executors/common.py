@@ -8,6 +8,7 @@ import logging
 from typing import Any, Protocol
 
 from pydantic import ValidationError
+from app.model_generation_policy import ModuleOutputBudget
 
 from app.marketing_orchestrator.contracts import AuthorizedContextFact
 from app.marketing_orchestrator.quality_gates.contracts import (
@@ -66,7 +67,8 @@ class StatementSemanticsError(ExecutorOutputError):
 
 class ModuleModelCall(Protocol):
     """Caller-owned single attempt; must enforce the supplied strict JSON schema."""
-    async def __call__(self, *, instruction: str, text: str, response_schema: dict[str, Any]) -> str: ...
+    async def __call__(self, *, instruction: str, text: str, response_schema: dict[str, Any],
+                       output_budget: ModuleOutputBudget = ModuleOutputBudget.GENERIC) -> str: ...
 
 
 def plain(value):
@@ -210,6 +212,9 @@ class BaseExecutor:
     def output_type_for(self, request, evidence) -> type[OutputBase]:
         return self.output_type
 
+    def output_budget_for(self, request) -> ModuleOutputBudget:
+        return ModuleOutputBudget.GENERIC
+
     async def generate(self, request, evidence):
         output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
@@ -248,7 +253,8 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
         }
         raw = await self._model_call(instruction=instructions.rendered_text,
                                      text=json.dumps(data, ensure_ascii=False),
-                                     response_schema=output_type.model_json_schema())
+                                     response_schema=output_type.model_json_schema(),
+                                     output_budget=self.output_budget_for(request))
         # Provider exceptions occur above this boundary and propagate unchanged.
         stage = OutputFailureStage.JSON_INVALID
         try:

@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings, settings
+from app.llm.openai_text import ModelResponseError, ModelResponseFailureReason
 from app.module_execution import ModuleExecutorRegistry
 from app.module_execution.errors import ModuleCompatibilityError
 from app.module_execution.executors import ExecutorOutputError
@@ -111,6 +112,24 @@ def test_transient_cause_chain_and_cycles(error, retryable):
 def test_explicit_contract_failure_is_terminal_even_with_transient_cause(error):
     error.__cause__ = TimeoutError()
     assert not transient(error)
+
+
+@pytest.mark.parametrize("reason", list(ModelResponseFailureReason))
+def test_model_response_reason_is_terminal_even_with_transient_cause(reason):
+    error = ModelResponseError(reason)
+    error.__cause__ = httpx.ReadTimeout("private provider text")
+    wrapper = RuntimeError()
+    wrapper.__cause__ = error
+    assert not transient(error) and not transient(wrapper)
+    item = SimpleNamespace(run_id="run.test", job_id="job.test")
+    service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
+        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), object())),
+        fail=AsyncMock(), finish=AsyncMock())
+    worker = ModuleGraphWorker(service)
+    worker.dispatcher.dispatch = AsyncMock(side_effect=error)
+    assert asyncio.run(worker.once())
+    service.fail.assert_awaited_once_with(item, code="execution_invalid", retryable=False)
+    service.finish.assert_not_awaited()
 
 
 @pytest.mark.parametrize("stage", list(OutputFailureStage))

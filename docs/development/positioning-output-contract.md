@@ -55,7 +55,9 @@ validation tracebacks are suppressed because they can contain model text. No raw
 response, prompt, context value, evidence payload or API key is logged.
 
 Provider exceptions propagate unchanged. Executor errors remain non-transient.
-The single attempt and bounded 4000-token adapter budget are unchanged. Quality
+The single-attempt invariant is unchanged. The subsequent
+[structured-response fix](structured-model-responses.md) selects a bounded
+16000-token profile for the full 16-output response. Quality
 Gates, full-claim acceptance, confidence caps, lineage, graph transactions and
 public HTTP error mapping are unchanged. Issue #78 remains separate.
 
