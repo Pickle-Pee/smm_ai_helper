@@ -203,6 +203,8 @@ def test_semantic_rule_codes_are_bounded_server_constants():
     assert {rule.value for rule in SemanticRule} == {
         "missing_seed_requires_hypothesis", "differentiation_requires_hypothesis",
         "product_claim_requires_truth",
+        "strategy_kind_invalid", "strategy_parent_required",
+        "main_growth_constraint_invalid", "numerical_support_required",
     }
     with pytest.raises(TypeError):
         StatementSemanticsError("PRIVATE_ARBITRARY_RULE")

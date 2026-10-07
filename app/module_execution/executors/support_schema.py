@@ -1,4 +1,6 @@
 """Request-owned provenance constraints shared by every statement wire type."""
+from enum import Enum
+
 from jsonschema import Draft202012Validator
 
 from app.module_execution.errors import ModuleExecutionContractError
@@ -12,9 +14,19 @@ MAX_SCHEMA_STRING_CHARACTERS = 120000
 SUPPORT_FIELDS = {"evidence_ids": "AllowedEvidenceId", "parent_claim_ids": "AllowedParentClaimId"}
 
 
-def support_response_schema(output_type, evidence_ids, parent_ids):
+class SupportRequirement(str, Enum):
+    ANY = "any"
+    PARENT_REQUIRED = "parent_required"
+
+
+def support_response_schema(output_type, evidence_ids, parent_ids, *,
+                            requirement: SupportRequirement = SupportRequirement.ANY):
     """Build/check one exact schema; never truncate or derive IDs from content."""
     allowed = {"evidence_ids": list(evidence_ids), "parent_claim_ids": list(parent_ids)}
+    if type(requirement) is not SupportRequirement:
+        raise ModuleExecutionContractError("Expected server support requirement")
+    if requirement is SupportRequirement.PARENT_REQUIRED and not allowed["parent_claim_ids"]:
+        raise ModuleExecutionContractError("Parent support requirement needs accepted parents")
     if not any(allowed.values()):
         raise ModuleExecutionContractError("Module generation requires available support")
     for identities in allowed.values():
@@ -34,6 +46,8 @@ def support_response_schema(output_type, evidence_ids, parent_ids):
         elif isinstance(node, dict):
             properties = node.get("properties", {})
             if all(field in properties for field in SUPPORT_FIELDS):
+                if requirement is SupportRequirement.PARENT_REQUIRED:
+                    properties["parent_claim_ids"]["minItems"] = 1
                 # OutputStatement owns this complete-object support OR. Remove
                 # branches whose support floor refers to an unavailable family.
                 if "anyOf" in node:

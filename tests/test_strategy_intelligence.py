@@ -49,7 +49,7 @@ class IntelligenceModel(FakeModel):
         # The inherited fake invokes mutate too early for structured additions.
         for statement in raw["outputs"]:
             statement["text"] = "Validate the supplied scheduling hypothesis"
-            if "StrategyStatement" in kwargs["response_schema"].get("$defs", {}):
+            if "MainGrowthConstraintStatement" in kwargs["response_schema"].get("$defs", {}):
                 statement["items"] = ["Prioritize validation of the supplied scheduling constraint"]
         if "experiments" in kwargs["response_schema"]["properties"]:
             raw["experiments"] = [{

@@ -58,8 +58,10 @@ def test_every_emitted_statement_schema_and_parser_agree(emitted_contract, local
         validator = Draft202012Validator({"$defs": schema["$defs"], "$ref": f"#/$defs/{name}"})
         available_local = "AllowedEvidenceId" in schema["$defs"]
         available_parent = "AllowedParentClaimId" in schema["$defs"]
+        parent_required = properties["parent_claim_ids"].get("minItems", 0) > 0
         assert validator.is_valid(payload) is ((local or parent) and (not local or available_local)
-                                                and (not parent or available_parent))
+                                                and (not parent or available_parent)
+                                                and (not parent_required or parent))
         if local or parent:
             assert statement_type.model_validate_json(json.dumps(payload)).model_dump() == payload
         else:
@@ -124,5 +126,5 @@ def test_parent_only_intelligence_remains_valid_but_missing_lineage_fails(module
         req = replace(req, context_packet=replace(req.context_packet, known_facts=(fact("business_goal"),)))
     with pytest.raises(ExecutorOutputError) as caught:
         run(req, omit_parent)
-    assert caught.value.stage is (OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert caught.value.stage is (OutputFailureStage.SCHEMA_INVALID
         if module is ModuleId.VIRTUAL_CMO else OutputFailureStage.RESULT_CONTRACT_INVALID)

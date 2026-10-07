@@ -5,7 +5,11 @@ import json
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
 from app.module_registry import ModuleId
 
-from .common import blocked, facts_for, first_party_evidence, scoped_facts
+from .common import (
+    SemanticRule, StatementSemanticsError, blocked, facts_for,
+    first_party_evidence, parent_claims, scoped_facts,
+)
+from .support_schema import SupportRequirement
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers, supported_text
 from .intelligence_schemas import StrategyOutput
 
@@ -29,6 +33,10 @@ license to invent budgets or unit economics. No new market/economic facts.
 Only HYPOTHESIS or RECOMMENDATION kinds. Numerical statements must quote supplied
 support verbatim. Qualitative resource prioritization is allowed without economics."""
     limitation = "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims."
+
+    def support_requirement_for(self, request) -> SupportRequirement:
+        return (SupportRequirement.PARENT_REQUIRED if parent_claims(request)
+                else SupportRequirement.ANY)
 
     async def execute(self, request):
         early = self.prepare(request)
@@ -56,11 +64,11 @@ support verbatim. Qualitative resource prioritization is allowed without economi
     def validate_statement(self, statement, local, parents):
         super().validate_statement(statement, local, parents)
         if statement.kind not in ("HYPOTHESIS", "RECOMMENDATION"):
-            raise ValueError("Synthesis must not introduce new factual claims")
+            raise StatementSemanticsError(SemanticRule.STRATEGY_KIND_INVALID)
         if parents and not statement.parent_claim_ids:
-            raise ValueError("Strategic synthesis with predecessors must cite parent claims")
+            raise StatementSemanticsError(SemanticRule.STRATEGY_PARENT_REQUIRED)
         if statement.output_name == "main_growth_constraint" and (
                 len(statement.items) != 1 or statement.kind != "HYPOTHESIS"):
-            raise ValueError("Exactly one main growth constraint hypothesis required")
+            raise StatementSemanticsError(SemanticRule.MAIN_GROWTH_CONSTRAINT_INVALID)
         for item in statement.items:
             require_supported_numbers(item, supported_text(statement, local, parents))

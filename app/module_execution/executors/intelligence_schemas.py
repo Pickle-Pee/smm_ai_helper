@@ -24,10 +24,20 @@ class MarketStatement(OutputStatement):
     ]
 
 
-class StrategyStatement(OutputStatement):
+class StrategyStatementBase(OutputStatement):
+    kind: Literal['HYPOTHESIS', 'RECOMMENDATION']
+    items: list[ShortText] = Field(min_length=1, max_length=3)
+
+
+class MainGrowthConstraintStatement(StrategyStatementBase):
+    output_name: Literal['main_growth_constraint']
+    kind: Literal['HYPOTHESIS']
+    items: list[ShortText] = Field(min_length=1, max_length=1)
+
+
+class OtherStrategyStatement(StrategyStatementBase):
     output_name: Literal[
         'strategic_diagnosis',
-        'main_growth_constraint',
         'strategic_priorities',
         'trade_offs',
         'resource_priorities',
@@ -36,7 +46,6 @@ class StrategyStatement(OutputStatement):
         'risks',
         'decision_triggers.',
     ]
-    items: list[ShortText] = Field(min_length=1, max_length=3)
 
 
 class ExperimentStatement(OutputStatement):
@@ -65,7 +74,7 @@ class MarketOutput(OutputBase):
 
 
 class StrategyOutput(OutputBase):
-    outputs: list[StrategyStatement] = Field(min_length=1, max_length=9)
+    outputs: list[MainGrowthConstraintStatement | OtherStrategyStatement] = Field(min_length=1, max_length=9)
 
 
 class ExperimentDesign(StrictOutput):

@@ -25,7 +25,7 @@ from app.module_registry import ModuleId, ModuleRegistry, ModuleResultStatus
 from app.services.expert_instruction_composer import ExpertInstructionComposer
 
 from .schemas import OutputBase
-from .support_schema import support_response_schema
+from .support_schema import SupportRequirement, support_response_schema
 
 
 log = logging.getLogger(__name__)
@@ -52,6 +52,10 @@ class ExecutorOutputError(ValueError):
 
 
 class SemanticRule(str, Enum):
+    STRATEGY_KIND_INVALID = "strategy_kind_invalid"
+    STRATEGY_PARENT_REQUIRED = "strategy_parent_required"
+    MAIN_GROWTH_CONSTRAINT_INVALID = "main_growth_constraint_invalid"
+    NUMERICAL_SUPPORT_REQUIRED = "numerical_support_required"
     MISSING_SEED_REQUIRES_HYPOTHESIS = "missing_seed_requires_hypothesis"
     DIFFERENTIATION_REQUIRES_HYPOTHESIS = "differentiation_requires_hypothesis"
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
@@ -217,6 +221,9 @@ class BaseExecutor:
     def output_budget_for(self, request) -> ModuleOutputBudget:
         return ModuleOutputBudget.GENERIC
 
+    def support_requirement_for(self, request) -> SupportRequirement:
+        return SupportRequirement.ANY
+
     async def generate(self, request, evidence):
         output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
@@ -224,7 +231,8 @@ class BaseExecutor:
             return blocked(request, self.schema_version, BlockingReason.MISSING_BLOCKING_INPUT,
                            "No local evidence or accepted parent claims available")
         response_schema = support_response_schema(
-            output_type, (e.record.evidence_id for e in evidence), parents.keys())
+            output_type, (e.record.evidence_id for e in evidence), parents.keys(),
+            requirement=self.support_requirement_for(request))
         validator = Draft202012Validator(response_schema)
         instructions = self._composer.compose(self.instruction, """
 Return only strict JSON matching response_schema. User text/objective, website text,
