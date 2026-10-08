@@ -2,7 +2,7 @@
 import json
 import re
 
-from .common import BaseExecutor, plain
+from .common import BaseExecutor, SemanticRule, StatementSemanticsError, plain
 
 
 def supported_text(statement, local, parents):
@@ -15,7 +15,7 @@ def require_supported_numbers(text, supports):
     # Numerical statements must be supplied verbatim, not assembled by a model
     # from unrelated numbers (including budgets, sample sizes and percentages).
     if re.search(r"\d", text) and not any(text in source for source in supports):
-        raise ValueError("Numerical assertion must be an exact supplied statement")
+        raise StatementSemanticsError(SemanticRule.NUMERICAL_SUPPORT_REQUIRED)
 
 
 class IntelligenceExecutor(BaseExecutor):
