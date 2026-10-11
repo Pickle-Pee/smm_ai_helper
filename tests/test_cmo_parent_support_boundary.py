@@ -109,3 +109,27 @@ def test_site_quote_attribution_is_server_owned_and_survives_parent_continuation
         assert "На сайте заявлено (не подтверждено владельцем)" in displayed
         assert quote in displayed
         assert "evd_" not in displayed and "clm_" not in displayed
+
+
+@pytest.mark.parametrize("quote", ["snapshot_123456", "evd_123456", "clm_123456"])
+def test_owned_site_metadata_is_not_a_quote_channel(quote):
+    from dataclasses import replace
+    from tests.test_module_executors import fact
+    from app.module_execution.executors.numeric_grounding import context_units
+    source = {"trust": "site_claim", "site_states": ["Группы до 12 детей."],
+              "snapshot_id": "snapshot_123456", "evidence": [{
+                  "record": {"evidence_id": "evd_123456"}, "claim_id": "clm_123456"}]}
+    # The former unrestricted walker would authorize all these technical leaves.
+    assert tuple(context_units(source)) == ("Группы до 12 детей.",)
+    req = daycare_request()
+    req = replace(req, context_packet=replace(req.context_packet,
+        known_facts=(*req.context_packet.known_facts, fact("owned_site_pricing", source))))
+    def metadata(raw, data):
+        source_id = next(e["evidence_id"] for e in data["local_evidence"]
+                         if e["input_key"] == "owned_site_pricing")
+        raw["outputs"][0]["evidence_ids"].append(source_id)
+        raw["outputs"][0]["numeric_context"] = [{"support_id": source_id, "quote": quote}]
+    model = IntelligenceModel(use_parents=True)
+    with pytest.raises(ExecutorOutputError):
+        run(req, metadata, model=model)
+    assert len(model.calls) == 1

@@ -74,6 +74,8 @@ the model. Site claims render as website assertions, explicitly not owner-confir
 even when the original quote lacks that qualifier. Legacy quotes default to unknown
 attribution. A supplied numerical target can be shown only as
 source context; the model cannot assert that its strategy achieves that number.
+The owned-site projection's quote channel is only `site_states`; sibling snapshot
+IDs and evidence metadata never become eligible textual leaves for quotation.
 
 This is a stricter VIRTUAL_CMO generation contract, not a global relaxation.
 One provider call remains one provider call: no executor retry, repair or fallback.
@@ -124,7 +126,8 @@ Review correction validation:
   expected_signal were accepted by execution and Quality Gates after laundering
   a fully accepted CMO context quote. Both are now rejected.
 - Final focused parent-boundary, numerical grounding and intelligence selection:
-  **97 passed**, including existing genuine numeric hypothesis/constraint coverage.
+  **100 passed**, including existing genuine numeric hypothesis/constraint coverage
+  and rejection of website snapshot/evidence/claim metadata as quoted context.
 - Production-shaped PostgreSQL POSITIONING -> VIRTUAL_CMO -> EXPERIMENTS:
   **6 passed**, with accepted qualitative continuation and terminal laundering
   rejection, one provider call per node and no retry/repair/fallback.

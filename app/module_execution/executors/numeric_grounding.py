@@ -18,6 +18,11 @@ def context_units(value):
                 and re.search(r"[^\W\d_]", value) and value == value.strip()):
             yield value
     elif isinstance(value, Mapping):
+        if value.get("trust") == "site_claim":
+            # The owned-site projection carries IDs/evidence metadata alongside
+            # its assertion text. Only site_states is a quotation channel.
+            yield from context_units(value.get("site_states", ()))
+            return
         for child in value.values():
             yield from context_units(child)
     elif isinstance(value, (list, tuple)):
