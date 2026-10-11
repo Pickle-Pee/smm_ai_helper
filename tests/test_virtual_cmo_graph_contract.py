@@ -62,7 +62,7 @@ def assert_cmo_schema(call, accepted_parent_ids):
     data = json.loads(call["input"][1]["content"])
     schema = call["text"]["format"]["schema"]
     assert call["text"]["format"]["strict"] is True
-    assert call["max_output_tokens"] == 4000
+    assert call["max_output_tokens"] == 16000
     assert {u["producer_node_id"] for u in data["upstream_results"]} == {"positioning"}
     assert set(data["allowed_parent_claim_ids"]) == accepted_parent_ids
     assert len(accepted_parent_ids) == 16

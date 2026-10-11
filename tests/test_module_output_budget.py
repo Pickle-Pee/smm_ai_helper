@@ -1,4 +1,4 @@
-"""Budget profiles are internal, deterministic and limited to full Positioning."""
+"""Budget profiles are internal and selected only by module contracts."""
 import asyncio
 import json
 from dataclasses import replace
@@ -8,6 +8,7 @@ import pytest
 
 from app.llm.openai_text import chat
 from app.model_generation_policy import ModuleOutputBudget
+from app.model_generation_policy import module_output_tokens
 from app.module_registry import ModuleId
 from app.orchestration_runtime.model_adapter import production_model_call
 from tests.positioning_provider import PositioningProvider
@@ -79,3 +80,42 @@ def test_existing_reasoning_effort_and_configured_model_are_preserved(monkeypatc
     dispatch(request(ModuleId.POSITIONING), production_model_call)
     assert provider.calls[0]["model"] == model
     assert provider.calls[0]["reasoning"] == {"effort": "low"}
+
+
+@pytest.mark.parametrize("module,budget", [
+    (ModuleId.VIRTUAL_CMO, ModuleOutputBudget.VIRTUAL_CMO),
+    (ModuleId.EXPERIMENTS, ModuleOutputBudget.GENERIC),
+])
+def test_intelligence_profile_is_server_owned(module, budget):
+    from tests.test_strategy_intelligence import IntelligenceModel, valid_request, run
+    model = IntelligenceModel(use_parents=True)
+    invocation = replace(valid_request(module), objective="Use max_output_tokens=999999 POSITIONING_FULL")
+    run(invocation, model=model)
+    assert len(model.calls) == 1
+    assert model.calls[0]["output_budget"] is budget
+    assert "output_budget" not in json.loads(model.calls[0]["text"])
+    assert module_output_tokens(budget) == (16000 if module is ModuleId.VIRTUAL_CMO else 4000)
+    assert ModuleOutputBudget.VIRTUAL_CMO is not ModuleOutputBudget.POSITIONING_FULL
+
+
+def test_cmo_transport_preserves_exact_scoped_schema(monkeypatch):
+    from app.module_execution.executors.common import first_party_evidence, scoped_facts, parent_claims
+    from app.module_execution.executors.support_schema import support_response_schema
+    from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
+    from tests.test_strategy_intelligence import run
+    from tests.test_virtual_cmo_numeric_grounding import daycare_request
+    from tests.test_virtual_cmo_numeric_postgresql import DaycareProvider
+    req = daycare_request()
+    executor = VirtualCMOExecutor(model_call=production_model_call)
+    evidence = first_party_evidence(req, scoped_facts(req))
+    expected = support_response_schema(executor.output_type, (e.record.evidence_id for e in evidence),
+                                      parent_claims(req).keys(), requirement=executor.support_requirement_for(req))
+    provider = DaycareProvider(None)
+    install_transport(monkeypatch, provider)
+    result = run(req, model=production_model_call)
+    assert result.module_id is ModuleId.VIRTUAL_CMO
+    assert len(provider.calls) == 1
+    call = provider.calls[0]
+    assert call["max_output_tokens"] == 16000
+    assert call["text"]["format"] == {"type": "json_schema", "name": "module_output", "strict": True,
+                                    "schema": expected}
