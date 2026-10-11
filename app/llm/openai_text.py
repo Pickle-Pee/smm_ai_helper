@@ -99,11 +99,54 @@ def _log_response_rejection(
         reasoning_cap = fields.get("output_tokens", budget)
         if type(reasoning_tokens) is int and 0 <= reasoning_tokens <= reasoning_cap:
             fields["reasoning_tokens"] = reasoning_tokens
+    fields.update(_response_metadata(data, budget))
     log.warning(
         "Structured model response rejected " + " ".join(f"{key}=%s" for key in fields),
         *fields.values(),
         extra=fields,
     )
+
+
+def _response_metadata(data: Any, budget: int) -> dict[str, Any]:
+    """Closed labels and capped item counts only; never serialize provider values."""
+    if not isinstance(data, dict):
+        return {"response_status": "invalid"}
+    status = data.get("status")
+    fields: dict[str, Any] = {
+        "response_status": status if type(status) is str and status in (
+            "completed", "incomplete", "failed", "in_progress", "queued", "cancelled"
+        ) else "unknown",
+        "usage_state": "missing" if "usage" not in data else (
+            "null" if data["usage"] is None else (
+                "present" if isinstance(data["usage"], dict) else "invalid")),
+    }
+    usage = data.get("usage")
+    output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+    reasoning_cap = output_tokens if type(output_tokens) is int and 0 <= output_tokens <= budget else budget
+    for name, container, cap in (
+        ("output_tokens", usage, budget),
+        ("reasoning_tokens", usage.get("output_tokens_details") if isinstance(usage, dict) else None, reasoning_cap),
+    ):
+        fields[name + "_state"] = (
+            "missing" if not isinstance(container, dict) or name not in container else
+            "null" if container[name] is None else
+            "reported" if type(container[name]) is int and 0 <= container[name] <= cap else
+            "invalid"
+        )
+    output = data.get("output")
+    fields["output_items_state"] = "missing" if "output" not in data else (
+        "present" if isinstance(output, list) else "invalid")
+    if isinstance(output, list):
+        # Inspect a bounded prefix, even for a malformed or oversized envelope.
+        fields["output_items_count"] = min(len(output), 32)
+        fields["output_items_truncated"] = len(output) > 32
+        for item_type in ("reasoning", "message"):
+            fields[item_type + "_items"] = sum(
+                isinstance(item, dict) and item.get("type") == item_type for item in output[:32])
+        for item_status in ("completed", "incomplete", "in_progress"):
+            fields[item_status + "_items"] = sum(
+                isinstance(item, dict) and item.get("status") == item_status for item in output[:32])
+    return fields
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:

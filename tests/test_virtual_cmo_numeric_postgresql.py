@@ -12,7 +12,7 @@ from app.marketing_copilot.application_contracts import CopilotRequest
 from app.marketing_copilot.context_resolver import ContextEntry
 from app.marketing_copilot.contracts import IntentKind
 from app.marketing_copilot.factory import build_marketing_copilot_service
-from app.models import JobStatus, User
+from app.models import JobExecution, JobStatus, User
 from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.orchestration_runtime.serialization import result_from_json
 from app.module_execution.executors.common import plain
@@ -39,6 +39,7 @@ class DaycareProvider:
         self.calls.append(body)
         data = json.loads(body["input"][1]["content"])
         if "experiments" in body["text"]["format"]["schema"]["properties"]:
+            assert body["max_output_tokens"] == 4000
             cmo = next(u["result"] for u in data["upstream_results"] if u["result"]["module_id"] == "VIRTUAL_CMO")
             claim = cmo["normalized_result"]["claims"][0]
             assert json.loads(claim["value"])["numeric_context"][1]["quote"] == PRICE
@@ -59,6 +60,12 @@ class DaycareProvider:
         if "main_growth_constraint" not in data["expected_outputs"]:
             return self.positioning(request)
         schema = body["text"]["format"]["schema"]
+        assert body["max_output_tokens"] == 16000
+        if self.failure == "incomplete":
+            return httpx.Response(200, json={"status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "usage": {"output_tokens": 0, "output_tokens_details": {"reasoning_tokens": 0}},
+                "output": []})
         outputs = [dict(output_name=name, kind="HYPOTHESIS", confidence="MEDIUM",
             text="Проверить влияние форматов посещения на спрос.", items=["Сопоставить спрос с расходами без прогноза прибыли."],
             evidence_ids=[data["local_evidence"][0]["evidence_id"]],
@@ -66,6 +73,14 @@ class DaycareProvider:
             for name in data["expected_outputs"]]
         payload = dict(outputs=outputs, assumptions=[], limitations=[])
         grounded_output(payload, data)
+        if self.failure == "large_success":
+            # Nine material outputs with eight parents each, full qualitative
+            # rationale, and repeated exact numeric leaves: larger than 4k tokens.
+            for statement in outputs:
+                statement["text"] = "Проверить влияние форматов посещения на спрос без предположений о рентабельности. " * 12
+                statement["items"] *= 1 if statement["output_name"] == "main_growth_constraint" else 3
+                statement["evidence_ids"] = list(outputs[0]["evidence_ids"])
+                statement["numeric_context"] = list(outputs[0]["numeric_context"])
         if self.failure in ("text", "items"):
             outputs[0][self.failure] = RECOMMENDATION if self.failure == "text" else [RECOMMENDATION]
         elif self.failure == "combination":
@@ -84,10 +99,10 @@ class DaycareProvider:
                 for child in node:
                     strict(child)
         strict(schema)
-        return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
+        return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload, ensure_ascii=False)})
 
 
-@pytest.mark.parametrize("failure", [None, "text", "items", "combination", "experiment_text", "experiment_signal"])
+@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete"])
 def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, failure, caplog):
     provider = DaycareProvider(failure)
     install_transport(monkeypatch, provider)
@@ -114,13 +129,18 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
             run, jobs, artifacts = await state(mvp_database, rid)
             cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
             assert len(provider.calls) == 2  # One provider call for each required node.
-            if failure in ("text", "items", "combination"):
+            if failure in ("text", "items", "combination", "incomplete"):
                 assert run.status == "failed"
                 assert cmo.status is JobStatus.FAILED
                 assert not any(a.step == "virtual_cmo" for a in artifacts)
                 assert not any(j.workflow_step == "experiments" for j in jobs)
-                assert "rule=numerical_support_required field=" + (
-                    "numeric_context" if failure == "combination" else failure) in caplog.text
+                if failure != "incomplete":
+                    assert "rule=numerical_support_required field=" + (
+                        "numeric_context" if failure == "combination" else failure) in caplog.text
+                else:
+                    async with mvp_database() as session:
+                        assert (await session.get(JobExecution, cmo.job_id)).attempts == 1
+                    assert cmo.error == "execution_invalid"
                 assert RECOMMENDATION not in caplog.text
                 # Poll/advance cannot turn a semantic rejection into a retry.
                 assert await service.advance(rid) == ()
@@ -140,7 +160,7 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
                 _, jobs, artifacts = await state(mvp_database, rid)
                 experiment = next(j for j in jobs if j.workflow_step == "experiments")
                 assert len(provider.calls) == 3
-                if failure:
+                if failure in ("experiment_text", "experiment_signal"):
                     assert experiment.status is JobStatus.FAILED
                     assert not any(a.step == "experiments" for a in artifacts)
                     assert await fresh.advance(rid) == ()

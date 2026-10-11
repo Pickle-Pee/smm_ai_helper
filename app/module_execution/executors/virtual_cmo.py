@@ -3,6 +3,7 @@ from dataclasses import replace
 
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
 from app.module_registry import ModuleId
+from app.model_generation_policy import ModuleOutputBudget
 
 from .common import (
     SemanticRule, StatementSemanticsError, blocked, facts_for,
@@ -46,6 +47,9 @@ assertions; goals and parent hypotheses remain goals and hypotheses. Use an empt
 numeric_context when none applies. Qualitative resource prioritization is allowed
 without economics."""
     limitation = "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims."
+
+    def output_budget_for(self, request) -> ModuleOutputBudget:
+        return ModuleOutputBudget.VIRTUAL_CMO
 
     def support_requirement_for(self, request) -> SupportRequirement:
         return (SupportRequirement.PARENT_REQUIRED if parent_claims(request)

@@ -67,7 +67,7 @@ def test_incomplete_response_has_safe_reason_and_usage(monkeypatch, caplog, prov
     assert str(caught.value) == expected.value
     assert len(requests) == 1
     record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
-    assert record.getMessage() == (
+    assert record.getMessage().startswith(
         f"Structured model response rejected reason={expected.value} "
         "model=configured-model max_output_tokens=4000 output_tokens=4000 reasoning_tokens=1800"
     )
@@ -92,12 +92,76 @@ def test_usage_logging_requires_nonnegative_integers(monkeypatch, caplog, usage)
     with pytest.raises(ModelResponseError):
         call()
     record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
-    assert record.getMessage() == (
+    assert record.getMessage().startswith(
         "Structured model response rejected reason=incomplete_other "
         "model=configured-model max_output_tokens=4000"
     )
     assert not hasattr(record, "output_tokens")
     assert not hasattr(record, "reasoning_tokens")
+    assert "PRIVATE" not in caplog.text
+
+
+@pytest.mark.parametrize("usage,output_state,reasoning_state", [
+    ({"output_tokens": 0, "output_tokens_details": {"reasoning_tokens": 0}}, "reported", "reported"),
+    ({}, "missing", "missing"),
+    ({"output_tokens": 0}, "reported", "missing"),
+    ({"output_tokens": None, "output_tokens_details": {"reasoning_tokens": None}}, "null", "null"),
+    ({"output_tokens": True, "output_tokens_details": {"reasoning_tokens": "PRIVATE"}}, "invalid", "invalid"),
+])
+def test_zero_usage_is_not_missing_and_metadata_is_content_free(monkeypatch, caplog, usage, output_state, reasoning_state):
+    requests = install_response(monkeypatch, httpx.Response(200, json={
+        "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+        "usage": usage, "output_text": "PRIVATE_TEXT",
+        "output": [{"type": "reasoning", "status": "completed", "summary": "PRIVATE_REASONING"},
+                   {"type": "message", "status": "incomplete", "id": "PRIVATE_ID",
+                    "content": [{"type": "output_text", "text": "PRIVATE_PARTIAL"}]}],
+    }))
+    with pytest.raises(ModelResponseError) as caught:
+        call()
+    assert caught.value.reason is ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS
+    assert len(requests) == 1
+    record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
+    assert record.response_status == "incomplete"
+    assert record.output_tokens_state == output_state
+    assert record.reasoning_tokens_state == reasoning_state
+    assert hasattr(record, "output_tokens") == (output_state == "reported")
+    assert hasattr(record, "reasoning_tokens") == (reasoning_state == "reported")
+    if output_state == "reported":
+        assert record.output_tokens == 0
+    if reasoning_state == "reported":
+        assert record.reasoning_tokens == 0
+    assert record.output_items_count == 2
+    assert record.reasoning_items == record.message_items == 1
+    assert record.completed_items == record.incomplete_items == 1
+    assert "PRIVATE" not in caplog.text
+
+
+@pytest.mark.parametrize("extra,state", [({}, "missing"), ({"usage": None}, "null"),
+    ({"usage": {}}, "present"), ({"usage": "PRIVATE"}, "invalid")])
+def test_usage_container_presence_is_explicit(monkeypatch, caplog, extra, state):
+    install_response(monkeypatch, httpx.Response(200, json={"status": "incomplete", **extra}))
+    with pytest.raises(ModelResponseError):
+        call()
+    record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
+    assert record.usage_state == state
+    assert not hasattr(record, "output_tokens")
+    assert not hasattr(record, "reasoning_tokens")
+    assert "PRIVATE" not in caplog.text
+
+
+def test_item_diagnostics_are_bounded_and_unknown_labels_never_logged(monkeypatch, caplog):
+    requests = install_response(monkeypatch, httpx.Response(200, json={
+        "status": "PRIVATE_STATUS", "output": [
+            {"type": "PRIVATE_TYPE", "status": "PRIVATE_STATUS", "summary": "PRIVATE_SUMMARY"}
+        ] * 100, "usage": {"output_tokens": 10 ** 1000},
+    }))
+    with pytest.raises(ModelResponseError):
+        call()
+    record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
+    assert record.response_status == "unknown"
+    assert record.output_items_count == 32 and record.output_items_truncated
+    assert record.reasoning_items == record.message_items == record.completed_items == 0
+    assert len(requests) == 1
     assert "PRIVATE" not in caplog.text
 
 
