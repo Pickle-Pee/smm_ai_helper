@@ -45,6 +45,12 @@ def support_response_schema(output_type, evidence_ids, parent_ids, *,
                 scope(child)
         elif isinstance(node, dict):
             properties = node.get("properties", {})
+            if "numeric_context" in properties:
+                node["required"] = list(dict.fromkeys([*node.get("required", []), "numeric_context"]))
+            if "support_id" in properties and "quote" in properties:
+                properties["support_id"] = {"anyOf": [
+                    {"$ref": f"#/$defs/{definition}"}
+                    for field, definition in SUPPORT_FIELDS.items() if allowed[field]]}
             if all(field in properties for field in SUPPORT_FIELDS):
                 if requirement is SupportRequirement.PARENT_REQUIRED:
                     properties["parent_claim_ids"]["minItems"] = 1

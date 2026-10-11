@@ -109,6 +109,7 @@ class StrategyContractProvider:
         assert parents and locals
         base = dict(output_name="main_growth_constraint", text="Validate the supplied growth hypothesis",
             kind="HYPOTHESIS", confidence="MEDIUM", items=["Validate demand from supplied parent context"],
+            numeric_context=[],
             evidence_ids=[], parent_claim_ids=[parents[0]])
         changes = {
             "local_only": dict(evidence_ids=[locals[0]], parent_claim_ids=[]),

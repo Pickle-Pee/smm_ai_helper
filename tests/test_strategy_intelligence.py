@@ -51,6 +51,7 @@ class IntelligenceModel(FakeModel):
             statement["text"] = "Validate the supplied scheduling hypothesis"
             if "MainGrowthConstraintStatement" in kwargs["response_schema"].get("$defs", {}):
                 statement["items"] = ["Prioritize validation of the supplied scheduling constraint"]
+                statement["numeric_context"] = []
         if "experiments" in kwargs["response_schema"]["properties"]:
             raw["experiments"] = [{
                 "hypothesis": "The supplied positioning resonates with the target",

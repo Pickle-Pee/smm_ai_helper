@@ -1,6 +1,5 @@
 """Bounded strategic synthesis, never planning, routing or scheduling."""
 from dataclasses import replace
-import json
 
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
 from app.module_registry import ModuleId
@@ -10,8 +9,10 @@ from .common import (
     first_party_evidence, parent_claims, scoped_facts,
 )
 from .support_schema import SupportRequirement
-from .intelligence_common import IntelligenceExecutor, require_supported_numbers, supported_text
+from .intelligence_common import IntelligenceExecutor
 from .intelligence_schemas import StrategyOutput
+from .numeric_grounding import validate_numeric_context, context_attribution
+from .claim_support import StrategyClaim, StoredNumericContext
 
 
 class VirtualCMOExecutor(IntelligenceExecutor):
@@ -30,8 +31,20 @@ risks and decision triggers. Roadmap items are hypotheses/recommendations suppor
 by the same cited parents and assumptions. No generic catalogue of marketing advice.
 Missing economics means unknown profitability and resource affordability, not a
 license to invent budgets or unit economics. No new market/economic facts.
-Only HYPOTHESIS or RECOMMENDATION kinds. Numerical statements must quote supplied
-support verbatim. Qualitative resource prioritization is allowed without economics."""
+Only HYPOTHESIS or RECOMMENDATION kinds. Keep text and items qualitative, with no
+digits, including ages, prices, numbered lists, targets or deadlines. Preserve
+relevant supplied numerical facts separately in numeric_context (at most three):
+support_id must also be cited in this statement's evidence_ids or parent_claim_ids;
+quote must copy a COMPLETE textual source value/leaf verbatim, including qualifiers.
+For a structured accepted CMO claim, quote its complete summary, item or prior
+numeric_context quote; never copy the serialized JSON or technical identities.
+Do not extract a number, sentence fragment or substring, combine sources, calculate,
+project or introduce targets. Bare numeric values cannot be quoted. Quotes longer
+than the field bound must be omitted, never shortened. These are attributed source
+context, not strategic conclusions or verified facts. Site assertions remain site
+assertions; goals and parent hypotheses remain goals and hypotheses. Use an empty
+numeric_context when none applies. Qualitative resource prioritization is allowed
+without economics."""
     limitation = "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims."
 
     def support_requirement_for(self, request) -> SupportRequirement:
@@ -56,13 +69,17 @@ support verbatim. Qualitative resource prioritization is allowed without economi
         result = super().build_result(request, output, evidence, parents)
         # Structured item text is material too: include it in the very same claim,
         # with exactly the validated support and confidence, not an ungated payload.
-        claims = tuple(replace(claim, value=json.dumps({"summary": statement.text, "items": statement.items}, ensure_ascii=False))
-                       for claim, statement in zip(result.normalized_result.claims, output.outputs))
+        local = {e.record.evidence_id: e for e in evidence}
+        claims = tuple(replace(claim, value=StrategyClaim(
+            summary=statement.text, items=statement.items,
+            numeric_context=[StoredNumericContext(**c.model_dump(),
+                attribution=context_attribution(c, local, parents)) for c in statement.numeric_context]
+        ).model_dump_json()) for claim, statement in zip(result.normalized_result.claims, output.outputs))
         return replace(result, payload=output.model_dump(mode="json"),
                        normalized_result=replace(result.normalized_result, claims=claims))
 
     def validate_statement(self, statement, local, parents):
-        super().validate_statement(statement, local, parents)
+        validate_numeric_context(statement, local, parents)
         if statement.kind not in ("HYPOTHESIS", "RECOMMENDATION"):
             raise StatementSemanticsError(SemanticRule.STRATEGY_KIND_INVALID)
         if parents and not statement.parent_claim_ids:
@@ -70,5 +87,3 @@ support verbatim. Qualitative resource prioritization is allowed without economi
         if statement.output_name == "main_growth_constraint" and (
                 len(statement.items) != 1 or statement.kind != "HYPOTHESIS"):
             raise StatementSemanticsError(SemanticRule.MAIN_GROWTH_CONSTRAINT_INVALID)
-        for item in statement.items:
-            require_supported_numbers(item, supported_text(statement, local, parents))

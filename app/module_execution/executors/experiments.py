@@ -10,6 +10,7 @@ from app.module_registry import ModuleId
 from .common import LocalEvidence, blocked, first_party_evidence, parent_claims, scoped_facts, stable_id
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
+from .claim_support import assertion_support
 
 
 def strategic_parents(request):
@@ -33,7 +34,9 @@ signal, failure/falsification condition and minimum inputs. Preserve supplied ti
 and resource constraints; otherwise time_resource_constraints is empty. Expected
 changes are hypotheses, never forecasted facts. Do not invent uplift, budget,
 duration, sample size, MDE or significance thresholds. Numerical text must be copied
-verbatim from cited supplied statements, never calculated or invented.
+verbatim from cited supplied statements, never calculated or invented. Structured
+VIRTUAL_CMO parents supply qualitative summaries/actions only. Their numeric_context
+quotes are attributed context, never numerical support for outputs or design fields.
 Use HYPOTHESIS or RECOMMENDATION kinds. Formal AB designs without baseline,
 measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
@@ -63,7 +66,7 @@ learning_record explicit in requested canonical outputs. At most three experimen
             refs = experiment.related_strategic_claim_ids
             if len(refs) != len(set(refs)) or not set(refs) <= eligible.keys():
                 raise ValueError("Experiment requires existing material strategic hypotheses")
-            supports = tuple(str(eligible[p].value) for p in refs)
+            supports = tuple(text for p in refs for text in assertion_support(eligible[p].value))
             for key, value in experiment.model_dump().items():
                 if key in ("related_strategic_claim_ids", "time_resource_constraints"):
                     continue
