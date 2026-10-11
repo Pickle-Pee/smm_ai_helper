@@ -2,6 +2,7 @@
 from urllib.parse import urlsplit, urlunsplit
 
 from app.module_execution.executors.common import plain
+from app.module_execution.executors.claim_support import strategy_claim
 from app.module_execution.executors.schemas import CompetitorOutput, PositioningOutput, CreatorOutput
 from app.module_execution.executors.intelligence_schemas import MarketOutput, StrategyOutput, ExperimentsOutput
 from app.module_registry import ModuleId
@@ -59,9 +60,21 @@ def module_presentation(result):
     if result.module_id is ModuleId.CREATOR:
         return dto.Post(**wire.post.model_dump(), limitations=limits)
     if result.module_id is ModuleId.VIRTUAL_CMO:
+        stored = {c.declared_output_name: strategy_claim(c.value) for c in result.normalized_result.claims}
+        labels = {
+            "site_claim": "На сайте заявлено (не подтверждено владельцем)",
+            "supplied_context": "Предоставленный контекст (не независимо проверенный факт)",
+            "parent_claim": "Контекст принятого родительского утверждения",
+            "unknown": "Контекст источника (происхождение не подтверждено)",
+        }
+        def quote_label(statement, context):
+            claim = stored.get(statement.output_name)
+            matches = [c.attribution for c in claim.numeric_context
+                       if c.support_id == context.support_id and c.quote == context.quote] if claim else []
+            attribution = matches[0] if matches and len(set(matches)) == 1 else "unknown"
+            return labels[attribution] + " (дословная цитата, не подтверждение вывода): «" + context.quote + "»"
         sections = {s.output_name.rstrip("."): dto.StrategySection(text=s.text, items=s.items,
-            numeric_context=["Контекст источника (дословная цитата, не подтверждение вывода): «" + c.quote + "»"
-                             for c in s.numeric_context]) for s in wire.outputs}
+            numeric_context=[quote_label(s, c) for c in s.numeric_context]) for s in wire.outputs}
         return dto.Strategy(**sections, limitations=limits)
     if result.module_id is ModuleId.EXPERIMENTS:
         return dto.Experiments(designs=[dto.Experiment(**e.model_dump(exclude={"related_strategic_claim_ids"}))

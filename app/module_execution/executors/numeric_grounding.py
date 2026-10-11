@@ -1,9 +1,9 @@
 """Exact, indivisible numerical context, never numeric entailment by token overlap."""
-import json
 import re
 from collections.abc import Mapping
 
 from .common import NumericLocation, SemanticRule, StatementSemanticsError
+from .claim_support import strategy_claim, assertion_support
 
 
 def context_units(value):
@@ -46,35 +46,27 @@ def validate_numeric_context(statement, local, parents):
 
 
 def parent_context_units(value):
-    """Read the authoritative CMO claim envelope without quoting technical IDs.
+    """Context propagation is separate from downstream assertion authority."""
+    parsed = strategy_claim(value)
+    if parsed is not None:
+        yield from context_units(parsed.summary)
+        yield from context_units(parsed.items)
+        for context in parsed.numeric_context:
+            yield from context_units(context.quote)
+    else:
+        for text in assertion_support(value):
+            yield from context_units(text)
 
-    A plain parent assertion is indivisible. A structured CMO claim carries
-    separately validated textual units; only those units can propagate as quoted
-    context. Other serialized structures cannot be reinterpreted as assertions.
-    """
-    if not isinstance(value, str):
-        return
-    try:
-        parsed = json.loads(value)
-    except (ValueError, RecursionError):
-        if not value.lstrip().startswith(("{", "[")):
-            yield from context_units(value)
-        return
-    if not isinstance(parsed, (dict, list)):
-        yield from context_units(value)
-        return
-    if (not isinstance(parsed, dict)
-            or set(parsed) not in ({"summary", "items"}, {"summary", "items", "numeric_context"})
-            or not isinstance(parsed["summary"], str)
-            or not isinstance(parsed["items"], list)
-            or not all(isinstance(item, str) for item in parsed["items"])):
-        return
-    yield from context_units(parsed["summary"])
-    yield from context_units(parsed["items"])
-    contexts = parsed.get("numeric_context", [])
-    if not isinstance(contexts, list):
-        return
-    for context in contexts:
-        if (isinstance(context, dict) and set(context) == {"support_id", "quote"}
-                and isinstance(context["support_id"], str) and isinstance(context["quote"], str)):
-            yield from context_units(context["quote"])
+
+def context_attribution(context, local, parents):
+    if context.support_id in local:
+        evidence = local[context.support_id]
+        is_site = (evidence.input_key == "site_claim" or
+                   isinstance(evidence.value, Mapping) and evidence.value.get("trust") == "site_claim")
+        return "site_claim" if is_site else "supplied_context"
+    parsed = strategy_claim(parents[context.support_id].value)
+    if parsed is not None:
+        matches = [c.attribution for c in parsed.numeric_context if c.quote == context.quote]
+        # Conflicting/legacy attribution must never imply owner confirmation.
+        return matches[0] if matches and len(set(matches)) == 1 else "unknown"
+    return "parent_claim"

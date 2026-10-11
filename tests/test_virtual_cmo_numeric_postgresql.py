@@ -38,6 +38,24 @@ class DaycareProvider:
         body = json.loads(request.content)
         self.calls.append(body)
         data = json.loads(body["input"][1]["content"])
+        if "experiments" in body["text"]["format"]["schema"]["properties"]:
+            cmo = next(u["result"] for u in data["upstream_results"] if u["result"]["module_id"] == "VIRTUAL_CMO")
+            claim = cmo["normalized_result"]["claims"][0]
+            assert json.loads(claim["value"])["numeric_context"][1]["quote"] == PRICE
+            refs = [claim["claim_id"]]
+            payload = dict(outputs=[dict(output_name=name, kind="HYPOTHESIS", confidence="MEDIUM",
+                text="Проверить влияние сообщения на качество обращений.", evidence_ids=[], parent_claim_ids=refs)
+                for name in data["expected_outputs"]], assumptions=[], limitations=[], experiments=[dict(
+                hypothesis="Сообщение соответствует потребностям семей.", target_metric="Качество обращений",
+                intervention="Сравнить варианты сообщения", expected_signal="Рост доли подходящих обращений",
+                failure_condition="Качество обращений не улучшилось", minimum_required_inputs=["Определение обращения"],
+                time_resource_constraints=[], related_strategic_claim_ids=refs)])
+            if self.failure == "experiment_text":
+                payload["outputs"][0]["text"] = "18 000 рублей"
+            if self.failure == "experiment_signal":
+                payload["experiments"][0]["expected_signal"] = "18 000 рублей"
+            assert Draft202012Validator(body["text"]["format"]["schema"]).is_valid(payload)
+            return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
         if "main_growth_constraint" not in data["expected_outputs"]:
             return self.positioning(request)
         schema = body["text"]["format"]["schema"]
@@ -69,7 +87,7 @@ class DaycareProvider:
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
 
 
-@pytest.mark.parametrize("failure", [None, "text", "items", "combination"])
+@pytest.mark.parametrize("failure", [None, "text", "items", "combination", "experiment_text", "experiment_signal"])
 def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, failure, caplog):
     provider = DaycareProvider(failure)
     install_transport(monkeypatch, provider)
@@ -96,7 +114,7 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
             run, jobs, artifacts = await state(mvp_database, rid)
             cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
             assert len(provider.calls) == 2  # One provider call for each required node.
-            if failure:
+            if failure in ("text", "items", "combination"):
                 assert run.status == "failed"
                 assert cmo.status is JobStatus.FAILED
                 assert not any(a.step == "virtual_cmo" for a in artifacts)
@@ -118,11 +136,22 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
                 assert all(c.claim_id in quality["accepted_claim_ids"] for c in result.normalized_result.claims)
                 # Durable reload through a fresh service retains exactly gated quotes.
                 fresh = build_production_graph_runtime(queue=queue(), sessions=mvp_database).service
-                from app.orchestration_runtime.contracts import module_job_id
-                item = await fresh.claim(module_job_id(rid, 1, "experiments"))
-                _, request = await fresh.load_work(item)
-                saved = next(u.result for u in request.upstream_results if u.result.module_id.value == "VIRTUAL_CMO")
-                assert saved == result
+                await execute_node(fresh, rid, "experiments")
+                _, jobs, artifacts = await state(mvp_database, rid)
+                experiment = next(j for j in jobs if j.workflow_step == "experiments")
+                assert len(provider.calls) == 3
+                if failure:
+                    assert experiment.status is JobStatus.FAILED
+                    assert not any(a.step == "experiments" for a in artifacts)
+                    assert await fresh.advance(rid) == ()
+                    assert len(provider.calls) == 3
+                    assert "rule=numerical_support_required" in caplog.text
+                else:
+                    assert experiment.status is JobStatus.SUCCEEDED
+                    artifact = next(a for a in artifacts if a.step == "experiments")
+                    saved = result_from_json(artifact.payload_json["execution_result"])
+                    assert saved.normalized_result.result_id in artifact.payload_json["quality"]["accepted_result_ids"]
+                    assert saved.normalized_result.claims[0].parent_claim_ids == (result.normalized_result.claims[0].claim_id,)
         finally:
             if rid:
                 await cleanup(mvp_database, rid, owner)

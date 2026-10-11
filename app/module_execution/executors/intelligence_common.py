@@ -3,12 +3,13 @@ import json
 import re
 
 from .common import BaseExecutor, SemanticRule, StatementSemanticsError, plain
+from .claim_support import assertion_support
 
 
 def supported_text(statement, local, parents):
     return tuple(local[e].value if isinstance(local[e].value, str)
                  else json.dumps(plain(local[e].value), ensure_ascii=False) for e in statement.evidence_ids) + tuple(
-        str(parents[p].value) for p in statement.parent_claim_ids)
+        text for p in statement.parent_claim_ids for text in assertion_support(parents[p].value))
 
 
 def require_supported_numbers(text, supports):

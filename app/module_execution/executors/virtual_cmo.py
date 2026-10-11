@@ -1,6 +1,5 @@
 """Bounded strategic synthesis, never planning, routing or scheduling."""
 from dataclasses import replace
-import json
 
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
 from app.module_registry import ModuleId
@@ -12,7 +11,8 @@ from .common import (
 from .support_schema import SupportRequirement
 from .intelligence_common import IntelligenceExecutor
 from .intelligence_schemas import StrategyOutput
-from .numeric_grounding import validate_numeric_context
+from .numeric_grounding import validate_numeric_context, context_attribution
+from .claim_support import StrategyClaim, StoredNumericContext
 
 
 class VirtualCMOExecutor(IntelligenceExecutor):
@@ -69,9 +69,12 @@ without economics."""
         result = super().build_result(request, output, evidence, parents)
         # Structured item text is material too: include it in the very same claim,
         # with exactly the validated support and confidence, not an ungated payload.
-        claims = tuple(replace(claim, value=json.dumps({"summary": statement.text, "items": statement.items,
-                           "numeric_context": [c.model_dump() for c in statement.numeric_context]}, ensure_ascii=False))
-                       for claim, statement in zip(result.normalized_result.claims, output.outputs))
+        local = {e.record.evidence_id: e for e in evidence}
+        claims = tuple(replace(claim, value=StrategyClaim(
+            summary=statement.text, items=statement.items,
+            numeric_context=[StoredNumericContext(**c.model_dump(),
+                attribution=context_attribution(c, local, parents)) for c in statement.numeric_context]
+        ).model_dump_json()) for claim, statement in zip(result.normalized_result.claims, output.outputs))
         return replace(result, payload=output.model_dump(mode="json"),
                        normalized_result=replace(result.normalized_result, claims=claims))
 
