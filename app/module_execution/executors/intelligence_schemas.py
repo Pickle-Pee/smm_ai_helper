@@ -1,7 +1,7 @@
 """Strict bounded wire contracts for the intelligence executors (payload.v1)."""
 from typing import Annotated, Literal
 from pydantic import Field
-from .schemas import OutputBase, OutputStatement, StrictOutput, Reference
+from .schemas import OutputBase, OutputStatement, StrictOutput, Reference, Text
 
 ShortText = Annotated[str, Field(min_length=1, max_length=300)]
 
@@ -24,9 +24,19 @@ class MarketStatement(OutputStatement):
     ]
 
 
+class NumericContext(StrictOutput):
+    support_id: Reference = Field(description="Exact source identity also cited by this statement")
+    quote: Annotated[str, Field(min_length=1, max_length=1000,
+        description="Complete textual source value/leaf, verbatim including qualifiers; never a fragment or derived assertion")]
+
+
 class StrategyStatementBase(OutputStatement):
     kind: Literal['HYPOTHESIS', 'RECOMMENDATION']
-    items: list[ShortText] = Field(min_length=1, max_length=3)
+    text: Text = Field(description="Qualitative strategy rationale, no digits; numerical facts belong only in numeric_context")
+    items: list[ShortText] = Field(min_length=1, max_length=3,
+        description="Qualitative strategic actions, no digits or numerical projections")
+    # Optional on persisted v1 payloads; strict provider generation requires it.
+    numeric_context: list[NumericContext] = Field(default_factory=list, max_length=3)
 
 
 class MainGrowthConstraintStatement(StrategyStatementBase):

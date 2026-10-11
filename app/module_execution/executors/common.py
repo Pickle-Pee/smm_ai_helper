@@ -64,11 +64,20 @@ class SemanticRule(str, Enum):
 class StatementSemanticsError(ExecutorOutputError):
     """Internal server-selected diagnostic; never contains provider content."""
 
-    def __init__(self, rule: SemanticRule):
+    def __init__(self, rule: SemanticRule, *, numeric_location=None):
         if type(rule) is not SemanticRule:
             raise TypeError("Expected server semantic rule")
         super().__init__(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID)
         self.rule = rule
+        if numeric_location is not None and type(numeric_location) is not NumericLocation:
+            raise TypeError("Expected server numeric location")
+        self.numeric_location = numeric_location
+
+
+class NumericLocation(str, Enum):
+    TEXT = "text"
+    ITEMS = "items"
+    CONTEXT = "numeric_context"
 
 
 class ModuleModelCall(Protocol):
@@ -288,8 +297,12 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             if isinstance(exc, ExecutorOutputError):
                 stage = exc.stage
             if isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
-                log.warning("Module output rejected module=%s stage=%s rule=%s",
-                            self.module_id.value, stage.value, exc.rule.value)
+                if exc.numeric_location is not None:
+                    log.warning("Module output rejected module=%s stage=%s rule=%s field=%s",
+                                self.module_id.value, stage.value, exc.rule.value, exc.numeric_location.value)
+                else:
+                    log.warning("Module output rejected module=%s stage=%s rule=%s",
+                                self.module_id.value, stage.value, exc.rule.value)
             else:
                 log.warning("Module output rejected module=%s stage=%s", self.module_id.value, stage.value)
             # Validation exceptions may contain model text. Expose only a bounded

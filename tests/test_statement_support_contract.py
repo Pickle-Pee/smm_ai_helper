@@ -55,6 +55,8 @@ def test_every_emitted_statement_schema_and_parser_agree(emitted_contract, local
                        parent_claim_ids=[schema["$defs"].get("AllowedParentClaimId", {"enum": ["clm_unavailable"]})["enum"][0]] if parent else [])
         if "items" in properties:
             payload["items"] = ["Synthetic priority"]
+        if "numeric_context" in properties:
+            payload["numeric_context"] = []
         validator = Draft202012Validator({"$defs": schema["$defs"], "$ref": f"#/$defs/{name}"})
         available_local = "AllowedEvidenceId" in schema["$defs"]
         available_parent = "AllowedParentClaimId" in schema["$defs"]

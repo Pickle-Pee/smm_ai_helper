@@ -144,6 +144,7 @@ class Post(StrictDTO):
 class StrategySection(StrictDTO):
     text: Text
     items: list[Short] = Field(min_length=1, max_length=3)
+    numeric_context: list[Text] = Field(default_factory=list, max_length=3)
 
 
 class Strategy(StrictDTO):

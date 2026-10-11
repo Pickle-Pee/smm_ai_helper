@@ -131,7 +131,8 @@ def run(value: dto.RunResponse) -> list[str]:
     if value.strategy:
         for key, label in SECTIONS.items():
             section = getattr(value.strategy, key)
-            messages.append(f"{label}\n{section.text}\n{bullets(section.items)}")
+            context = "\n" + bullets(section.numeric_context) if section.numeric_context else ""
+            messages.append(f"{label}\n{section.text}\n{bullets(section.items)}{context}")
     if value.experiments:
         messages.append("Эксперименты — отдельный план проверки гипотез")
         for experiment in value.experiments.designs:

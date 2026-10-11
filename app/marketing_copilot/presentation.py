@@ -59,7 +59,9 @@ def module_presentation(result):
     if result.module_id is ModuleId.CREATOR:
         return dto.Post(**wire.post.model_dump(), limitations=limits)
     if result.module_id is ModuleId.VIRTUAL_CMO:
-        sections = {s.output_name.rstrip("."): dto.StrategySection(text=s.text, items=s.items) for s in wire.outputs}
+        sections = {s.output_name.rstrip("."): dto.StrategySection(text=s.text, items=s.items,
+            numeric_context=["Контекст источника (дословная цитата, не подтверждение вывода): «" + c.quote + "»"
+                             for c in s.numeric_context]) for s in wire.outputs}
         return dto.Strategy(**sections, limitations=limits)
     if result.module_id is ModuleId.EXPERIMENTS:
         return dto.Experiments(designs=[dto.Experiment(**e.model_dump(exclude={"related_strategic_claim_ids"}))

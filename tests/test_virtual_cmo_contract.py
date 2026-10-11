@@ -42,6 +42,7 @@ def test_proven_gaps_now_rejected_by_exact_emitted_schema(name, changes):
     # An OBSERVATION quotes cited local support, isolating the strategy kind rule.
     statement = dict(output_name=name, kind="HYPOTHESIS", confidence="MEDIUM",
                      text=data["local_evidence"][0]["value"], items=["one"],
+                     numeric_context=[],
                      evidence_ids=[data["local_evidence"][0]["evidence_id"]],
                      parent_claim_ids=data["allowed_parent_claim_ids"])
     statement.update(changes)
@@ -109,7 +110,7 @@ def test_request_parent_policy_matrix(parents, evidence, refs):
                                     ["clm_parent"] if parents else [], requirement=policy)
     for name in ("main_growth_constraint", "strategic_priorities"):
         payload = dict(outputs=[dict(output_name=name, text="Synthetic", kind="HYPOTHESIS",
-            confidence="MEDIUM", evidence_ids=evidence, parent_claim_ids=refs, items=["one"])],
+            confidence="MEDIUM", evidence_ids=evidence, parent_claim_ids=refs, items=["one"], numeric_context=[])],
             assumptions=[], limitations=[])
         assert Draft202012Validator(schema).is_valid(payload) is (
             bool(refs) if parents else bool(evidence) and not refs)
@@ -157,8 +158,8 @@ def test_numerical_rule_logs_no_content(field, monkeypatch):
     model = IntelligenceModel(use_parents=True)
     with pytest.raises(ExecutorOutputError) as caught:
         run(valid_request(ModuleId.VIRTUAL_CMO), invalid, model=model)
-    warning.assert_called_once_with("Module output rejected module=%s stage=%s rule=%s",
-        "VIRTUAL_CMO", "statement_semantics_invalid", "numerical_support_required")
+    warning.assert_called_once_with("Module output rejected module=%s stage=%s rule=%s field=%s",
+        "VIRTUAL_CMO", "statement_semantics_invalid", "numerical_support_required", field)
     assert secret not in str(warning.call_args) + "".join(traceback.format_exception(caught.value))
     assert len(model.calls) == 1
 
