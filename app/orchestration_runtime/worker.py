@@ -16,9 +16,10 @@ from .service import evaluate_result
 
 log = logging.getLogger(__name__)
 
-# No reason here changes the execution condition of the next attempt. In
-# particular, repeating a token-exhausted request with the same budget is unsafe.
+# Only confirmed empty zero-token anomalies may repeat the unchanged request.
+# Ordinary token exhaustion remains terminal, including missing diagnostics.
 _MODEL_RESPONSE_RETRYABLE = {
+    ModelResponseFailureReason.INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS: True,
     ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS: False,
     ModelResponseFailureReason.INCOMPLETE_CONTENT_FILTER: False,
     ModelResponseFailureReason.INCOMPLETE_OTHER: False,

@@ -17,7 +17,8 @@ capability over `openai_text.chat`. PostgreSQL owns attempts and fencing.
 
 | Provider condition | Internal reason | Graph retry |
 | --- | --- | --- |
-| incomplete, max_output_tokens | incomplete_max_output_tokens | terminal |
+| incomplete, max_output_tokens, explicit integer output_tokens=0 and reasoning_tokens=0, output=[] | incomplete_empty_max_output_tokens | durable retry |
+| incomplete, max_output_tokens, consumed tokens or missing/invalid diagnostics | incomplete_max_output_tokens | terminal |
 | incomplete, content_filter | incomplete_content_filter | terminal |
 | incomplete, unknown/missing/malformed reason metadata | incomplete_other | terminal |
 | refusal block | refusal | terminal |
@@ -34,8 +35,16 @@ The rejection warning contains only `reason`, configured `model`, effective
 must be exact nonnegative integers within the effective budget; bools, strings,
 floats and excessive values are omitted. Reasoning usage cannot exceed validated
 output usage when available; otherwise it is bounded by the effective budget.
-No response, prompt, schema, evidence or refusal text is logged.
-Graph failures retain the existing safe `execution_invalid` persistence code.
+Rejection warnings also include optional `x_request_id` (1–128 ASCII letters,
+digits, underscores or hyphens), and `input_tokens` (exact nonnegative integer
+at most 2^31-1). `input_text_bytes` measures non-system/developer message content;
+`instructions_bytes` measures system/developer message content; both use UTF-8.
+`json_schema_bytes` measures compact JSON with unescaped Unicode encoded as UTF-8.
+Only the sizes are logged, never the prompt, instructions, schema, response,
+evidence, refusal text or credentials. Invalid header/counter values are omitted.
+The confirmed empty anomaly uses existing `provider_transient` persistence and
+the unchanged maximum of three attempts with 5s/10s durable backoff. Other
+model failures retain `execution_invalid`. No migration or business contract changes.
 
 ## Bounded generation policy
 
@@ -70,7 +79,10 @@ Capacity inspection distinguishes expected concise output from field maxima:
 16000 provides roughly 10000 tokens of additional reasoning/formatting headroom
 over the 1000-character example. It is a deterministic cost bound, not a proof
 that every schema-valid response fits. Actual usage and latency need monitoring;
-an exhausted response fails closed without a second request or graph retry.
+an ordinary exhausted response fails closed without a second request or graph retry.
+The confirmed zero-token empty anomaly can retry only as a new durable attempt;
+it never changes the model, budget, schema or reasoning effort. Its cause remains
+unproven; this classification does not imply a provider root cause.
 The four request-scoped Positioning schemas, semantic/evidence gates and existing
 131072-character validation bound are unchanged.
 
@@ -102,8 +114,10 @@ Transport regressions cover completed responses, all failure reasons, malformed
 2xx envelopes, HTTP 400 preservation, safe logs/tracebacks, malformed counters,
 and exactly one provider request. Budget tests verify executor selection,
 real HTTP payloads, arbitrary-budget rejection, generic cap preservation and
-unchanged reasoning/model settings. Every bounded reason is terminal through
-the worker, including wrapped causes. Existing four-schema and product-truth
+unchanged reasoning/model settings. Only the confirmed empty anomaly is retryable
+through the worker, including wrapped causes. PostgreSQL regressions verify exact
+backoff boundaries, one identical HTTP request per attempt, bounded exhaustion,
+terminal Job/run state and lease release. Existing four-schema and product-truth
 regressions remain required. The PostgreSQL strategy regression executes the
 production HTTP adapter with both strategic seeds absent, accepts 16 claims,
 persists POSITIONING success and makes VIRTUAL_CMO pending.

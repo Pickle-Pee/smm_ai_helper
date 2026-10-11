@@ -205,8 +205,16 @@ def test_shutdown_leaves_both_active_leases_recoverable(mvp_database):
     ("timeout", {}, 3), ("transport", {}, 3), ("protocol", {}, 3),
     (200, "invalid JSON SECRET", 1), (200, {"output_text": "malformed SECRET"}, 1),
     (200, {"output_text": '{}'}, 1),
+    (200, {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+           "output": [], "usage": {"output_tokens": 0,
+           "output_tokens_details": {"reasoning_tokens": 0}}}, 3),
+    (200, {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+           "output": [], "usage": {"output_tokens": 16000,
+           "output_tokens_details": {"reasoning_tokens": 16000}}}, 1),
+    (200, {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+           "output": [], "usage": {"output_tokens": 0}}, 1),
 ])
-def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_database, monkeypatch, status, body, attempts):
+def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_database, monkeypatch, caplog, status, body, attempts):
     from tests.test_graph_model_adapter import install_transport
     from tests.test_production_graph_worker import queue
     async def exercise():
@@ -237,15 +245,28 @@ def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_da
             for attempt in range(attempts):
                 assert await worker.once()
                 assert not await worker.once()  # No retry until durable available_at.
-                clock.tick(11)
+                if attempt < attempts - 1:
+                    run, jobs, artifacts = await state(mvp_database, rid)
+                    assert run.status == "queued" and jobs[0].status is JobStatus.RUNNING and not artifacts
+                    async with mvp_database() as session:
+                        lease = await session.get(JobExecution, jobs[0].job_id)
+                        assert lease.available_at == clock() + timedelta(seconds=5 * 2 ** attempt)
+                        assert lease.claim_token is None and lease.lease_until is None
+                    clock.tick(5 * 2 ** attempt - 1)
+                    assert not await worker.once()
+                    clock.tick(1)
             assert not await worker.once()
             run, jobs, artifacts = await state(mvp_database, rid)
             assert run.status == "failed" and len(jobs) == 1 and not artifacts
             assert jobs[0].status is JobStatus.FAILED
             assert len(calls) == attempts and all(c.is_closed for c in clients)
+            assert len({request.content for request in calls}) == 1
+            assert "SECRET" not in caplog.text
             assert "SECRET" not in str(run.state_json) + str(jobs[0].error)
             async with mvp_database() as session:
-                assert (await session.get(JobExecution, jobs[0].job_id)).attempts == attempts
+                lease = await session.get(JobExecution, jobs[0].job_id)
+                assert lease.attempts == attempts
+                assert lease.claim_token is None and lease.lease_until is None
         finally:
             await cleanup(mvp_database, rid, owner_id)
     asyncio.run(exercise())

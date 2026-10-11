@@ -1,5 +1,6 @@
 """Bounded provider diagnostics without another request or provider content."""
 import asyncio
+import json
 import logging
 import traceback
 
@@ -7,6 +8,92 @@ import httpx
 import pytest
 
 from app.llm.openai_text import ModelResponseError, ModelResponseFailureReason, _extract_output_text, chat
+from app.orchestration_runtime.worker import transient
+
+
+def empty_incomplete():
+    return {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
+            "output": [], "usage": {"output_tokens": 0,
+            "output_tokens_details": {"reasoning_tokens": 0}}}
+
+
+@pytest.mark.parametrize("field,value", [
+    ("output_tokens", None), ("output_tokens", False), ("output_tokens", "0"),
+    ("output_tokens", 0.0), ("output_tokens", -1), ("output_tokens", 1),
+    ("reasoning_tokens", None), ("reasoning_tokens", False), ("reasoning_tokens", "0"),
+    ("reasoning_tokens", 0.0), ("reasoning_tokens", -1), ("reasoning_tokens", 1),
+    ("output_tokens_details", None), ("output_tokens_details", []),
+    ("output_tokens_details", {}), ("usage", None), ("usage", []), ("usage", {}),
+    ("output", None), ("output", {}), ("output", ""), ("output", [{"type": "reasoning"}]),
+])
+def test_empty_incomplete_requires_confirmed_diagnostics(monkeypatch, field, value):
+    data = empty_incomplete()
+    if field == "reasoning_tokens":
+        data["usage"]["output_tokens_details"][field] = value
+    elif field in ("output_tokens", "output_tokens_details"):
+        data["usage"][field] = value
+    else:
+        data[field] = value
+    requests = install_response(monkeypatch, httpx.Response(200, json=data))
+    with pytest.raises(ModelResponseError) as caught:
+        call()
+    assert caught.value.reason is ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS
+    assert not transient(caught.value) and len(requests) == 1
+
+
+@pytest.mark.parametrize("field", ["usage", "output_tokens", "output_tokens_details", "reasoning_tokens", "output"])
+def test_empty_incomplete_missing_diagnostics_are_terminal(monkeypatch, field):
+    data = empty_incomplete()
+    container = (data["usage"]["output_tokens_details"] if field == "reasoning_tokens"
+                 else data["usage"] if field in ("output_tokens", "output_tokens_details") else data)
+    del container[field]
+    install_response(monkeypatch, httpx.Response(200, json=data))
+    with pytest.raises(ModelResponseError) as caught:
+        call()
+    assert caught.value.reason is ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS
+    assert not transient(caught.value)
+
+
+def test_confirmed_empty_anomaly_has_safe_diagnostics_and_one_request(monkeypatch, caplog):
+    from app.config import settings
+    from app.model_generation_policy import ModuleOutputBudget
+    from app.orchestration_runtime.model_adapter import production_model_call
+    data = empty_incomplete()
+    data["usage"]["input_tokens"] = 123
+    data["error"] = "PRIVATE_PROVIDER_BODY"
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "PRIVATE_API_KEY")
+    schema = {"PRIVATE_SCHEMA": "секрет"}
+    requests = install_response(monkeypatch, httpx.Response(
+        200, json=data, headers={"x-request-id": "req_abc-123"}))
+    kwargs = dict(instruction="PRIVATE_INSTRUCTIONS я", text="PRIVATE_INPUT я",
+                  response_schema=schema, output_budget=ModuleOutputBudget.VIRTUAL_CMO)
+    with pytest.raises(ModelResponseError) as caught:
+        asyncio.run(production_model_call(**kwargs))
+    assert caught.value.reason is ModelResponseFailureReason.INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS
+    assert transient(caught.value) and len(requests) == 1
+    payload = json.loads(requests[0].content)
+    assert payload["max_output_tokens"] == 16000
+    assert payload["text"]["format"]["schema"] == schema and payload["text"]["format"]["strict"]
+    record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
+    assert record.x_request_id == "req_abc-123" and record.input_tokens == 123
+    assert record.input_text_bytes == len("PRIVATE_INPUT я".encode("utf-8"))
+    assert record.instructions_bytes == len("PRIVATE_INSTRUCTIONS я".encode("utf-8"))
+    assert record.json_schema_bytes == len(json.dumps(schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    assert "PRIVATE" not in caplog.text + str(record.__dict__)
+    assert "PRIVATE" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.parametrize("value", [None, False, "PRIVATE_TOKENS", -1, 1.5, 2 ** 100])
+def test_invalid_input_tokens_are_not_logged(monkeypatch, caplog, value):
+    data = empty_incomplete()
+    data["usage"]["input_tokens"] = value
+    install_response(monkeypatch, httpx.Response(200, json=data,
+        headers={"x-request-id": "PRIVATE header\tcontent"}))
+    with pytest.raises(ModelResponseError):
+        call()
+    record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
+    assert not hasattr(record, "input_tokens") and not hasattr(record, "x_request_id")
+    assert "PRIVATE" not in caplog.text
 
 
 def install_response(monkeypatch, response):
@@ -69,8 +156,9 @@ def test_incomplete_response_has_safe_reason_and_usage(monkeypatch, caplog, prov
     record = next(r for r in caplog.records if r.name == "app.llm.openai_text")
     assert record.getMessage().startswith(
         f"Structured model response rejected reason={expected.value} "
-        "model=configured-model max_output_tokens=4000 output_tokens=4000 reasoning_tokens=1800"
+        "model=configured-model max_output_tokens=4000"
     )
+    assert record.output_tokens == 4000 and record.reasoning_tokens == 1800
     assert record.exc_info is None
     assert "PRIVATE" not in caplog.text
     assert "PRIVATE" not in "".join(traceback.format_exception(caught.value))

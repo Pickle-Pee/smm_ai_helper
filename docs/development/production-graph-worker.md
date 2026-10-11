@@ -67,8 +67,13 @@ transient. The classifier walks explicit `__cause__` chains with cycle protectio
 for existing wrapped provider errors. An arbitrary RuntimeError, malformed
 structured output, contract violation, other HTTP status or application bug is
 terminal. Errors are persisted as existing safe codes, never raw provider data.
-All five `ModelResponseFailureReason` values are explicitly terminal, even with
-a transient chained cause. Token exhaustion does not retry an identical request.
+`incomplete_empty_max_output_tokens` is transient only when `status=incomplete`,
+`reason=max_output_tokens`, both output and reasoning usage are explicitly integer
+zero, and `output` is an explicitly empty list. All other model response reasons
+are terminal, even with a transient chained cause. Ordinary token exhaustion,
+missing diagnostics and malformed usage do not retry an identical request.
+The confirmed anomaly uses the same three-attempt cap and 5s/10s durable backoff;
+exhaustion fails the Job and required graph run with `provider_transient`.
 See [structured response diagnostics and capacity](structured-model-responses.md).
 
 Startup requires `0 < HTTP_TIMEOUT < GRAPH_TIMEOUT_SECONDS < GRAPH_LEASE_SECONDS`.
