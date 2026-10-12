@@ -8,6 +8,13 @@ justifies global rollout.
 
 Incident run: `918f5a2504835cf4df57bc280579474cb5c68f77a40464c9e75f15021e5a7ac2`.
 Incident job: `de3a4436ce8189937533c8456c4ee8ab`.
+Latest reported replay: `req_06d7388ca87640c180cd187eb4b0bd27` completed with
+2437 output tokens but failed during result construction. The recipe now returns
+`failure_rule` and available zero-based `output_index` / `experiment_index` on
+such rejection, without response text or exception details. See the
+[closed rule definitions and unchanged kind mismatch](../development/experiments-result-diagnostics.md).
+The original and projected schema hashes below are pinned to that replay; obtain
+private approval for the instruction/input hashes before any live call.
 
 Use an isolated operator process with the approved code/dependencies, existing
 secure credentials and read-only PostgreSQL privileges. Do not start workers,
@@ -40,6 +47,7 @@ from app.config import settings
 from app.llm.openai_text import _response_metadata
 from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors import ExperimentsExecutor
+from app.module_execution.executors.common import ResultContractError
 from app.module_execution.executors.experiments import strategic_parents
 from app.module_execution.executors.intelligence_schemas import ExperimentsOutput
 from app.module_execution.executors.provider_schema import schema_measurement
@@ -52,7 +60,8 @@ from tools.experiments_diagnostics import capture_request, restore_database
 
 APPROVED = False
 APPROVED_HASHES = {"instructions": "<approved_sha256>", "input": "<approved_sha256>",
-                   "schema": "<approved_sha256>"}
+                   "schema": "49c9d21c942a1c5dd97af086fc1189e8d2f78ebd294edc58a1546b0e55560150"}
+APPROVED_PROVIDER_SCHEMA_HASH = "27e6f30e45dd5aa10a5d5ee83a1e4529ec483e863f8d8c497c8cb80022582d68"
 RUN_ID = "918f5a2504835cf4df57bc280579474cb5c68f77a40464c9e75f15021e5a7ac2"
 JOB_ID = "de3a4436ce8189937533c8456c4ee8ab"
 logging.disable(logging.CRITICAL)
@@ -74,6 +83,9 @@ async def verify():
     hashes = {"instructions": hashlib.sha256(baseline.arguments["instruction"].encode("utf-8")).hexdigest(),
               "input": hashlib.sha256(baseline.arguments["text"].encode("utf-8")).hexdigest(),
               "schema": schema_measurement(original)["sha256"]}
+    if (schema_measurement(projected)["sha256"] !=
+            APPROVED_PROVIDER_SCHEMA_HASH):
+        raise RuntimeError("verification_provider_fingerprint_mismatch")
     if hashes != APPROVED_HASHES:
         raise RuntimeError("verification_fingerprint_mismatch")
     expected = deepcopy(baseline.payload)
@@ -97,9 +109,18 @@ async def verify():
     original_client = httpx.AsyncClient
     def client(**kwargs):
         return original_client(**kwargs, event_hooks={"request": [guard], "response": [observe]})
-    with patch.object(httpx, "AsyncClient", client):
-        result = await ExperimentsExecutor(model_call=production_model_call,
-            provider_schema_projection=settings.EXPERIMENTS_SCHEMA_PROJECTION_ENABLED).execute(request)
+    try:
+        with patch.object(httpx, "AsyncClient", client):
+            result = await ExperimentsExecutor(model_call=production_model_call,
+                provider_schema_projection=settings.EXPERIMENTS_SCHEMA_PROJECTION_ENABLED).execute(request)
+    except ResultContractError as exc:
+        summary.update(accepted=False, http_calls=posts, failure=exc.stage.value,
+                       failure_rule=exc.failure_rule.value)
+        if exc.output_index is not None:
+            summary["output_index"] = exc.output_index
+        if exc.experiment_index is not None:
+            summary["experiment_index"] = exc.experiment_index
+        return summary
     # execute has already validated raw response with original schema + Pydantic,
     # provenance, every-output strategic citation, numeric grounding and exact
     # constraints for every design. Recheck the returned payload independently.

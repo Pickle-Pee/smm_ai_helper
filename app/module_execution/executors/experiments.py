@@ -8,7 +8,11 @@ from app.marketing_orchestrator.quality_gates.contracts import (
 from app.module_registry import ModuleId, ModuleRegistry
 from app.model_generation_policy import ModuleOutputBudget
 
-from .common import LocalEvidence, blocked, first_party_evidence, parent_claims, scoped_facts, stable_id, log
+from .common import (
+    LocalEvidence, OutputFailureStage, ResultContractError, ResultFailureRule,
+    blocked, first_party_evidence, log, normalize_result, parent_claims,
+    scoped_facts, stable_id,
+)
 from .provider_schema import schema_measurement, SchemaProjectionError
 from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
@@ -94,13 +98,17 @@ learning_record explicit in requested canonical outputs. At most three experimen
 
     def build_result(self, request, output, evidence, parents):
         eligible = strategic_parents(request)
-        for statement in output.outputs:
+        for output_index, statement in enumerate(output.outputs):
             if not set(statement.parent_claim_ids) & eligible.keys():
-                raise ValueError("Every experiment output must reference a strategic hypothesis")
-        for experiment in output.experiments:
+                raise ResultContractError(ResultFailureRule.OUTPUT_MISSING_STRATEGIC_PARENT, output_index=output_index)
+        for experiment_index, experiment in enumerate(output.experiments):
             refs = experiment.related_strategic_claim_ids
-            if len(refs) != len(set(refs)) or not set(refs) <= eligible.keys():
-                raise ValueError("Experiment requires existing material strategic hypotheses")
+            if len(refs) != len(set(refs)):
+                raise ResultContractError(ResultFailureRule.EXPERIMENT_DUPLICATE_STRATEGIC_REFERENCES,
+                                          experiment_index=experiment_index)
+            if not set(refs) <= eligible.keys():
+                raise ResultContractError(ResultFailureRule.EXPERIMENT_INVALID_STRATEGIC_REFERENCES,
+                                          experiment_index=experiment_index)
             supports = tuple(text for p in refs for text in assertion_support(eligible[p].value))
             for key, value in experiment.model_dump().items():
                 if key in ("related_strategic_claim_ids", "time_resource_constraints"):
@@ -111,7 +119,7 @@ learning_record explicit in requested canonical outputs. At most three experimen
                 "constraints", "time_resource_constraint", "budget", "duration"))
             if (len(experiment.time_resource_constraints) != len(set(experiment.time_resource_constraints))
                     or set(experiment.time_resource_constraints) != {str(e.value) for e in constraints}):
-                raise ValueError("Preserve every supplied time/resource constraint verbatim")
+                raise ResultContractError(ResultFailureRule.EXPERIMENT_CONSTRAINTS_MISMATCH, experiment_index=experiment_index)
             output.outputs[0].evidence_ids = list(dict.fromkeys((
                 *output.outputs[0].evidence_ids, *(e.record.evidence_id for e in constraints))))
             # Attach the complete structured design to the first normalized claim;
@@ -119,12 +127,13 @@ learning_record explicit in requested canonical outputs. At most three experimen
             output.outputs[0].parent_claim_ids = list(dict.fromkeys((*output.outputs[0].parent_claim_ids, *refs)))
         result = super().build_result(request, output, evidence, parents)
         first, *rest = result.normalized_result.claims
-        first = replace(first, value=json.dumps({"summary": first.value,
+        first = normalize_result(replace, first, output_index=0, value=json.dumps({"summary": first.value,
             "experiments": [e.model_dump() for e in output.experiments]}, ensure_ascii=False))
-        return replace(result, payload=output.model_dump(mode="json"),
-                       normalized_result=replace(result.normalized_result, claims=(first, *rest)))
+        return normalize_result(replace, result, payload=output.model_dump(mode="json"),
+                       normalized_result=normalize_result(replace, result.normalized_result, claims=(first, *rest)))
 
     def validate_statement(self, statement, local, parents):
         super().validate_statement(statement, local, parents)
         if statement.kind not in ("HYPOTHESIS", "RECOMMENDATION"):
-            raise ValueError("Expected changes cannot be forecasted facts")
+            raise ResultContractError(ResultFailureRule.OUTPUT_INVALID_KIND,
+                                      stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID)

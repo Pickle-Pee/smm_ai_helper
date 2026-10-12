@@ -52,6 +52,43 @@ class ExecutorOutputError(ValueError):
         self.stage = OutputFailureStage(stage)
 
 
+class ResultFailureRule(str, Enum):
+    OUTPUT_MISSING_STRATEGIC_PARENT = "output_missing_strategic_parent"
+    EXPERIMENT_INVALID_STRATEGIC_REFERENCES = "experiment_invalid_strategic_references"
+    EXPERIMENT_DUPLICATE_STRATEGIC_REFERENCES = "experiment_duplicate_strategic_references"
+    EXPERIMENT_CONSTRAINTS_MISMATCH = "experiment_constraints_mismatch"
+    POST_MUTATION_PYDANTIC_INVALID = "post_mutation_pydantic_invalid"
+    OUTPUT_DUPLICATE_NAMES = "output_duplicate_names"
+    OUTPUT_INVALID_KIND = "output_invalid_kind"
+    RESULT_NORMALIZATION_INVALID = "result_normalization_invalid"
+    OTHER_RESULT_CONTRACT_INVALID = "other_result_contract_invalid"
+
+
+class ResultContractError(ExecutorOutputError):
+    """Closed server diagnostic; indices are zero-based positions, never identities."""
+
+    def __init__(self, rule, *, output_index=None, experiment_index=None,
+                 stage=OutputFailureStage.RESULT_CONTRACT_INVALID):
+        if type(rule) is not ResultFailureRule:
+            raise TypeError("Expected server result rule")
+        for index in (output_index, experiment_index):
+            if index is not None and (type(index) is not int or index < 0):
+                raise TypeError("Expected nonnegative server index")
+        super().__init__(stage=stage)
+        self.failure_rule = rule
+        self.output_index = output_index
+        self.experiment_index = experiment_index
+
+
+def normalize_result(factory, *args, output_index=None, **kwargs):
+    """Classify only failures inside construction of the normalized contract."""
+    try:
+        return factory(*args, **kwargs)
+    except (ValueError, TypeError, RecursionError, UnicodeError):
+        raise ResultContractError(ResultFailureRule.RESULT_NORMALIZATION_INVALID,
+                                  output_index=output_index) from None
+
+
 class SemanticRule(str, Enum):
     STRATEGY_KIND_INVALID = "strategy_kind_invalid"
     STRATEGY_PARENT_REQUIRED = "strategy_parent_required"
@@ -302,7 +339,16 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
         except (ValueError, TypeError, RecursionError, UnicodeError, ValidationError) as exc:
             if isinstance(exc, ExecutorOutputError):
                 stage = exc.stage
-            if isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
+            diagnostic = None
+            if isinstance(exc, ResultContractError):
+                diagnostic = exc
+            elif stage is OutputFailureStage.RESULT_CONTRACT_INVALID:
+                diagnostic = ResultContractError(ResultFailureRule.OTHER_RESULT_CONTRACT_INVALID)
+            if diagnostic is not None:
+                log.warning("Module output rejected module=%s stage=%s failure_rule=%s output_index=%s experiment_index=%s",
+                            self.module_id.value, stage.value, diagnostic.failure_rule.value,
+                            diagnostic.output_index, diagnostic.experiment_index)
+            elif isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
                 if exc.numeric_location is not None:
                     log.warning("Module output rejected module=%s stage=%s rule=%s field=%s",
                                 self.module_id.value, stage.value, exc.rule.value, exc.numeric_location.value)
@@ -313,6 +359,10 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 log.warning("Module output rejected module=%s stage=%s", self.module_id.value, stage.value)
             # Validation exceptions may contain model text. Expose only a bounded
             # stage and suppress their traceback in callers that log exceptions.
+            if diagnostic is not None:
+                raise ResultContractError(diagnostic.failure_rule, stage=stage,
+                    output_index=diagnostic.output_index,
+                    experiment_index=diagnostic.experiment_index) from None
             raise ExecutorOutputError(stage=stage) from None
 
     def build_result(self, request, output, evidence, parents):
@@ -321,9 +371,9 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             raise ExecutorOutputError(stage=OutputFailureStage.OUTPUT_COVERAGE_INVALID)
         local = {e.record.evidence_id: e for e in evidence}
         rid = stable_id("res", request)
-        assumptions = tuple(AssumptionRecord(stable_id("asm", request, str(i)), text, Materiality.MATERIAL)
+        assumptions = tuple(normalize_result(AssumptionRecord, stable_id("asm", request, str(i)), text, Materiality.MATERIAL)
                             for i, text in enumerate(dict.fromkeys((*request.context_packet.assumptions, *output.assumptions))))
-        limitations = tuple(LimitationRecord(
+        limitations = tuple(normalize_result(LimitationRecord,
             stable_id("lim", request, str(i)), LimitationReason.INCOMPLETE_COVERAGE,
             Materiality.MATERIAL, related_result_ids=(rid,), description=text,
         ) for i, text in enumerate(dict.fromkeys((self.limitation, *output.limitations))))
@@ -339,6 +389,8 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 raise ExecutorOutputError(stage=OutputFailureStage.SUPPORT_MISSING)
             try:
                 self.validate_statement(statement, local, parents)
+            except ResultContractError as exc:
+                raise ResultContractError(exc.failure_rule, stage=exc.stage, output_index=i) from None
             except StatementSemanticsError:
                 raise
             except (ValueError, TypeError):
@@ -350,7 +402,7 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 supports.append(Confidence.MEDIUM)
             confidence = clamp_confidence(Confidence(statement.confidence), supports)
             statement.confidence = confidence.value
-            claims.append(NormalizedClaim(
+            claims.append(normalize_result(NormalizedClaim, output_index=i,
                 claim_id=stable_id("clm", request, str(i)), declared_output_name=statement.output_name,
                 claim_type=ClaimType(statement.kind), confidence=confidence,
                 authority_status=AuthorityStatus.WITHIN_SCOPE, value=statement.text,
@@ -359,10 +411,10 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 assumption_ids=tuple(a.assumption_id for a in assumptions),
                 limitation_ids=tuple(l.limitation_id for l in limitations),
             ))
-        return ModuleExecutionResult(
+        return normalize_result(ModuleExecutionResult,
             module_id=self.module_id, schema_version=self.schema_version,
             payload=output.model_dump(mode="json"),
-            normalized_result=NormalizedModuleResult(
+            normalized_result=normalize_result(NormalizedModuleResult,
                 result_id=rid, module_id=self.module_id, module_status=ModuleResultStatus.PASS_WITH_LIMITATIONS,
                 claims=tuple(claims), evidence=tuple(e.record for e in evidence), assumptions=assumptions,
                 limitations=limitations, evidence_sufficiency=EvidenceSufficiency.LIMITED,
