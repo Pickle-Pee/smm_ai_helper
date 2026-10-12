@@ -29,7 +29,8 @@ def validate_executor_coherence(metadata: ModuleRegistry, executors: ModuleExecu
 def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyzer: SiteAnalyzer | None,
                                    composer=None, registry_version=EXECUTABLE_REGISTRY_VERSION,
                                    market_analyzer: SiteAnalyzer | None = None,
-                                   positioning_schema_projection: bool = False) -> ModuleExecutorRegistry:
+                                   positioning_schema_projection: bool = False,
+                                   experiments_schema_projection: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
     implementations = [
         CompetitorAnalysisExecutor(model_call=model_call, analyzer=analyzer, composer=composer),
@@ -41,7 +42,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
         implementations.extend((
             MarketAnalysisExecutor(model_call=model_call, analyzer=market_analyzer, composer=composer),
             VirtualCMOExecutor(model_call=model_call, composer=composer),
-            ExperimentsExecutor(model_call=model_call, composer=composer),
+            ExperimentsExecutor(model_call=model_call, composer=composer,
+                                provider_schema_projection=experiments_schema_projection),
         ))
     registry = ModuleExecutorRegistry(implementations)
     validate_executor_coherence(metadata, registry)

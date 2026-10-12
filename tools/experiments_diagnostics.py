@@ -41,7 +41,7 @@ async def capture_request(request):
         raise _Captured()
 
     try:
-        await ExperimentsExecutor(model_call=capture).execute(request)
+        await ExperimentsExecutor(model_call=capture, provider_schema_projection=False).execute(request)
     except _Captured:
         pass
     if not arguments:
