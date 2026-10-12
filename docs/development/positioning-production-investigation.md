@@ -13,8 +13,11 @@ The incident supplied by the operator concerns run
 `provider_transient`, attempts=3, `gpt-5-mini`, budget 16000. The reported envelope
 is `incomplete/max_output_tokens`, with input/output/reasoning usage all zero and
 `output=[]`. Correlation IDs:
-`req_de67dcc84fcb412687913db66c21d028` and
-`req_793170f9962f40a398c6742618c7f0a0`.
+`req_de67dcc84fcb412687913db66c21d028`,
+`req_793170f9962f40a398c6742618c7f0a0`, and
+`req_87d0826eee7a44ec8b4bbe487cc7171d`. All three requests are
+operator-confirmed `incomplete_empty_max_output_tokens` failures with zero
+input, output and reasoning tokens and empty output.
 
 These are supplied observations, not independently retrieved production records.
 Production DB access, historical deployment revision/configuration and provider
@@ -148,8 +151,8 @@ change, not an established remedy for this incident.
 Run from the chosen deployment-compatible checkout, as a standalone process:
 
 ```sh
-python -m app.diagnostics.positioning --snapshot /secure/incident.diagnostic-snapshot.json --run-id RUN_ID --job-id JOB_ID
-python -m app.diagnostics.positioning --database-read --run-id RUN_ID --job-id JOB_ID
+python -m tools.positioning_diagnostics --snapshot /secure/incident.diagnostic-snapshot.json --run-id RUN_ID --job-id JOB_ID
+python -m tools.positioning_diagnostics --database-read --run-id RUN_ID --job-id JOB_ID
 ```
 
 Default snapshot mode needs no usable DB credentials or API key and opens no DB
@@ -204,7 +207,7 @@ the original replay payload is immutable with respect to variant construction.
 To execute a bounded batch only after explicit authorization:
 
 ```sh
-python -m app.diagnostics.positioning --snapshot /secure/incident.diagnostic-snapshot.json --run-id RUN_ID --job-id JOB_ID --live --max-calls 2 --case baseline --case no_core
+python -m tools.positioning_diagnostics --snapshot /secure/incident.diagnostic-snapshot.json --run-id RUN_ID --job-id JOB_ID --live --max-calls 2 --case baseline --case no_core
 ```
 
 `--live`, explicit `--case` selections and `--max-calls` are all required. Maximum
@@ -248,7 +251,13 @@ Core, schema, Quality Gate or retry change.
 
 Offline suite: diagnostic replay/privacy/guards plus POSITIONING output/seeds,
 graph adapter, Expert Core/integration, production worker and strategy builder.
-331 tests passed on the final code and tests. `git diff --check` passed.
+The original focused suite passed 331 tests, but full CI subsequently exposed two
+architecture-boundary failures (2847 passed, 2 failed). The standalone CLI is now
+in `tools/positioning_diagnostics.py`; no architecture-test exceptions or production
+dependency changes were added. The updated tests also run the public module CLI
+in a subprocess with real HTTP clients and DB sessions blocked and check output privacy.
+Final exact-HEAD CI and container-smoke results are recorded in PR #111.
+`git diff --check` is required before publishing the update.
 PostgreSQL enforcement is specified by the read-only transaction
 and its call-order test; a real production DB integration was not run here.
 Final diff review must verify only diagnostic/test/documentation/ignore additions

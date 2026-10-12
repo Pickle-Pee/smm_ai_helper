@@ -2,13 +2,17 @@
 import asyncio
 import copy
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
-from app.diagnostics.positioning import (
+from tools.positioning_diagnostics import (
     DiagnosticError, capture_request, live_probe, main, metadata,
     restore_database, restore_snapshot, variants,
 )
@@ -165,7 +169,7 @@ def test_offline_cli_no_network_safe_output(tmp_path, monkeypatch, capsys, caplo
 
 
 def test_db_reader_sets_read_only_before_select(monkeypatch):
-    from app.diagnostics import positioning as diagnostic
+    from tools import positioning_diagnostics as diagnostic
     import app.db
     statements = []
     class Session:
@@ -236,3 +240,37 @@ def test_live_one_post_no_retry_no_content(monkeypatch):
     assert result[0]["output_items_count"] == 0
     assert result[0]["request_id"] == "req_synthetic"
     assert result[0]["input_tokens"] == result[0]["output_tokens"] == result[0]["reasoning_tokens"] == 0
+
+
+def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_path):
+    source, jid = snapshot()
+    snapshot_path = tmp_path / "private.diagnostic-snapshot.json"
+    snapshot_path.write_text(json.dumps(source), encoding="utf-8")
+    guard_dir = tmp_path / "network_guard"
+    guard_dir.mkdir()
+    marker = tmp_path / "network_attempt"
+    (guard_dir / "sitecustomize.py").write_text(
+        "import os, httpx, app.db\n"
+        "from pathlib import Path\n"
+        "def blocked(*args, **kwargs):\n"
+        "    Path(os.environ['DIAGNOSTIC_NETWORK_MARKER']).write_text('attempt')\n"
+        "    raise RuntimeError('network forbidden in offline CLI test')\n"
+        "httpx.AsyncClient.__init__ = blocked\n"
+        "httpx.Client.__init__ = blocked\n"
+        "app.db.AsyncSessionLocal = blocked\n", encoding="utf-8")
+    env = dict(os.environ, PYTHONPATH=str(guard_dir) + os.pathsep + str(Path(__file__).resolve().parents[1]),
+               DIAGNOSTIC_NETWORK_MARKER=str(marker), OPENAI_API_KEY="CLI_PRIVATE_KEY",
+               OPENAI_BASE_URL="https://provider.invalid/v1",
+               DATABASE_URL="postgresql+asyncpg://offline:offline@localhost:9/offline",
+               TELEGRAM_BOT_TOKEN="CLI_PRIVATE_BOT_TOKEN")
+    completed = subprocess.run(
+        [sys.executable, "-m", "tools.positioning_diagnostics", "--snapshot", str(snapshot_path),
+         "--run-id", RUN_ID, "--job-id", jid],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, timeout=30)
+    assert completed.returncode == 0
+    assert not marker.exists()
+    report = json.loads(completed.stdout)
+    assert report["components"]["instructions"]["bytes"] == 53151
+    assert report["core_copies"] == 1 and "probes" not in report
+    for private in ("Supplied", "CLI_PRIVATE_KEY", "CLI_PRIVATE_BOT_TOKEN", "properties", "EXPERT_CORE_PRODUCTION"):
+        assert private not in completed.stdout + completed.stderr
