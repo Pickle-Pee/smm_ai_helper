@@ -5,7 +5,8 @@ import json
 from app.marketing_orchestrator.quality_gates.contracts import (
     BlockingReason, ClaimType, Confidence, EvidenceRecord, EvidenceSourceClass,
 )
-from app.module_registry import ModuleId
+from app.module_registry import ModuleId, ModuleRegistry
+from app.model_generation_policy import ModuleOutputBudget
 
 from .common import LocalEvidence, blocked, first_party_evidence, parent_claims, scoped_facts, stable_id
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
@@ -42,6 +43,12 @@ measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
 learning_record explicit in requested canonical outputs. At most three experiments."""
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
+
+    def output_budget_for(self, request) -> ModuleOutputBudget:
+        # Only the complete server-owned output contract receives extra headroom.
+        if set(request.expected_outputs) == set(ModuleRegistry.load("1.3.0").get(self.module_id).outputs):
+            return ModuleOutputBudget.EXPERIMENTS_FULL
+        return ModuleOutputBudget.GENERIC
 
     async def execute(self, request):
         early = self.prepare(request)

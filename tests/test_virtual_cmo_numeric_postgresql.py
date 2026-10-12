@@ -40,10 +40,14 @@ class DaycareProvider:
         self.calls.append(body)
         data = json.loads(body["input"][1]["content"])
         if "experiments" in body["text"]["format"]["schema"]["properties"]:
-            assert body["max_output_tokens"] == 4000
+            assert body["max_output_tokens"] == 16000
             cmo = next(u["result"] for u in data["upstream_results"] if u["result"]["module_id"] == "VIRTUAL_CMO")
             claim = cmo["normalized_result"]["claims"][0]
             assert json.loads(claim["value"])["numeric_context"][1]["quote"] == PRICE
+            if self.failure == "experiment_exhausted":
+                return httpx.Response(200, json={"status": "incomplete",
+                    "incomplete_details": {"reason": "max_output_tokens"}, "output": [],
+                    "usage": {"output_tokens": 16000, "output_tokens_details": {"reasoning_tokens": 128}}})
             refs = [claim["claim_id"]]
             payload = dict(outputs=[dict(output_name=name, kind="HYPOTHESIS", confidence="MEDIUM",
                 text="Проверить влияние сообщения на качество обращений.", evidence_ids=[], parent_claim_ids=refs)
@@ -104,7 +108,7 @@ class DaycareProvider:
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload, ensure_ascii=False)})
 
 
-@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete", "empty_incomplete", "exhausted_incomplete"])
+@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "experiment_exhausted", "incomplete", "empty_incomplete", "exhausted_incomplete"])
 def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, failure, caplog):
     provider = DaycareProvider(failure)
     install_transport(monkeypatch, provider)
@@ -202,12 +206,19 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
                 _, jobs, artifacts = await state(mvp_database, rid)
                 experiment = next(j for j in jobs if j.workflow_step == "experiments")
                 assert len(provider.calls) == 3
-                if failure in ("experiment_text", "experiment_signal"):
+                if failure in ("experiment_text", "experiment_signal", "experiment_exhausted"):
                     assert experiment.status is JobStatus.FAILED
                     assert not any(a.step == "experiments" for a in artifacts)
                     assert await fresh.advance(rid) == ()
                     assert len(provider.calls) == 3
-                    assert "rule=numerical_support_required" in caplog.text
+                    if failure == "experiment_exhausted":
+                        async with mvp_database() as session:
+                            assert (await session.get(JobExecution, experiment.job_id)).attempts == 1
+                        assert experiment.error == "execution_invalid"
+                        assert not await runtime.create_worker().once(experiment.job_id)
+                        assert len(provider.calls) == 3
+                    else:
+                        assert "rule=numerical_support_required" in caplog.text
                 else:
                     assert experiment.status is JobStatus.SUCCEEDED
                     artifact = next(a for a in artifacts if a.step == "experiments")

@@ -68,9 +68,11 @@ def test_main_composition_simultaneous_fixed_and_strategy(mvp_database, monkeypa
             fmt = payload["text"]["format"]
             expected = set(json.loads(payload["input"][1]["content"])["expected_outputs"])
             full_positioning = set(ModuleRegistry.load("1.3.0").get(ModuleId.POSITIONING).outputs)
+            full_experiments = set(ModuleRegistry.load("1.3.0").get(ModuleId.EXPERIMENTS).outputs)
             assert fmt["strict"] is True
             assert payload["max_output_tokens"] == (
-                16000 if expected == full_positioning or "main_growth_constraint" in expected else 4000)
+                16000 if expected in (full_positioning, full_experiments)
+                or "main_growth_constraint" in expected else 4000)
             text = await model(instruction=payload["input"][0]["content"], text=payload["input"][1]["content"],
                                response_schema=fmt["schema"])
             return httpx.Response(200, json={"status": "completed", "output_text": text})
@@ -127,7 +129,7 @@ def test_main_composition_simultaneous_fixed_and_strategy(mvp_database, monkeypa
             assert not process.done()
             _, jobs, artifacts = await state(mvp_database, rid)
             assert len(jobs) == len(artifacts) == len(model.calls) == len(provider_calls) == 5
-            assert [c["max_output_tokens"] for c in provider_calls].count(16000) == 2
+            assert [c["max_output_tokens"] for c in provider_calls].count(16000) == 3
             assert all(j.kind == "orchestration.module" and j.status is JobStatus.SUCCEEDED for j in jobs)
             fixed_run, fixed_jobs, _ = await state(mvp_database, fixed["run_id"])
             assert len(fixed_jobs) == 1 and fixed_jobs[0].kind == "marketing.step"
