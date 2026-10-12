@@ -141,22 +141,27 @@ def _graph():
         model_call=forbidden, analyzer=None, registry_version="1.3.0"))
 
 
-async def restore(session, *, run_id, job_id):
+async def restore(session, *, run_id, job_id, module_id=None):
     """Reuse SELECT-only production validators; terminal run status is irrelevant."""
     from app.module_execution import ModuleExecutionRequest
     from app.module_registry import ModuleId
     from app.orchestration_runtime.contracts import module_job_id
+    module_id = module_id or ModuleId.POSITIONING
     graph = _graph()
     revision, plan = await graph._plan(session, run_id)
     jobs, accepted = await graph._graph_state(session, run_id, revision, plan)
     nodes = [n for n in plan.nodes if module_job_id(run_id, revision, n.node_id) == job_id]
-    if len(nodes) != 1 or nodes[0].module_id is not ModuleId.POSITIONING:
-        raise DiagnosticError("positioning_job_not_found")
+    if len(nodes) != 1 or nodes[0].module_id is not module_id:
+        raise DiagnosticError("module_job_not_found")
     node = nodes[0]
     if node.node_id not in jobs or not graph._ready(plan, node, jobs, accepted):
         raise DiagnosticError("dependency_barrier_unsatisfied")
     packet = node.context_packet
-    coverage = graph._coverage(plan, jobs, accepted)
+    # The target had not failed when its original request was dispatched.
+    # In particular EXPERIMENTS is optional: its own later failure must not
+    # appear in the reconstructed pre-execution evidence coverage.
+    coverage = graph._coverage(plan, {key: value for key, value in jobs.items()
+                                      if key != node.node_id}, accepted)
     if coverage is not None:
         packet = replace(packet, open_questions=(*packet.open_questions,
             "Evidence coverage (limitations, not factual claims): " + json.dumps(coverage, sort_keys=True)))
@@ -165,11 +170,13 @@ async def restore(session, *, run_id, job_id):
         upstream_results=graph._upstream(plan, node, accepted))
 
 
-async def restore_snapshot(snapshot, *, run_id, job_id):
+async def restore_snapshot(snapshot, *, run_id, job_id, module_id=None):
     """Local table projection: no DB session or connection is opened."""
+    from app.module_registry import ModuleId
     from app.models import Job, JobStatus, MarketingArtifact, OrchestrationPlanRecord
+    module_id = module_id or ModuleId.POSITIONING
     from app.orchestration_runtime.contracts import WORKFLOW_TYPE
-    if (snapshot["schema_version"] != "positioning_diagnostic_snapshot.v1"
+    if (snapshot["schema_version"] != module_id.value.lower() + "_diagnostic_snapshot.v1"
             or snapshot["run"]["run_id"] != run_id
             or snapshot["run"]["workflow_type"] != WORKFLOW_TYPE):
         raise DiagnosticError("snapshot_identity_mismatch")
@@ -206,10 +213,10 @@ async def restore_snapshot(snapshot, *, run_id, job_id):
                 raise DiagnosticError("unexpected_snapshot_query")
             return SimpleNamespace(all=lambda: rows)
 
-    return await restore(SnapshotSession(), run_id=run_id, job_id=job_id)
+    return await restore(SnapshotSession(), run_id=run_id, job_id=job_id, module_id=module_id)
 
 
-async def restore_database(*, run_id, job_id):
+async def restore_database(*, run_id, job_id, module_id=None):
     from sqlalchemy import select, text
     from app.db import AsyncSessionLocal, engine
     from app.models import MarketingRun
@@ -221,7 +228,7 @@ async def restore_database(*, run_id, job_id):
                 MarketingRun.run_id == run_id, MarketingRun.workflow_type == WORKFLOW_TYPE))
             if run is None:
                 raise DiagnosticError("run_not_found")
-            return await restore(session, run_id=run_id, job_id=job_id)
+            return await restore(session, run_id=run_id, job_id=job_id, **({"module_id": module_id} if module_id else {}))
     finally:
         await engine.dispose()
 
