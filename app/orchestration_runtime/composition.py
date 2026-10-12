@@ -56,7 +56,8 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
     if metadata.version != "1.3.0" or sum(d.execution_binding is not None for d in metadata.descriptors) != 6:
         raise ValueError("Production graph requires exactly six Registry 1.3.0 bindings")
     executors = build_module_executor_registry(model_call=model_call, analyzer=analyzer,
-        market_analyzer=analyzer, registry_version="1.3.0")
+        market_analyzer=analyzer, registry_version="1.3.0",
+        positioning_schema_projection=settings.POSITIONING_SCHEMA_PROJECTION_ENABLED)
     validate_executor_coherence(metadata, executors)
     service = GraphExecutionService(sessions, executors=executors, queue=queue,
         lease_seconds=settings.GRAPH_LEASE_SECONDS, max_attempts=3)

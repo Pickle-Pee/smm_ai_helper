@@ -263,7 +263,7 @@ def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_p
                DIAGNOSTIC_NETWORK_MARKER=str(marker), OPENAI_API_KEY="CLI_PRIVATE_KEY",
                OPENAI_BASE_URL="https://provider.invalid/v1",
                DATABASE_URL="postgresql+asyncpg://offline:offline@localhost:9/offline",
-               TELEGRAM_BOT_TOKEN="CLI_PRIVATE_BOT_TOKEN")
+               TELEGRAM_BOT_TOKEN="CLI_PRIVATE_BOT_TOKEN", POSITIONING_SCHEMA_PROJECTION_ENABLED="true")
     completed = subprocess.run(
         [sys.executable, "-m", "tools.positioning_diagnostics", "--snapshot", str(snapshot_path),
          "--run-id", RUN_ID, "--job-id", jid, *(["--schema-only"] if schema_only else [])],
@@ -273,6 +273,7 @@ def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_p
     report = json.loads(completed.stdout)
     assert report["components"]["instructions"]["bytes"] == 53151
     assert report["core_copies"] == 1 and "probes" not in report
+    assert report["baseline_mode"] == "original_unprojected"
     if schema_only:
         from tools.positioning_schema_diagnostics import SCHEMA_CASES
         assert set(report["matrix"]) == set(report["schema_matrix"]) == {"baseline", *SCHEMA_CASES}

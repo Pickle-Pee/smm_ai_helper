@@ -9,9 +9,8 @@ from app.module_execution.executors.schemas import (
     PositioningOutput, PositioningWithoutJobOutput, PositioningWithoutAlternativeOutput, PositioningWithoutSeedsOutput,
 )
 from app.module_execution.executors.support_schema import support_response_schema
-from tools.positioning_schema_diagnostics import (
-    SchemaDiagnosticError, collapse_single_support_anyof, schema_metadata, schema_variants,
-)
+from app.module_execution.executors.provider_schema import SchemaProjectionError, collapse_single_support_anyof
+from tools.positioning_schema_diagnostics import schema_metadata, schema_variants
 from tests.test_positioning_schema_diagnostics import payload
 
 
@@ -161,7 +160,7 @@ def test_refuses_unproved_differences_without_mutating_input(corruption):
         target["properties"]["text"]["unevaluatedProperties"] = False
         branch["properties"]["text"]["unevaluatedProperties"] = False
     original = deepcopy(schema)
-    with pytest.raises(SchemaDiagnosticError) as caught:
+    with pytest.raises(SchemaProjectionError) as caught:
         collapse_single_support_anyof(schema)
     assert str(caught.value) == "single_support_anyof_not_equivalent"
     assert schema == original

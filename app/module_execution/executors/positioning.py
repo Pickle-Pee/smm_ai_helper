@@ -5,7 +5,10 @@ from app.model_generation_policy import ModuleOutputBudget
 
 from .common import (
     BaseExecutor, SemanticRule, StatementSemanticsError, blocked, facts_for,
-    first_party_evidence, scoped_facts,
+    first_party_evidence, scoped_facts, log,
+)
+from .provider_schema import (
+    SchemaProjectionError, collapse_single_support_anyof, single_support_anyof_count, schema_measurement,
 )
 from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
@@ -46,6 +49,35 @@ points_of_parity must be HYPOTHESIS, including when citing accepted factual pare
 Never treat an upstream hypothesis as observed evidence. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
+
+    def __init__(self, *, model_call, composer=None, provider_schema_projection=False):
+        if type(provider_schema_projection) is not bool:
+            raise TypeError("Expected boolean POSITIONING projection policy")
+        super().__init__(model_call=model_call, composer=composer)
+        self._provider_schema_projection = provider_schema_projection
+
+    def provider_schema_for(self, request, validation_schema):
+        collapsed = 0
+        if self._provider_schema_projection and single_support_anyof_count(validation_schema):
+            try:
+                provider_schema = collapse_single_support_anyof(validation_schema)
+            except SchemaProjectionError:
+                log.warning("POSITIONING schema projection rejected execution_id=%s code=equivalence_unproved",
+                            request.execution_id)
+                raise
+            collapsed = single_support_anyof_count(validation_schema) - single_support_anyof_count(provider_schema)
+        else:
+            provider_schema = super().provider_schema_for(request, validation_schema)
+        original = schema_measurement(validation_schema)
+        provider = schema_measurement(provider_schema)
+        fields = {"module_id": self.module_id.value, "execution_id": request.execution_id,
+            "schema_projection_enabled": self._provider_schema_projection,
+            "schema_projection_applied": collapsed > 0, "schema_projection_nodes": collapsed,
+            "validation_schema_bytes": original["bytes"], "validation_schema_sha256": original["sha256"],
+            "provider_schema_bytes": provider["bytes"], "provider_schema_sha256": provider["sha256"]}
+        log.info("POSITIONING provider schema " + " ".join(f"{key}=%s" for key in fields),
+                 *fields.values(), extra=fields)
+        return provider_schema
 
     def output_budget_for(self, request):
         # Preparation has checked the requested names. Only the complete
