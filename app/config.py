@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = Field(..., min_length=1)
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
+    # Rollout gate: original server schemas and disabled-by-default provider projection.
+    POSITIONING_SCHEMA_PROJECTION_ENABLED: bool = False
+
     DEFAULT_TEXT_MODEL_LIGHT: str = "gpt-5-mini"
     DEFAULT_TEXT_MODEL_HARD: str = "gpt-5"
     DEFAULT_IMAGE_MODEL: str = "gpt-image-1"

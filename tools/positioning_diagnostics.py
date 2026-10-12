@@ -57,7 +57,7 @@ async def capture_request(request, *, model):
         raise _Captured()
 
     try:
-        await PositioningExecutor(model_call=capture).execute(request)
+        await PositioningExecutor(model_call=capture, provider_schema_projection=False).execute(request)
     except _Captured:
         pass
     if not arguments:
@@ -117,6 +117,7 @@ def metadata(replay):
         components[name] = measurement(data[name])
     sections = list(re.finditer(r"^# (\d+)\. .+$", core, re.MULTILINE))
     return {
+        "baseline_mode": "original_unprojected",
         "components": components, "expert_core_version": EXPERT_CORE_VERSION,
         "facts_count": len(data["context"]["known_facts"]),
         "evidence_ids_count": len(data["local_evidence"]),

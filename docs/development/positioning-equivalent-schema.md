@@ -144,3 +144,6 @@ boundary. The full original server schema, Pydantic parsing, provenance and
 POSITIONING semantics must remain authoritative, with all regression/quality
 checks retained. Until then this is an equivalent offline diagnostic candidate,
 not a demonstrated remedy for Structured Outputs.
+
+Production follow-up: [disabled-by-default provider projection and rollback](positioning-provider-projection.md).
+Diagnostic baseline remains explicitly original_unprojected.

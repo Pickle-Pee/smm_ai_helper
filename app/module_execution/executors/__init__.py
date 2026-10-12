@@ -28,11 +28,13 @@ def validate_executor_coherence(metadata: ModuleRegistry, executors: ModuleExecu
 
 def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyzer: SiteAnalyzer | None,
                                    composer=None, registry_version=EXECUTABLE_REGISTRY_VERSION,
-                                   market_analyzer: SiteAnalyzer | None = None) -> ModuleExecutorRegistry:
+                                   market_analyzer: SiteAnalyzer | None = None,
+                                   positioning_schema_projection: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
     implementations = [
         CompetitorAnalysisExecutor(model_call=model_call, analyzer=analyzer, composer=composer),
-        PositioningExecutor(model_call=model_call, composer=composer),
+        PositioningExecutor(model_call=model_call, composer=composer,
+                            provider_schema_projection=positioning_schema_projection),
         CreatorExecutor(model_call=model_call, composer=composer),
     ]
     if registry_version in {"1.2.0", "1.3.0"}:
