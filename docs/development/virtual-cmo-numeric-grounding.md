@@ -168,9 +168,13 @@ separate and is not used for statement semantics.
 provider instructions, input serialization, response schema, model, token policy and
 single-attempt behavior are identical to the previous builder. With it enabled, only
 `numeric_quote_catalog` and `numeric_quote_catalog_guidance` are added to user data.
-The catalog is transient model input, never persisted. Server-side validation still
-requires exact complete quotes and a corresponding statement citation; a hint is not
-source authority. Site attribution and parent hypothesis status remain unchanged.
+The catalog is transient model input, never persisted. Catalog mode now also opts
+into [numeric citation binding](virtual-cmo-numeric-binding.md), an explicit server
+acceptance policy change: an exact model-selected pair can supply its omitted
+repeated statement citation after the original schema checks. Complete quotes,
+mandatory strategic parents and all original validation/gates remain required;
+a hint is not source authority. Site attribution and parent hypothesis status
+remain unchanged.
 
 The catalog uses `context_units()` for already scoped local evidence and
 `parent_context_units()` for accepted, within-scope parent claims. It sorts identities

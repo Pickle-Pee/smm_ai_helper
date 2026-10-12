@@ -3,6 +3,7 @@ import asyncio
 import copy
 import json
 import logging
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,6 +16,55 @@ from tests.test_graph_model_adapter import install_transport
 from tests.test_strategy_builder import StrategyModel
 from tools import positioning_diagnostics as shared
 from tools import virtual_cmo_diagnostics as diagnostic
+
+
+@pytest.mark.parametrize("replay_mode", ["baseline", "catalog"])
+@pytest.mark.parametrize("reject_quality", [False, True])
+def test_uncited_exact_quote_replay_uses_original_pipeline_and_one_post(
+        monkeypatch, replay_mode, reject_quality):
+    from tests.test_module_executors import fact
+    from tests.test_virtual_cmo_numeric_grounding import PRICE
+    req = restored()
+    req = replace(req, context_packet=replace(req.context_packet,
+        known_facts=(*req.context_packet.known_facts, fact("binding_price", PRICE))))
+    replay = asyncio.run(diagnostic.capture_request(req, mode=replay_mode))
+    model = StrategyModel(use_parents=True)
+    output = json.loads(asyncio.run(model(**replay.arguments)))
+    data = json.loads(replay.arguments["text"])
+    eid = next(e["evidence_id"] for e in data["local_evidence"] if e["value"] == PRICE)
+    statement = output["outputs"][1]
+    statement["evidence_ids"] = []
+    statement["numeric_context"] = [dict(support_id=eid, quote=PRICE)]
+    calls = []
+    def respond(wire):
+        calls.append(wire.content)
+        return httpx.Response(200, json={"output_text": json.dumps(output)})
+    install_transport(monkeypatch, respond)
+    import app.orchestration_runtime.service as service
+    evaluate = service.evaluate_result
+    checked = []
+    def gates(*args):
+        result = evaluate(*args)
+        checked.append(result)
+        if reject_quality:
+            result["accepted_result_ids"] = []
+        return result
+    monkeypatch.setattr(service, "evaluate_result", gates)
+    report = asyncio.run(diagnostic.replay_once(req, replay,
+        expected_payload_sha256=diagnostic.measurement(replay.payload)["sha256"],
+        authorized=True, mode=replay_mode, catalog_hash_approved=True))
+    assert len(calls) == report["provider_calls"] == 1
+    assert calls == [httpx.Request("POST", "https://provider.test/v1/responses", json=replay.payload).content]
+    assert PRICE not in json.dumps(report) and eid not in json.dumps(report)
+    if replay_mode == "baseline":
+        assert not checked and not report["server_contract_valid"]
+        assert not report["quality_gates_checked"]
+        assert report["numeric_context_reason"] == "support_not_cited"
+        assert report["output_index"] == 1 and report["numeric_context_index"] == 0
+    else:
+        assert len(checked) == 1
+        assert report["server_contract_valid"] and report["quality_gates_checked"]
+        assert report["quality_accepted"] is not reject_quality
 
 
 def snapshot():

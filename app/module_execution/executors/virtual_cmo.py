@@ -1,5 +1,6 @@
 """Bounded strategic synthesis, never planning, routing or scheduling."""
 from dataclasses import replace
+import logging
 
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
 from app.module_registry import ModuleId
@@ -12,8 +13,14 @@ from .common import (
 from .support_schema import SupportRequirement
 from .intelligence_common import IntelligenceExecutor
 from .intelligence_schemas import StrategyOutput
-from .numeric_grounding import validate_numeric_context, context_attribution, numeric_quote_catalog
+from .numeric_grounding import (
+    validate_numeric_context, context_attribution, numeric_quote_catalog,
+    bind_numeric_context_citations,
+)
 from .claim_support import StrategyClaim, StoredNumericContext
+
+
+log = logging.getLogger(__name__)
 
 
 class VirtualCMOExecutor(IntelligenceExecutor):
@@ -68,6 +75,15 @@ without economics."""
 
     def output_budget_for(self, request) -> ModuleOutputBudget:
         return ModuleOutputBudget.VIRTUAL_CMO
+
+    def normalize_output_payload(self, request, payload, evidence, parents):
+        if not self._numeric_quote_catalog_enabled:
+            return payload
+        normalized, count = bind_numeric_context_citations(
+            payload, {e.record.evidence_id: e for e in evidence}, parents)
+        if count:
+            log.info("Module output normalized module=VIRTUAL_CMO code=numeric_context_citation_bound normalized_reference_count=%d", count)
+        return normalized
 
     def support_requirement_for(self, request) -> SupportRequirement:
         return (SupportRequirement.PARENT_REQUIRED if parent_claims(request)
