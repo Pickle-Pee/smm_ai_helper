@@ -220,3 +220,6 @@ content have safe rejection/metadata tests. CLI subprocess tests block real HTTP
 clients and DB sessions in both default and schema-only modes. Existing read-only,
 live opt-in/call cap, architecture and production regression tests are retained.
 Full exact-HEAD CI and container-smoke results are recorded in this PR.
+
+Follow-up: [equivalent single-support-anyOf collapse](positioning-equivalent-schema.md)
+preserves all restrictions and requires live A/B results before any production recommendation.

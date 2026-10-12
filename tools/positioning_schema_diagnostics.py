@@ -1,16 +1,17 @@
 """Schema-only ablations and content-free structural measurements.
 
-These are diagnostic relaxations, never provider-compatibility certification or
-replacement server contracts. Traversal visits schema positions, not JSON literals.
+These are diagnostic transformations, never provider-compatibility certification
+or replacement server contracts. Traversal visits schema positions, not JSON literals.
 """
 from collections import Counter
 from copy import deepcopy
+import json
 
 
 SCHEMA_CASES = (
     "schema_no_support_anyof", "schema_no_string_bounds", "schema_no_array_bounds",
     "schema_no_support_enums", "schema_no_semantic_enums", "schema_inline_refs",
-    "schema_flatten_output_union", "schema_no_annotations",
+    "schema_flatten_output_union", "schema_no_annotations", "schema_collapse_single_support_anyof",
 )
 MAPS = ("properties", "$defs", "definitions", "patternProperties", "dependentSchemas")
 LISTS = ("anyOf", "oneOf", "allOf", "prefixItems")
@@ -57,6 +58,94 @@ def is_support_or(node):
                 and set(branch.get("properties", {})) == set(properties)
                 and any(branch["properties"][key].get("minItems", 0) > 0
                         for key in ("evidence_ids", "parent_claim_ids")) for branch in branches))
+
+
+def collapse_single_support_anyof(schema):
+    """Exact rewrite of the generated single-branch support conjunction.
+
+    Prove that parent and branch are identical closed, fully required objects,
+    apart from object title annotations and support-array minItems floors. Their
+    conjunction is then the parent with max(parent floor, branch floor). Refuse
+    any other difference; this is intentionally not a general schema optimizer.
+    The caller's schema is never mutated, including on a later proof failure.
+    """
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError
+
+    def fail():
+        raise SchemaDiagnosticError("single_support_anyof_not_equivalent") from None
+
+    def validate(value):
+        try:
+            Draft202012Validator.check_schema(value)
+        except (SchemaError, TypeError, ValueError):
+            fail()
+
+    if type(schema) is not dict:
+        fail()
+    validate(schema)
+    result = deepcopy(schema)
+    support_fields = ("evidence_ids", "parent_claim_ids")
+    object_keys = {"type", "properties", "required", "additionalProperties", "title"}
+    for node in list(nodes(result)):
+        branches = node.get("anyOf", [])
+        if len(branches) != 1 or not set(support_fields) <= node.get("properties", {}).keys():
+            continue
+        parent = {key: deepcopy(value) for key, value in node.items() if key != "anyOf"}
+        branch = deepcopy(branches[0])
+        if not isinstance(branch, dict):
+            fail()
+        for value in (parent, branch):
+            if (not set(value) <= object_keys or value.get("type") != "object"
+                    or value.get("additionalProperties") is not False
+                    or set(value.get("required", [])) != set(value.get("properties", {}))):
+                fail()
+        # Scope/evaluation-dependent keywords are outside this local proof.
+        for value in (parent, branch):
+            if any(any(key in sub for key in ("$id", "$anchor", "$dynamicAnchor", "$dynamicRef",
+                    "unevaluatedProperties", "unevaluatedItems")) for sub in nodes(value)):
+                fail()
+        normalized_parent, normalized_branch = deepcopy(parent), deepcopy(branch)
+        normalized_parent.pop("title", None)
+        normalized_branch.pop("title", None)
+        floors = {}
+        for name in support_fields:
+            left = normalized_parent["properties"].get(name)
+            right = normalized_branch["properties"].get(name)
+            if not isinstance(left, dict) or not isinstance(right, dict):
+                fail()
+            values = []
+            for prop in (left, right):
+                if prop.get("type") != "array":
+                    fail()
+                minimum = prop.pop("minItems", 0)
+                if type(minimum) is not int or minimum < 0:
+                    fail()
+                values.append(minimum)
+            floors[name] = max(values)
+        # Python equality conflates true with 1. Use JSON-sensitive structural
+        # equality so enum/const differences can never pass the proof.
+        try:
+            same = json.dumps(normalized_parent, sort_keys=True, allow_nan=False) == json.dumps(
+                normalized_branch, sort_keys=True, allow_nan=False)
+        except (TypeError, ValueError):
+            fail()
+        if not same:
+            fail()
+        if not any(floors.values()):
+            fail()
+        for name, minimum in floors.items():
+            prop = parent["properties"][name]
+            if minimum > prop.get("maxItems", minimum):
+                fail()
+            # Zero is the default; avoid adding a redundant floor to untouched
+            # fields. Keep explicit parent/branch zero floors when present.
+            if minimum or "minItems" in prop or "minItems" in branch["properties"][name]:
+                prop["minItems"] = minimum
+        node.clear()
+        node.update(parent)
+    validate(result)
+    return result
 
 
 def inline_refs(schema):
@@ -157,7 +246,9 @@ def schema_variants(payload):
     for case in SCHEMA_CASES:
         candidate = deepcopy(payload)
         schema = candidate["text"]["format"]["schema"]
-        if case == "schema_inline_refs":
+        if case == "schema_collapse_single_support_anyof":
+            candidate["text"]["format"]["schema"] = collapse_single_support_anyof(schema)
+        elif case == "schema_inline_refs":
             candidate["text"]["format"]["schema"] = inline_refs(schema)
         elif case == "schema_flatten_output_union":
             flatten_output_union(schema)

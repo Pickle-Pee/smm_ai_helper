@@ -44,7 +44,11 @@ def test_schema_variants_change_only_schema_and_preserve_source(schema, case):
     before = deepcopy(original)
     candidate = schema_variants(original)[case]
     assert original == before
-    assert candidate["text"]["format"]["schema"] != original["text"]["format"]["schema"]
+    changed = candidate["text"]["format"]["schema"] != original["text"]["format"]["schema"]
+    if case == "schema_collapse_single_support_anyof" and schema_metadata(schema)["support_allowlist_counts"][1]:
+        assert not changed  # Two-branch support ORs are deliberately preserved.
+    else:
+        assert changed
     actual = deepcopy(candidate)
     actual["text"]["format"]["schema"] = deepcopy(schema)
     assert actual == original  # Includes instructions, context, model, budget, reasoning, strict/name.
