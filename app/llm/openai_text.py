@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from enum import Enum
 from typing import Any, Dict, List, Tuple
 
@@ -16,6 +18,7 @@ RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
 class ModelResponseFailureReason(str, Enum):
+    INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS = "incomplete_empty_max_output_tokens"
     INCOMPLETE_MAX_OUTPUT_TOKENS = "incomplete_max_output_tokens"
     INCOMPLETE_CONTENT_FILTER = "incomplete_content_filter"
     INCOMPLETE_OTHER = "incomplete_other"
@@ -41,6 +44,15 @@ def _single_attempt_output(data: Any) -> str:
         reason = details.get("reason") if isinstance(details, dict) else None
         if reason == "max_output_tokens":
             failure = ModelResponseFailureReason.INCOMPLETE_MAX_OUTPUT_TOKENS
+            usage = data.get("usage")
+            details = usage.get("output_tokens_details") if isinstance(usage, dict) else None
+            output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+            reasoning_tokens = details.get("reasoning_tokens") if isinstance(details, dict) else None
+            output = data.get("output")
+            if (type(output_tokens) is int and output_tokens == 0
+                    and type(reasoning_tokens) is int and reasoning_tokens == 0
+                    and isinstance(output, list) and not output):
+                failure = ModelResponseFailureReason.INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS
         elif reason == "content_filter":
             failure = ModelResponseFailureReason.INCOMPLETE_CONTENT_FILTER
         else:
@@ -82,15 +94,35 @@ def _single_attempt_output(data: Any) -> str:
 
 
 def _log_response_rejection(
-    reason: ModelResponseFailureReason, model: str, budget: int, data: Any
+    reason: ModelResponseFailureReason, model: str, budget: int, data: Any,
+    *, request_id: str | None, payload: dict[str, Any],
 ) -> None:
     fields: dict[str, Any] = {
         "reason": reason.value,
         "model": model,
         "max_output_tokens": budget,
     }
+    # Provider correlation IDs are bounded opaque labels, never arbitrary headers.
+    if request_id is not None and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", request_id):
+        fields["x_request_id"] = request_id
+    fields["input_text_bytes"] = sum(
+        len(message["content"].encode("utf-8")) for message in payload["input"]
+        if message.get("role") not in ("system", "developer")
+    )
+    fields["instructions_bytes"] = sum(
+        len(message["content"].encode("utf-8")) for message in payload["input"]
+        if message.get("role") in ("system", "developer")
+    )
+    schema = payload.get("text", {}).get("format", {}).get("schema")
+    fields["json_schema_bytes"] = (
+        len(json.dumps(schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        if schema is not None else 0
+    )
     usage = data.get("usage") if isinstance(data, dict) else None
     if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens")
+        if type(input_tokens) is int and 0 <= input_tokens <= 2 ** 31 - 1:
+            fields["input_tokens"] = input_tokens
         output_tokens = usage.get("output_tokens")
         if type(output_tokens) is int and 0 <= output_tokens <= budget:
             fields["output_tokens"] = output_tokens
@@ -285,7 +317,10 @@ async def chat(
                             raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE) from None
                         content = _single_attempt_output(data)
                     except ModelResponseError as exc:
-                        _log_response_rejection(exc.reason, model, payload["max_output_tokens"], data)
+                        _log_response_rejection(
+                            exc.reason, model, payload["max_output_tokens"], data,
+                            request_id=resp.headers.get("x-request-id"), payload=payload,
+                        )
                         raise exc from None
                     return content, data.get("usage", {}) or {}
 

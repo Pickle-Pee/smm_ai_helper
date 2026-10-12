@@ -115,12 +115,13 @@ def test_explicit_contract_failure_is_terminal_even_with_transient_cause(error):
 
 
 @pytest.mark.parametrize("reason", list(ModelResponseFailureReason))
-def test_model_response_reason_is_terminal_even_with_transient_cause(reason):
+def test_model_response_reason_controls_retry_even_with_transient_cause(reason):
     error = ModelResponseError(reason)
     error.__cause__ = httpx.ReadTimeout("private provider text")
     wrapper = RuntimeError()
     wrapper.__cause__ = error
-    assert not transient(error) and not transient(wrapper)
+    retryable = reason is ModelResponseFailureReason.INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS
+    assert transient(error) is retryable and transient(wrapper) is retryable
     item = SimpleNamespace(run_id="run.test", job_id="job.test")
     service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
         claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), object())),
@@ -128,7 +129,8 @@ def test_model_response_reason_is_terminal_even_with_transient_cause(reason):
     worker = ModuleGraphWorker(service)
     worker.dispatcher.dispatch = AsyncMock(side_effect=error)
     assert asyncio.run(worker.once())
-    service.fail.assert_awaited_once_with(item, code="execution_invalid", retryable=False)
+    service.fail.assert_awaited_once_with(
+        item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
     service.finish.assert_not_awaited()
 
 

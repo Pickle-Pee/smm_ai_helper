@@ -3,6 +3,7 @@ import asyncio
 import json
 import uuid
 from dataclasses import replace
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -20,7 +21,7 @@ from tests.postgresql_support import mvp_database
 from tests.positioning_provider import PositioningProvider
 from tests.test_copilot_application import intent_model
 from tests.test_graph_model_adapter import install_transport
-from tests.test_graph_postgresql import cleanup, state
+from tests.test_graph_postgresql import Clock, cleanup, state
 from tests.test_production_graph_worker import queue
 from tests.test_strategy_builder_postgresql import execute_node
 from tests.test_virtual_cmo_numeric_grounding import (
@@ -61,10 +62,11 @@ class DaycareProvider:
             return self.positioning(request)
         schema = body["text"]["format"]["schema"]
         assert body["max_output_tokens"] == 16000
-        if self.failure == "incomplete":
+        if self.failure in ("incomplete", "empty_incomplete", "exhausted_incomplete"):
+            tokens = 16000 if self.failure == "exhausted_incomplete" else 0
             return httpx.Response(200, json={"status": "incomplete",
                 "incomplete_details": {"reason": "max_output_tokens"},
-                "usage": {"output_tokens": 0, "output_tokens_details": {"reasoning_tokens": 0}},
+                "usage": {"output_tokens": tokens, "output_tokens_details": {"reasoning_tokens": tokens}},
                 "output": []})
         outputs = [dict(output_name=name, kind="HYPOTHESIS", confidence="MEDIUM",
             text="Проверить влияние форматов посещения на спрос.", items=["Сопоставить спрос с расходами без прогноза прибыли."],
@@ -102,13 +104,15 @@ class DaycareProvider:
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload, ensure_ascii=False)})
 
 
-@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete"])
+@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete", "empty_incomplete", "exhausted_incomplete"])
 def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, failure, caplog):
     provider = DaycareProvider(failure)
     install_transport(monkeypatch, provider)
     async def exercise():
         runtime = build_production_graph_runtime(queue=queue(), sessions=mvp_database)
         service = runtime.service
+        clock = Clock()
+        service.clock = clock
         async with mvp_database() as session, session.begin():
             user = User(telegram_id=int(uuid.uuid4().hex[:12], 16))
             session.add(user)
@@ -126,25 +130,63 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
             rid = response.workflow.run_id
             await execute_node(service, rid, "positioning")
             await execute_node(service, rid, "virtual_cmo")
+            if failure == "incomplete":
+                async def assert_waiting():
+                    run, jobs, artifacts = await state(mvp_database, rid)
+                    cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
+                    assert run.status == "queued"
+                    assert cmo.status is JobStatus.RUNNING
+                    assert not any(a.step == "virtual_cmo" for a in artifacts)
+                    assert not any(j.workflow_step == "experiments" for j in jobs)
+                    async with mvp_database() as session:
+                        execution = await session.get(JobExecution, cmo.job_id)
+                        assert execution.attempts == 1
+                        assert execution.available_at == available_at
+                    assert len(provider.calls) == 2
+                    return cmo
+
+                available_at = clock() + timedelta(seconds=5)
+                cmo = await assert_waiting()
+                worker = runtime.create_worker()
+                assert not await worker.once(cmo.job_id)
+                await assert_waiting()
+                clock.tick(4)
+                assert clock() < available_at
+                assert not await worker.once(cmo.job_id)
+                await assert_waiting()
+                return
+            if failure == "empty_incomplete":
+                for delay in (5, 10):
+                    run, jobs, artifacts = await state(mvp_database, rid)
+                    cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
+                    assert run.status == "queued" and cmo.status is JobStatus.RUNNING
+                    assert not await runtime.create_worker().once(cmo.job_id)
+                    clock.tick(delay)
+                    assert await runtime.create_worker().once(cmo.job_id)
             run, jobs, artifacts = await state(mvp_database, rid)
             cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
-            assert len(provider.calls) == 2  # One provider call for each required node.
-            if failure in ("text", "items", "combination", "incomplete"):
+            expected_calls = 4 if failure == "empty_incomplete" else 2
+            assert len(provider.calls) == expected_calls
+            if failure in ("text", "items", "combination", "exhausted_incomplete", "empty_incomplete"):
                 assert run.status == "failed"
                 assert cmo.status is JobStatus.FAILED
                 assert not any(a.step == "virtual_cmo" for a in artifacts)
                 assert not any(j.workflow_step == "experiments" for j in jobs)
-                if failure != "incomplete":
+                if failure not in ("exhausted_incomplete", "empty_incomplete"):
                     assert "rule=numerical_support_required field=" + (
                         "numeric_context" if failure == "combination" else failure) in caplog.text
                 else:
                     async with mvp_database() as session:
-                        assert (await session.get(JobExecution, cmo.job_id)).attempts == 1
-                    assert cmo.error == "execution_invalid"
+                        assert (await session.get(JobExecution, cmo.job_id)).attempts == (
+                            3 if failure == "empty_incomplete" else 1)
+                    assert cmo.error == ("provider_transient" if failure == "empty_incomplete" else "execution_invalid")
+                    if failure == "empty_incomplete":
+                        assert provider.calls[1] == provider.calls[2] == provider.calls[3]
+                        assert not await runtime.create_worker().once(cmo.job_id)
                 assert RECOMMENDATION not in caplog.text
                 # Poll/advance cannot turn a semantic rejection into a retry.
                 assert await service.advance(rid) == ()
-                assert len(provider.calls) == 2
+                assert len(provider.calls) == expected_calls
             else:
                 assert cmo.status is JobStatus.SUCCEEDED
                 assert next(j for j in jobs if j.workflow_step == "experiments").status is JobStatus.PENDING
