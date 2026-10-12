@@ -16,8 +16,10 @@ import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from tools.positioning_schema_diagnostics import SCHEMA_CASES, schema_metadata, schema_variants
 
-CASES = ("baseline", "no_core", "small_context", "simple_schema", "alternate_model")
+
+CASES = ("baseline", "no_core", "small_context", "simple_schema", "alternate_model", *SCHEMA_CASES)
 HARD_CALL_LIMIT = 4
 SNAPSHOT_LIMIT = 16 * 1024 * 1024
 
@@ -124,6 +126,7 @@ def metadata(replay):
         "core_sections": [dict(index=i + 1, **measurement(core[m.start():sections[i + 1].start()
                           if i + 1 < len(sections) else len(core)])) for i, m in enumerate(sections)],
         "core_copies": instruction.count(core),
+        "schema_structure": schema_metadata(payload["text"]["format"]["schema"]),
     }
 
 
@@ -226,7 +229,8 @@ def variants(replay, *, alternate_model=None):
     """One factor per case; no changes to production or original payload."""
     from app.prompts.expert_core import load_expert_core
     baseline = replay.payload
-    result = {name: copy.deepcopy(baseline) for name in CASES if name != "alternate_model" or alternate_model}
+    result = {name: copy.deepcopy(baseline) for name in CASES
+              if name not in SCHEMA_CASES and (name != "alternate_model" or alternate_model)}
     result["no_core"]["input"][0]["content"] = baseline["input"][0]["content"].replace(load_expert_core(), "", 1)
     # Remove business context, but preserve support identities and output slots.
     result["small_context"]["input"][1]["content"] = compact({
@@ -248,6 +252,7 @@ def variants(replay, *, alternate_model=None):
         "type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
     if alternate_model:
         result["alternate_model"]["model"] = alternate_model
+    result.update(schema_variants(baseline))
     return result
 
 
@@ -298,13 +303,16 @@ def main(argv=None):
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--model", default="gpt-5-mini", help="Incident model; memory-only diagnostic setting")
     parser.add_argument("--alternate-model")
+    parser.add_argument("--schema-only", action="store_true", help="Baseline and single-group schema variants only")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--case", action="append", choices=CASES)
     parser.add_argument("--max-calls", type=int)
     args = parser.parse_args(argv)
     # Suppress third-party transport/config/SQL logging, including debug mode.
     logging.disable(logging.CRITICAL)
-    if (not args.live and (args.case or args.max_calls is not None)) or (args.live and (
+    invalid_schema_case = args.schema_only and args.case and any(
+        case not in ("baseline", *SCHEMA_CASES) for case in args.case)
+    if invalid_schema_case or (not args.live and (args.case or args.max_calls is not None)) or (args.live and (
             not args.case or args.max_calls is None or not 1 <= args.max_calls <= HARD_CALL_LIMIT
             or len(args.case) > args.max_calls or len(set(args.case)) != len(args.case)
             or ("alternate_model" in args.case and not args.alternate_model))):
@@ -327,7 +335,13 @@ def main(argv=None):
             request = await restore_database(run_id=args.run_id, job_id=args.job_id)
         replay = await capture_request(request, model=args.model)
         payloads = variants(replay, alternate_model=args.alternate_model)
+        if args.schema_only:
+            payloads = {case: value for case, value in payloads.items() if case in ("baseline", *SCHEMA_CASES)}
         report = metadata(replay)
+        report["schema_matrix"] = {case: {"schema": measurement(value["text"]["format"]["schema"]),
+            "structure": schema_metadata(value["text"]["format"]["schema"]),
+            "changed": value["text"]["format"]["schema"] != replay.payload["text"]["format"]["schema"]}
+            for case, value in payloads.items() if case in ("baseline", *SCHEMA_CASES)}
         report["matrix"] = {case: measurement(value) for case, value in payloads.items()}
         if args.live:
             report["probes"] = await live_probe(payloads, cases=args.case, max_calls=args.max_calls, opt_in=True)

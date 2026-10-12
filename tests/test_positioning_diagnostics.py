@@ -157,7 +157,7 @@ def test_offline_cli_no_network_safe_output(tmp_path, monkeypatch, capsys, caplo
     try:
         assert main(["--snapshot", str(path), "--run-id", RUN_ID, "--job-id", jid]) == 0
         output = capsys.readouterr().out
-        assert "Supplied" not in output and "properties" not in output and "offline" not in output
+        assert "Supplied" not in output and '"properties":{' not in output and "offline" not in output
         assert not caplog.text
         assert json.loads(output)["components"]["instructions"]["bytes"] > 50000
         assert settings.DEFAULT_TEXT_MODEL_HARD == original_model
@@ -242,7 +242,8 @@ def test_live_one_post_no_retry_no_content(monkeypatch):
     assert result[0]["input_tokens"] == result[0]["output_tokens"] == result[0]["reasoning_tokens"] == 0
 
 
-def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_path):
+@pytest.mark.parametrize("schema_only", [False, True])
+def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_path, schema_only):
     source, jid = snapshot()
     snapshot_path = tmp_path / "private.diagnostic-snapshot.json"
     snapshot_path.write_text(json.dumps(source), encoding="utf-8")
@@ -265,12 +266,15 @@ def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_p
                TELEGRAM_BOT_TOKEN="CLI_PRIVATE_BOT_TOKEN")
     completed = subprocess.run(
         [sys.executable, "-m", "tools.positioning_diagnostics", "--snapshot", str(snapshot_path),
-         "--run-id", RUN_ID, "--job-id", jid],
+         "--run-id", RUN_ID, "--job-id", jid, *(["--schema-only"] if schema_only else [])],
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, timeout=30)
     assert completed.returncode == 0
     assert not marker.exists()
     report = json.loads(completed.stdout)
     assert report["components"]["instructions"]["bytes"] == 53151
     assert report["core_copies"] == 1 and "probes" not in report
-    for private in ("Supplied", "CLI_PRIVATE_KEY", "CLI_PRIVATE_BOT_TOKEN", "properties", "EXPERT_CORE_PRODUCTION"):
+    if schema_only:
+        from tools.positioning_schema_diagnostics import SCHEMA_CASES
+        assert set(report["matrix"]) == set(report["schema_matrix"]) == {"baseline", *SCHEMA_CASES}
+    for private in ("Supplied", "CLI_PRIVATE_KEY", "CLI_PRIVATE_BOT_TOKEN", '"properties":{', "EXPERT_CORE_PRODUCTION"):
         assert private not in completed.stdout + completed.stderr
