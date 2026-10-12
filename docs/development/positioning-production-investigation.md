@@ -262,3 +262,6 @@ PostgreSQL enforcement is specified by the read-only transaction
 and its call-order test; a real production DB integration was not run here.
 Final diff review must verify only diagnostic/test/documentation/ignore additions
 and unchanged production files.
+
+Schema follow-up: [single-group diagnosis and minimal fix plan](positioning-schema-investigation.md),
+including the operator-reported successful simple-schema request and schema-only tooling.
