@@ -200,5 +200,10 @@ def test_result_construction_diagnostics_are_safe(monkeypatch, rejection_log):
     with pytest.raises(ExecutorOutputError) as caught:
         dispatch(request(ModuleId.POSITIONING))
     assert caught.value.stage is OutputFailureStage.RESULT_CONTRACT_INVALID
-    assert_safe_rejection_log(rejection_log, "result_contract_invalid")
+    assert caught.value.failure_rule is common.ResultFailureRule.RESULT_NORMALIZATION_INVALID
+    assert caught.value.output_index == 0 and caught.value.experiment_index is None
+    rejection_log.assert_called_once_with(
+        "Module output rejected module=%s stage=%s failure_rule=%s output_index=%s experiment_index=%s",
+        "POSITIONING", "result_contract_invalid", "result_normalization_invalid", 0, None)
+    assert "PRIVATE_SENTINEL" not in str(rejection_log.call_args)
     assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))
