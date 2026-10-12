@@ -2,10 +2,12 @@
 import json
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 
 from pydantic import ValidationError
 
 from .intelligence_schemas import NumericContext
+from .schemas import OutputStatement
 
 from .common import NumericLocation, NumericContextFailureReason, SemanticRule, StatementSemanticsError
 from .claim_support import strategy_claim, assertion_support
@@ -97,6 +99,52 @@ def context_attribution(context, local, parents):
         # Conflicting/legacy attribution must never imply owner confirmation.
         return matches[0] if matches and len(set(matches)) == 1 else "unknown"
     return "parent_claim"
+
+
+def bind_numeric_context_citations(payload, local, parents):
+    """Append only raw model-selected, exact-source references; never infer support.
+
+    Input has passed the original schema and Pydantic. Work on raw JSON so their
+    whitespace handling cannot authorize a newly bound quote. Each statement's
+    additions are atomic; invalid/ambiguous sources, duplicate references, missing
+    mandatory parents or exceeded bounds are left for the original pipeline to
+    reject. The returned count records bindings, not acceptance or gate success.
+    """
+    candidate = deepcopy(payload)
+    count = 0
+    for statement in candidate["outputs"]:
+        if parents and not statement["parent_claim_ids"]:
+            continue
+        if any(len(ids) != len(set(ids)) for ids in
+               (statement["evidence_ids"], statement["parent_claim_ids"])):
+            continue
+        additions = {"evidence_ids": [], "parent_claim_ids": []}
+        for context in statement["numeric_context"]:
+            identity, quote = context["support_id"], context["quote"]
+            # Cross-family collisions have no unambiguous attribution channel.
+            if (identity in local) == (identity in parents):
+                break
+            if identity in local:
+                field, units = "evidence_ids", context_units(local[identity].value)
+            else:
+                field, units = "parent_claim_ids", parent_context_units(parents[identity].value)
+            if quote not in tuple(units):
+                break
+            if identity not in statement[field] and identity not in additions[field]:
+                additions[field].append(identity)
+        else:
+            updated = {**statement, **{field: statement[field] + ids for field, ids in additions.items()}}
+            try:
+                # Inherit authoritative reference bounds, never truncate arrays.
+                OutputStatement.model_validate({key: value for key, value in updated.items()
+                                                if key not in ("items", "numeric_context")})
+            except ValidationError:
+                continue
+            added = sum(map(len, additions.values()))
+            if added:
+                statement.update(updated)
+                count += added
+    return (candidate, count) if count else (payload, 0)
 
 
 MAX_NUMERIC_QUOTE_CATALOG_ENTRIES = 64

@@ -220,7 +220,6 @@ def test_disabled_full_http_bytes_equal_prefeature_hook_and_enabled_is_data_only
     ("fragment", "statement_semantics_invalid", "quote_is_fragment"),
     ("changed_number", "statement_semantics_invalid", "quote_not_exact"),
     ("changed_units", "statement_semantics_invalid", "quote_not_exact"),
-    ("uncited", "statement_semantics_invalid", "support_not_cited"),
     ("empty_source", "statement_semantics_invalid", "source_has_no_eligible_quote"),
     ("unknown", "schema_invalid", None),
     ("extra", "schema_invalid", None),
@@ -242,7 +241,6 @@ def test_advice_does_not_weaken_server_validation_and_safe_indexed_failure(
         if mutation == "fragment": context["quote"] = "30 000 рублей"
         elif mutation == "changed_number": context["quote"] = PRICE.replace("30 000", "31 000")
         elif mutation == "changed_units": context["quote"] = PRICE.replace("рублей", "долларов")
-        elif mutation == "uncited": statement["evidence_ids"].remove(context["support_id"])
         elif mutation == "empty_source":
             identity = next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"] == "product")
             context["support_id"] = identity

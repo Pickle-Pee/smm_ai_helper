@@ -299,6 +299,10 @@ class BaseExecutor:
     def model_input_for(self, request, data, evidence, parents):
         return data
 
+    def normalize_output_payload(self, request, payload, evidence, parents):
+        """Optional server policy after original schema/Pydantic validation."""
+        return payload
+
     async def generate(self, request, evidence):
         output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
@@ -358,6 +362,12 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             if not validator.is_valid(payload):
                 raise ExecutorOutputError(stage=stage)
             output = output_type.model_validate_json(raw)
+            normalized_payload = self.normalize_output_payload(request, payload, evidence, parents)
+            if normalized_payload is not payload:
+                # Reuse the exact request-scoped schema, including support floors.
+                if not validator.is_valid(normalized_payload):
+                    raise ExecutorOutputError(stage=stage)
+                output = output_type.model_validate_json(json.dumps(normalized_payload, ensure_ascii=False))
             stage = OutputFailureStage.RESULT_CONTRACT_INVALID
             return self.build_result(request, output, evidence, parents)
         except (ValueError, TypeError, RecursionError, UnicodeError, ValidationError) as exc:
