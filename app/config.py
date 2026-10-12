@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Rollout gate: original server schemas and disabled-by-default provider projection.
     POSITIONING_SCHEMA_PROJECTION_ENABLED: bool = False
+    EXPERIMENTS_SCHEMA_PROJECTION_ENABLED: bool = False
 
     DEFAULT_TEXT_MODEL_LIGHT: str = "gpt-5-mini"
     DEFAULT_TEXT_MODEL_HARD: str = "gpt-5"

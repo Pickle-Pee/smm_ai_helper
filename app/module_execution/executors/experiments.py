@@ -8,7 +8,9 @@ from app.marketing_orchestrator.quality_gates.contracts import (
 from app.module_registry import ModuleId, ModuleRegistry
 from app.model_generation_policy import ModuleOutputBudget
 
-from .common import LocalEvidence, blocked, first_party_evidence, parent_claims, scoped_facts, stable_id
+from .common import LocalEvidence, blocked, first_party_evidence, parent_claims, scoped_facts, stable_id, log
+from .provider_schema import schema_measurement, SchemaProjectionError
+from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
 from .claim_support import assertion_support
@@ -43,6 +45,32 @@ measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
 learning_record explicit in requested canonical outputs. At most three experiments."""
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
+
+    def __init__(self, *, model_call, composer=None, provider_schema_projection=False):
+        if type(provider_schema_projection) is not bool:
+            raise TypeError("Expected boolean EXPERIMENTS projection policy")
+        super().__init__(model_call=model_call, composer=composer)
+        self._provider_schema_projection = provider_schema_projection
+
+    def provider_schema_for(self, request, validation_schema):
+        try:
+            if self._provider_schema_projection:
+                provider_schema, removed = strip_schema_annotations(validation_schema)
+            else:
+                provider_schema = super().provider_schema_for(request, validation_schema)
+                removed = 0
+            original = schema_measurement(validation_schema)
+            provider = schema_measurement(provider_schema)
+        except (SchemaProjectionError, TypeError, ValueError, RecursionError):
+            log.warning("EXPERIMENTS schema projection rejected code=equivalence_unproved")
+            raise SchemaProjectionError("annotation_projection_not_equivalent") from None
+        fields = {"schema_projection_enabled": self._provider_schema_projection,
+            "schema_projection_applied": removed > 0, "schema_projection_annotations_removed": removed,
+            "validation_schema_bytes": original["bytes"], "validation_schema_sha256": original["sha256"],
+            "provider_schema_bytes": provider["bytes"], "provider_schema_sha256": provider["sha256"]}
+        log.info("EXPERIMENTS provider schema " + " ".join(f"{key}=%s" for key in fields),
+                 *fields.values(), extra=fields)
+        return provider_schema
 
     def output_budget_for(self, request) -> ModuleOutputBudget:
         # Only the complete server-owned output contract receives extra headroom.
