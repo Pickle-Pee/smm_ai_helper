@@ -99,10 +99,20 @@ class SemanticRule(str, Enum):
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
 
 
+class NumericContextFailureReason(str, Enum):
+    SUPPORT_NOT_CITED = "support_not_cited"
+    SUPPORT_NOT_FOUND = "support_not_found"
+    SOURCE_HAS_NO_ELIGIBLE_QUOTE = "source_has_no_eligible_quote"
+    QUOTE_IS_FRAGMENT = "quote_is_fragment"
+    QUOTE_NOT_EXACT = "quote_not_exact"
+    OTHER_NUMERIC_CONTEXT_INVALID = "other_numeric_context_invalid"
+
+
 class StatementSemanticsError(ExecutorOutputError):
     """Internal server-selected diagnostic; never contains provider content."""
 
-    def __init__(self, rule: SemanticRule, *, numeric_location=None):
+    def __init__(self, rule: SemanticRule, *, numeric_location=None,
+                 numeric_context_reason=None, output_index=None, numeric_context_index=None):
         if type(rule) is not SemanticRule:
             raise TypeError("Expected server semantic rule")
         super().__init__(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID)
@@ -110,6 +120,17 @@ class StatementSemanticsError(ExecutorOutputError):
         if numeric_location is not None and type(numeric_location) is not NumericLocation:
             raise TypeError("Expected server numeric location")
         self.numeric_location = numeric_location
+        if numeric_context_reason is not None:
+            if (type(numeric_context_reason) is not NumericContextFailureReason
+                    or rule is not SemanticRule.NUMERICAL_SUPPORT_REQUIRED
+                    or numeric_location is not NumericLocation.CONTEXT):
+                raise TypeError("Expected server numeric context reason")
+        for index in (output_index, numeric_context_index):
+            if index is not None and (type(index) is not int or index < 0):
+                raise TypeError("Expected nonnegative server index")
+        self.numeric_context_reason = numeric_context_reason
+        self.output_index = output_index
+        self.numeric_context_index = numeric_context_index
 
 
 class NumericLocation(str, Enum):
@@ -275,6 +296,9 @@ class BaseExecutor:
         # The model capability cannot mutate the authoritative validator schema.
         return deepcopy(validation_schema)
 
+    def model_input_for(self, request, data, evidence, parents):
+        return data
+
     async def generate(self, request, evidence):
         output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
@@ -320,7 +344,7 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             "allowed_parent_claim_ids": sorted(parents),
         }
         raw = await self._model_call(instruction=instructions.rendered_text,
-                                     text=json.dumps(data, ensure_ascii=False),
+                                     text=json.dumps(self.model_input_for(request, data, evidence, parents), ensure_ascii=False),
                                      response_schema=provider_schema,
                                      output_budget=self.output_budget_for(request))
         # Provider exceptions occur above this boundary and propagate unchanged.
@@ -349,7 +373,11 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                             self.module_id.value, stage.value, diagnostic.failure_rule.value,
                             diagnostic.output_index, diagnostic.experiment_index)
             elif isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
-                if exc.numeric_location is not None:
+                if exc.numeric_context_reason is not None:
+                    log.warning("Module output rejected module=%s stage=%s rule=%s field=%s reason=%s output_index=%s numeric_context_index=%s",
+                                self.module_id.value, stage.value, exc.rule.value, exc.numeric_location.value,
+                                exc.numeric_context_reason.value, exc.output_index, exc.numeric_context_index)
+                elif exc.numeric_location is not None:
                     log.warning("Module output rejected module=%s stage=%s rule=%s field=%s",
                                 self.module_id.value, stage.value, exc.rule.value, exc.numeric_location.value)
                 else:
@@ -363,6 +391,10 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 raise ResultContractError(diagnostic.failure_rule, stage=stage,
                     output_index=diagnostic.output_index,
                     experiment_index=diagnostic.experiment_index) from None
+            if isinstance(exc, StatementSemanticsError) and exc.numeric_context_reason is not None:
+                raise StatementSemanticsError(exc.rule, numeric_location=exc.numeric_location,
+                    numeric_context_reason=exc.numeric_context_reason, output_index=exc.output_index,
+                    numeric_context_index=exc.numeric_context_index) from None
             raise ExecutorOutputError(stage=stage) from None
 
     def build_result(self, request, output, evidence, parents):
@@ -391,8 +423,10 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                 self.validate_statement(statement, local, parents)
             except ResultContractError as exc:
                 raise ResultContractError(exc.failure_rule, stage=exc.stage, output_index=i) from None
-            except StatementSemanticsError:
-                raise
+            except StatementSemanticsError as exc:
+                raise StatementSemanticsError(exc.rule, numeric_location=exc.numeric_location,
+                    numeric_context_reason=exc.numeric_context_reason, output_index=i,
+                    numeric_context_index=exc.numeric_context_index) from None
             except (ValueError, TypeError):
                 raise ExecutorOutputError(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID) from None
             supports = [local[eid].confidence for eid in statement.evidence_ids]

@@ -30,7 +30,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    composer=None, registry_version=EXECUTABLE_REGISTRY_VERSION,
                                    market_analyzer: SiteAnalyzer | None = None,
                                    positioning_schema_projection: bool = False,
-                                   experiments_schema_projection: bool = False) -> ModuleExecutorRegistry:
+                                   experiments_schema_projection: bool = False,
+                                   virtual_cmo_numeric_quote_catalog: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
     implementations = [
         CompetitorAnalysisExecutor(model_call=model_call, analyzer=analyzer, composer=composer),
@@ -41,7 +42,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
     if registry_version in {"1.2.0", "1.3.0"}:
         implementations.extend((
             MarketAnalysisExecutor(model_call=model_call, analyzer=market_analyzer, composer=composer),
-            VirtualCMOExecutor(model_call=model_call, composer=composer),
+            VirtualCMOExecutor(model_call=model_call, composer=composer,
+                               numeric_quote_catalog_enabled=virtual_cmo_numeric_quote_catalog),
             ExperimentsExecutor(model_call=model_call, composer=composer,
                                 provider_schema_projection=experiments_schema_projection),
         ))

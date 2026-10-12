@@ -1,8 +1,13 @@
 """Exact, indivisible numerical context, never numeric entailment by token overlap."""
+import json
 import re
 from collections.abc import Mapping
 
-from .common import NumericLocation, SemanticRule, StatementSemanticsError
+from pydantic import ValidationError
+
+from .intelligence_schemas import NumericContext
+
+from .common import NumericLocation, NumericContextFailureReason, SemanticRule, StatementSemanticsError
 from .claim_support import strategy_claim, assertion_support
 
 
@@ -37,17 +42,34 @@ def validate_numeric_context(statement, local, parents):
             if re.search(r"\d", text):
                 raise StatementSemanticsError(SemanticRule.NUMERICAL_SUPPORT_REQUIRED,
                                               numeric_location=location)
-    for context in getattr(statement, "numeric_context", ()):
+    for index, context in enumerate(getattr(statement, "numeric_context", ())):
         identity = context.support_id
-        if identity in statement.evidence_ids and identity in local:
-            units = context_units(local[identity].value)
+        # Classify only the condition actually checked; earlier schema/support
+        # failures keep their own stages and are never reclassified here.
+        if identity not in local and identity not in parents:
+            reason = NumericContextFailureReason.SUPPORT_NOT_FOUND
+        elif identity in statement.evidence_ids and identity in local:
+            reason = quote_failure_reason(context.quote, tuple(context_units(local[identity].value)))
         elif identity in statement.parent_claim_ids and identity in parents:
-            units = parent_context_units(parents[identity].value)
+            reason = quote_failure_reason(context.quote, tuple(parent_context_units(parents[identity].value)))
         else:
-            units = ()
-        if context.quote not in tuple(units):
+            reason = NumericContextFailureReason.SUPPORT_NOT_CITED
+        if reason is not None:
             raise StatementSemanticsError(SemanticRule.NUMERICAL_SUPPORT_REQUIRED,
-                                          numeric_location=NumericLocation.CONTEXT)
+                numeric_location=NumericLocation.CONTEXT, numeric_context_reason=reason,
+                numeric_context_index=index)
+
+
+def quote_failure_reason(quote, units):
+    if quote in units:
+        return None
+    if not units:
+        return NumericContextFailureReason.SOURCE_HAS_NO_ELIGIBLE_QUOTE
+    if type(quote) is not str or not quote:
+        return NumericContextFailureReason.OTHER_NUMERIC_CONTEXT_INVALID
+    if any(quote in unit for unit in units):
+        return NumericContextFailureReason.QUOTE_IS_FRAGMENT
+    return NumericContextFailureReason.QUOTE_NOT_EXACT
 
 
 def parent_context_units(value):
@@ -75,3 +97,44 @@ def context_attribution(context, local, parents):
         # Conflicting/legacy attribution must never imply owner confirmation.
         return matches[0] if matches and len(set(matches)) == 1 else "unknown"
     return "parent_claim"
+
+
+MAX_NUMERIC_QUOTE_CATALOG_ENTRIES = 64
+MAX_NUMERIC_QUOTE_CATALOG_BYTES = 16384
+
+
+def numeric_quote_catalog(local, parents):
+    """Bounded deterministic hints from the validator's exact quotation channels.
+
+    Caller supplies only request-local evidence and accepted scoped parents.
+    Whole entries are skipped when they cannot fit; no truncation or rewriting.
+    The byte limit includes JSON escaping, identities, keys and list overhead.
+    """
+    catalog = []
+    size = 2  # JSON list brackets
+    for identity, source, extractor in sorted(
+            [(identity, e.value, context_units) for identity, e in local.items()]
+            + [(identity, p.value, parent_context_units) for identity, p in parents.items()],
+            key=lambda item: item[0]):
+        if type(identity) is not str or not 1 <= len(identity) <= 128:
+            continue
+        for quote in sorted(set(extractor(source))):
+            try:
+                NumericContext(support_id=identity, quote=quote)
+            except ValidationError:
+                continue
+            entry = {"support_id": identity, "exact_quote": quote}
+            if entry in catalog:
+                continue
+            try:
+                entry_size = len(json.dumps(entry, ensure_ascii=False).encode("utf-8"))
+            except UnicodeError:
+                continue
+            addition = entry_size + (2 if catalog else 0)
+            if size + addition > MAX_NUMERIC_QUOTE_CATALOG_BYTES:
+                continue
+            catalog.append(entry)
+            size += addition
+            if len(catalog) == MAX_NUMERIC_QUOTE_CATALOG_ENTRIES:
+                return catalog
+    return catalog
