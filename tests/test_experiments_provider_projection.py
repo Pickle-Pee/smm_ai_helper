@@ -292,7 +292,8 @@ def test_runbook_executes_full_acceptance_with_mock_transport(monkeypatch):
     previous_logging = logging.root.manager.disable
     try:
         exec(recipe.rsplit("\ntry:\n", 1)[0], namespace)
-        namespace.update(APPROVED=True, APPROVED_HASHES=hashes)
+        namespace.update(APPROVED=True, APPROVED_HASHES=hashes,
+            APPROVED_PROVIDER_SCHEMA_HASH=schema_measurement(strip_schema_annotations(baseline.arguments["response_schema"])[0])["sha256"])
         summary = asyncio.run(namespace["verify"]())
     finally:
         logging.disable(previous_logging)

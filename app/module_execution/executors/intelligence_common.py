@@ -1,8 +1,12 @@
 """Additional conservative output checks; acceptance still belongs to Quality Gates."""
 import json
 import re
+from pydantic import ValidationError
 
-from .common import BaseExecutor, SemanticRule, StatementSemanticsError, plain
+from .common import (
+    BaseExecutor, ResultContractError, ResultFailureRule, SemanticRule,
+    StatementSemanticsError, plain,
+)
 from .claim_support import assertion_support
 
 
@@ -22,10 +26,14 @@ def require_supported_numbers(text, supports):
 class IntelligenceExecutor(BaseExecutor):
     def build_result(self, request, output, evidence, parents):
         # Code-added support/limitations must retain the same bounded wire shape.
-        self.output_type.model_validate(output.model_dump())
+        try:
+            self.output_type.model_validate(output.model_dump())
+        except ValidationError:
+            raise ResultContractError(ResultFailureRule.POST_MUTATION_PYDANTIC_INVALID) from None
         names = [s.output_name for s in output.outputs]
         if len(names) != len(set(names)):
-            raise ValueError("Exactly one statement per requested output is required")
+            raise ResultContractError(ResultFailureRule.OUTPUT_DUPLICATE_NAMES,
+                                      output_index=next(i for i, name in enumerate(names) if name in names[:i]))
         return super().build_result(request, output, evidence, parents)
 
     def validate_statement(self, statement, local, parents):
