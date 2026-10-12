@@ -71,9 +71,10 @@ failure. It retains explicit approval, original instruction/input/schema
 fingerprints, checks the reported projected schema fingerprint, compares the
 entire provider wire, permits one HTTP call, closes read-only restoration before
 I/O and performs no database writes. It disables logging, never prints exceptions,
-and stops without retries. Schema hashes are pinned to this incident; instruction
-and input fingerprints still require private operator approval. A successful
-synthetic offline test does not authorize live use or global rollout.
+and stops without retries. All four fingerprints and the run/job identifiers are
+pinned to the latest reported production incident; a live call still requires
+explicit operator approval. A successful synthetic offline test does not
+authorize live use or global rollout.
 
 Offline tests cover every cause, actual parent-union overflow after initially
 valid wire, constructor rejection, check precedence, safe logging, runbook failure

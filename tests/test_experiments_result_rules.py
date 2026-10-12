@@ -1,5 +1,6 @@
 """Closed rejection rules through the actual executor and offline HTTP adapter."""
 import asyncio
+import ast
 from copy import deepcopy
 import hashlib
 import json
@@ -181,7 +182,10 @@ def run_recipe(monkeypatch, invocation, provider, *, mismatch=None, approved=Tru
             namespace["APPROVED_PROVIDER_SCHEMA_HASH"] = "0" * 64
         elif mismatch:
             hashes[mismatch] = "0" * 64
-        return asyncio.run(namespace["verify"]())
+        summary = asyncio.run(namespace["verify"]())
+        experiments_diagnostics.restore_database.assert_awaited_once_with(
+            run_id=namespace["RUN_ID"], job_id=namespace["JOB_ID"])
+        return summary
     finally:
         logging.disable(previous)
 
@@ -196,6 +200,17 @@ def test_runbook_returns_safe_failure_rule(monkeypatch, invocation, rule, mutate
     assert summary["http_status"] == 200 and summary["response_status"] == "completed"
     serialized = json.dumps(summary)
     assert all(secret not in serialized for secret in ("clm_", "evd_", "PRIVATE", "traceback"))
+    assert summary["failure_rule"] in {rule.value for rule in ResultFailureRule}
+    for field in ("output_index", "experiment_index"):
+        if field in summary:
+            assert type(summary[field]) is int and summary[field] >= 0
+    from tests.experiments_provider import full_payload
+    data = json.loads(provider.calls[0]["input"][1]["content"])
+    # Only diagnostics/metadata may escape; fixture business content stays private.
+    payload = full_payload(data)
+    assert all(statement["text"] not in serialized for statement in payload["outputs"])
+    assert all(parent_id not in serialized for parent_id in data["allowed_parent_claim_ids"])
+    assert all(item["evidence_id"] not in serialized for item in data["local_evidence"])
 
 
 @pytest.mark.parametrize("mismatch", ["instructions", "input", "schema", "provider"])
@@ -292,3 +307,33 @@ def test_runbook_second_http_call_blocked(monkeypatch, invocation):
     with pytest.raises(RuntimeError, match="^verification_wire_or_call_limit$"):
         run_recipe(monkeypatch, invocation, provider)
     assert len(provider.calls) == 1
+
+
+
+def test_runbook_defaults_match_latest_production_incident():
+    # Inspect literal defaults without executing the recipe or contacting a DB/API.
+    document = (Path(__file__).parents[1] / "docs/runbooks/verify-experiments-projection.md").read_text(encoding="utf-8")
+    recipe = document.split("```python\n", 1)[1].split("```", 1)[0]
+    expected = {
+        "APPROVED": False,
+        "RUN_ID": "4cc38ca6ed8c64b0039982fc8a83ff93bd3e165f89390052daa6cc3a718d785e",
+        "JOB_ID": "c264b79d868e90f97a00c37d05ac43e6",
+        "APPROVED_HASHES": {
+            "instructions": "b9a6ae79b33e9d781251adbca9c659b279f8ed1965e8076a6b01bce0e02143eb",
+            "input": "1bf797958c85b225429735385dae90e26f102c2c17071ea6e96d8cc425947c85",
+            "schema": "49c9d21c942a1c5dd97af086fc1189e8d2f78ebd294edc58a1546b0e55560150",
+        },
+        "APPROVED_PROVIDER_SCHEMA_HASH": "27e6f30e45dd5aa10a5d5ee83a1e4529ec483e863f8d8c497c8cb80022582d68",
+    }
+    assignments = {}
+    for node in ast.parse(recipe).body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in expected:
+                    assert target.id not in assignments  # No later conflicting default.
+                    assignments[target.id] = ast.literal_eval(node.value)
+    assert assignments == expected
+    assert assignments["APPROVED"] is False
+    assert f'Incident run: `{expected["RUN_ID"]}`.' in document
+    assert f'Incident job: `{expected["JOB_ID"]}`.' in document
+    assert "<approved_sha256>" not in document

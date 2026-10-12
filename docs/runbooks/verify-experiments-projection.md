@@ -6,15 +6,16 @@ revision, restored request fingerprints and run/job. Any server deployment needs
 separate permission. Leave the global flag false. One `completed` response never
 justifies global rollout.
 
-Incident run: `918f5a2504835cf4df57bc280579474cb5c68f77a40464c9e75f15021e5a7ac2`.
-Incident job: `de3a4436ce8189937533c8456c4ee8ab`.
+Incident run: `4cc38ca6ed8c64b0039982fc8a83ff93bd3e165f89390052daa6cc3a718d785e`.
+Incident job: `c264b79d868e90f97a00c37d05ac43e6`.
 Latest reported replay: `req_06d7388ca87640c180cd187eb4b0bd27` completed with
 2437 output tokens but failed during result construction. The recipe now returns
 `failure_rule` and available zero-based `output_index` / `experiment_index` on
 such rejection, without response text or exception details. See the
 [closed rule definitions and unchanged kind mismatch](../development/experiments-result-diagnostics.md).
-The original and projected schema hashes below are pinned to that replay; obtain
-private approval for the instruction/input hashes before any live call.
+All four fingerprints below are pinned to the latest production incident for
+this run/job. Explicit permission for one live call is still required; the
+reported fingerprints do not grant approval.
 
 Use an isolated operator process with the approved code/dependencies, existing
 secure credentials and read-only PostgreSQL privileges. Do not start workers,
@@ -24,7 +25,8 @@ the transaction closes before model I/O. A replay does not alter historical stat
 
 Before authorization, restore/capture offline and privately review hashes for
 instruction, input and original schema. Current persisted state/builders may
-differ from the incident: stop on mismatch. Enter the approved hashes below.
+differ from the incident: stop on mismatch. Keep the incident fingerprints below;
+do not replace them with current captures to bypass a mismatch.
 Confirm all 16 requested canonical names, strategic parents, incident model and
 16000 budget. Schema byte counts alone do not establish request identity.
 
@@ -59,11 +61,14 @@ from app.orchestration_runtime.serialization import result_to_json
 from tools.experiments_diagnostics import capture_request, restore_database
 
 APPROVED = False
-APPROVED_HASHES = {"instructions": "<approved_sha256>", "input": "<approved_sha256>",
-                   "schema": "49c9d21c942a1c5dd97af086fc1189e8d2f78ebd294edc58a1546b0e55560150"}
+APPROVED_HASHES = {
+    "instructions": "b9a6ae79b33e9d781251adbca9c659b279f8ed1965e8076a6b01bce0e02143eb",
+    "input": "1bf797958c85b225429735385dae90e26f102c2c17071ea6e96d8cc425947c85",
+    "schema": "49c9d21c942a1c5dd97af086fc1189e8d2f78ebd294edc58a1546b0e55560150",
+}
 APPROVED_PROVIDER_SCHEMA_HASH = "27e6f30e45dd5aa10a5d5ee83a1e4529ec483e863f8d8c497c8cb80022582d68"
-RUN_ID = "918f5a2504835cf4df57bc280579474cb5c68f77a40464c9e75f15021e5a7ac2"
-JOB_ID = "de3a4436ce8189937533c8456c4ee8ab"
+RUN_ID = "4cc38ca6ed8c64b0039982fc8a83ff93bd3e165f89390052daa6cc3a718d785e"
+JOB_ID = "c264b79d868e90f97a00c37d05ac43e6"
 logging.disable(logging.CRITICAL)
 
 async def verify():
