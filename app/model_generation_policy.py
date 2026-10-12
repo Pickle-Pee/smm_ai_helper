@@ -7,6 +7,7 @@ class ModuleOutputBudget(Enum):
     GENERIC = ("generic", 4000)
     POSITIONING_FULL = ("positioning_full", 16000)
     VIRTUAL_CMO = ("virtual_cmo", 16000)
+    EXPERIMENTS_FULL = ("experiments_full", 16000)
 
 
 def module_output_tokens(budget: ModuleOutputBudget) -> int:

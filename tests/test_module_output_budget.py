@@ -84,7 +84,7 @@ def test_existing_reasoning_effort_and_configured_model_are_preserved(monkeypatc
 
 @pytest.mark.parametrize("module,budget", [
     (ModuleId.VIRTUAL_CMO, ModuleOutputBudget.VIRTUAL_CMO),
-    (ModuleId.EXPERIMENTS, ModuleOutputBudget.GENERIC),
+    (ModuleId.EXPERIMENTS, ModuleOutputBudget.EXPERIMENTS_FULL),
 ])
 def test_intelligence_profile_is_server_owned(module, budget):
     from tests.test_strategy_intelligence import IntelligenceModel, valid_request, run
@@ -94,8 +94,9 @@ def test_intelligence_profile_is_server_owned(module, budget):
     assert len(model.calls) == 1
     assert model.calls[0]["output_budget"] is budget
     assert "output_budget" not in json.loads(model.calls[0]["text"])
-    assert module_output_tokens(budget) == (16000 if module is ModuleId.VIRTUAL_CMO else 4000)
+    assert module_output_tokens(budget) == 16000
     assert ModuleOutputBudget.VIRTUAL_CMO is not ModuleOutputBudget.POSITIONING_FULL
+    assert ModuleOutputBudget.EXPERIMENTS_FULL not in (ModuleOutputBudget.VIRTUAL_CMO, ModuleOutputBudget.POSITIONING_FULL)
 
 
 def test_cmo_transport_preserves_exact_scoped_schema(monkeypatch):
