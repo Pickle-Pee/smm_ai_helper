@@ -3,6 +3,7 @@ import asyncio
 import json
 import uuid
 from dataclasses import replace
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -61,8 +62,8 @@ class DaycareProvider:
             return self.positioning(request)
         schema = body["text"]["format"]["schema"]
         assert body["max_output_tokens"] == 16000
-        if self.failure in ("incomplete", "empty_incomplete"):
-            tokens = 16000 if self.failure == "incomplete" else 0
+        if self.failure in ("incomplete", "empty_incomplete", "exhausted_incomplete"):
+            tokens = 16000 if self.failure == "exhausted_incomplete" else 0
             return httpx.Response(200, json={"status": "incomplete",
                 "incomplete_details": {"reason": "max_output_tokens"},
                 "usage": {"output_tokens": tokens, "output_tokens_details": {"reasoning_tokens": tokens}},
@@ -103,7 +104,7 @@ class DaycareProvider:
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload, ensure_ascii=False)})
 
 
-@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete", "empty_incomplete"])
+@pytest.mark.parametrize("failure", [None, "large_success", "text", "items", "combination", "experiment_text", "experiment_signal", "incomplete", "empty_incomplete", "exhausted_incomplete"])
 def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, failure, caplog):
     provider = DaycareProvider(failure)
     install_transport(monkeypatch, provider)
@@ -129,6 +130,31 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
             rid = response.workflow.run_id
             await execute_node(service, rid, "positioning")
             await execute_node(service, rid, "virtual_cmo")
+            if failure == "incomplete":
+                async def assert_waiting():
+                    run, jobs, artifacts = await state(mvp_database, rid)
+                    cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
+                    assert run.status == "queued"
+                    assert cmo.status is JobStatus.RUNNING
+                    assert not any(a.step == "virtual_cmo" for a in artifacts)
+                    assert not any(j.workflow_step == "experiments" for j in jobs)
+                    async with mvp_database() as session:
+                        execution = await session.get(JobExecution, cmo.job_id)
+                        assert execution.attempts == 1
+                        assert execution.available_at == available_at
+                    assert len(provider.calls) == 2
+                    return cmo
+
+                available_at = clock() + timedelta(seconds=5)
+                cmo = await assert_waiting()
+                worker = runtime.create_worker()
+                assert not await worker.once(cmo.job_id)
+                await assert_waiting()
+                clock.tick(4)
+                assert clock() < available_at
+                assert not await worker.once(cmo.job_id)
+                await assert_waiting()
+                return
             if failure == "empty_incomplete":
                 for delay in (5, 10):
                     run, jobs, artifacts = await state(mvp_database, rid)
@@ -141,12 +167,12 @@ def test_daycare_production_graph_numeric_grounding(mvp_database, monkeypatch, f
             cmo = next(j for j in jobs if j.workflow_step == "virtual_cmo")
             expected_calls = 4 if failure == "empty_incomplete" else 2
             assert len(provider.calls) == expected_calls
-            if failure in ("text", "items", "combination", "incomplete", "empty_incomplete"):
+            if failure in ("text", "items", "combination", "exhausted_incomplete", "empty_incomplete"):
                 assert run.status == "failed"
                 assert cmo.status is JobStatus.FAILED
                 assert not any(a.step == "virtual_cmo" for a in artifacts)
                 assert not any(j.workflow_step == "experiments" for j in jobs)
-                if failure not in ("incomplete", "empty_incomplete"):
+                if failure not in ("exhausted_incomplete", "empty_incomplete"):
                     assert "rule=numerical_support_required field=" + (
                         "numeric_context" if failure == "combination" else failure) in caplog.text
                 else:
