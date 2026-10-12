@@ -1,6 +1,8 @@
 """Standalone read-only VIRTUAL_CMO replay; never import into a worker process."""
 import argparse
 import asyncio
+from dataclasses import dataclass
+from enum import Enum
 import json
 import logging
 import os
@@ -15,6 +17,31 @@ from tools.positioning_diagnostics import (
 )
 
 
+class ReplayMode(str, Enum):
+    BASELINE = "baseline"
+    CATALOG = "catalog"
+
+
+def selected_mode(mode):
+    try:
+        return ReplayMode(mode)
+    except (ValueError, TypeError):
+        raise DiagnosticError("replay_mode_invalid") from None
+
+
+@dataclass(repr=False)
+class ModeReplay(Replay):
+    mode: ReplayMode
+
+
+class SingleModeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, "_mode_selected", False):
+            parser.error("Select exactly one replay mode")
+        namespace._mode_selected = True
+        setattr(namespace, self.dest, values)
+
+
 async def restore_snapshot(snapshot, *, run_id, job_id):
     from app.module_registry import ModuleId
     return await shared_snapshot(snapshot, run_id=run_id, job_id=job_id,
@@ -27,7 +54,8 @@ async def restore_database(*, run_id, job_id):
                                  module_id=ModuleId.VIRTUAL_CMO)
 
 
-async def capture_request(request):
+async def capture_request(request, *, mode=ReplayMode.BASELINE):
+    mode = selected_mode(mode)
     from app.config import settings
     from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
     arguments = {}
@@ -37,12 +65,12 @@ async def capture_request(request):
         raise _Captured()
 
     try:
-        await VirtualCMOExecutor(model_call=capture, numeric_quote_catalog_enabled=False).execute(request)
+        await VirtualCMOExecutor(model_call=capture, numeric_quote_catalog_enabled=mode is ReplayMode.CATALOG).execute(request)
     except _Captured:
         pass
     if not arguments:
         raise DiagnosticError("request_not_executable")
-    return Replay(await capture_wire(arguments, model=settings.DEFAULT_TEXT_MODEL_HARD), arguments)
+    return ModeReplay(await capture_wire(arguments, model=settings.DEFAULT_TEXT_MODEL_HARD), arguments, mode)
 
 
 def verify_fingerprint(replay, expected_payload_sha256):
@@ -53,8 +81,14 @@ def verify_fingerprint(replay, expected_payload_sha256):
         raise DiagnosticError("request_fingerprint_mismatch")
 
 
-async def replay_once(request, replay, *, expected_payload_sha256, authorized=False):
+async def replay_once(request, replay, *, expected_payload_sha256, authorized=False,
+                      mode=ReplayMode.BASELINE, catalog_hash_approved=False):
     """One provider POST, full server validation and gates, no graph write path."""
+    mode = selected_mode(mode)
+    if type(replay) is not ModeReplay or replay.mode is not mode:
+        raise DiagnosticError("replay_mode_mismatch")
+    if mode is ReplayMode.CATALOG and catalog_hash_approved is not True:
+        raise DiagnosticError("catalog_hash_approval_required")
     if authorized is not True:
         raise DiagnosticError("live_policy_rejected")
     verify_fingerprint(replay, expected_payload_sha256)
@@ -88,11 +122,11 @@ async def replay_once(request, replay, *, expected_payload_sha256, authorized=Fa
             calls += 1
             return await self.client.post(url, headers=headers, json=json)
 
-    report = {"provider_calls": 0, "server_contract_valid": False,
+    report = {"mode": mode.value, "provider_calls": 0, "server_contract_valid": False,
               "quality_gates_checked": False, "quality_accepted": False}
     try:
         with patch.object(httpx, "AsyncClient", OneCallClient):
-            result = await VirtualCMOExecutor(model_call=production_model_call, numeric_quote_catalog_enabled=False).execute(request)
+            result = await VirtualCMOExecutor(model_call=production_model_call, numeric_quote_catalog_enabled=mode is ReplayMode.CATALOG).execute(request)
         report["server_contract_valid"] = True
         quality = evaluate_result(request.execution_id, result, request.upstream_results)
         report["quality_gates_checked"] = True
@@ -130,13 +164,20 @@ def main(argv=None):
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--snapshot", type=Path)
     source.add_argument("--database-read", action="store_true")
+    parser.add_argument("--mode", choices=[m.value for m in ReplayMode],
+                        default=ReplayMode.BASELINE.value, action=SingleModeAction)
+    parser.add_argument("--catalog-hash-approved", action="store_true",
+                        help="Attest separate approval of this catalog mode's full expected payload hash")
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--authorize-one-provider-call", action="store_true")
     parser.add_argument("--expected-payload-sha256")
     args = parser.parse_args(argv)
     logging.disable(logging.CRITICAL)
-    if args.authorize_one_provider_call and not args.expected_payload_sha256:
+    mode = selected_mode(args.mode)
+    if args.authorize_one_provider_call and (
+            not args.expected_payload_sha256
+            or mode is ReplayMode.CATALOG and not args.catalog_hash_approved):
         print('{"error":"live_policy_rejected"}')
         return 2
     if not args.database_read and not args.authorize_one_provider_call:
@@ -153,16 +194,21 @@ def main(argv=None):
             request = await restore_snapshot(json.loads(raw), run_id=args.run_id, job_id=args.job_id)
         else:
             request = await restore_database(run_id=args.run_id, job_id=args.job_id)
-        replay = await capture_request(request)
+        replay = await capture_request(request, mode=mode)
         if args.expected_payload_sha256:
             verify_fingerprint(replay, args.expected_payload_sha256)
         report = metadata(replay)
-        report["historical_fidelity"] = "current_builders_current_accepted_graph_not_original_dispatch_snapshot"
+        report["mode"] = mode.value
+        report["baseline_mode"] = mode.value
+        report["historical_fidelity"] = (
+            "current_builders_current_accepted_graph_not_original_dispatch_snapshot"
+            if mode is ReplayMode.BASELINE else "catalog_augmented_current_reconstruction")
         report["read_only"] = True
         report["provider_calls"] = 0
         if args.authorize_one_provider_call:
             report["replay"] = await replay_once(request, replay,
-                expected_payload_sha256=args.expected_payload_sha256, authorized=True)
+                expected_payload_sha256=args.expected_payload_sha256, authorized=True,
+                mode=mode, catalog_hash_approved=args.catalog_hash_approved)
         print(compact(report))
 
     try:
