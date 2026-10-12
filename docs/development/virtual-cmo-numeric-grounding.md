@@ -138,3 +138,49 @@ Review correction validation:
   The typed boundary preserves exact quote bytes, rejects malformed envelopes,
   excludes contextual numbers from assertion support, and retains accepted
   identities, confidence, lineage and product-truth authority. No merge.
+
+
+## Closed rejection diagnostics and optional quotation catalog
+
+Validation order is unchanged: bounded strict JSON parsing; request-scoped JSON Schema;
+Pydantic parsing; post-mutation Pydantic shape and duplicate output names; expected output
+coverage; duplicate support IDs; local/parent reference availability; nonempty support;
+statement semantics; normalized contract construction. For VIRTUAL_CMO, statement semantics
+first reject digits in text/items, then check numeric_context in list order, then strategy
+kind, parent citation and main-growth-constraint shape. Quality Gates evaluate the resulting
+normalized claims separately and retain their authority. A schema or support-reference
+failure never gets relabelled as a numeric-context failure.
+
+`numerical_support_required` in `numeric_context` reports a closed
+`numeric_context_reason`, plus zero-based `output_index` and `numeric_context_index`:
+missing available identity -> `support_not_found`; identity available but not cited in
+its corresponding support family -> `support_not_cited`; no eligible complete source
+leaf -> `source_has_no_eligible_quote`; proper substring of an eligible leaf ->
+`quote_is_fragment`; any other nonexact string -> `quote_not_exact`. An invalid runtime
+quote type or empty quote after a schema bypass is `other_numeric_context_invalid`.
+These codes describe checked conditions, not model intent or the historical incident.
+The normal schema rejects unknown identities and invalid quote types before this stage.
+No diagnostic includes quotations, numbers, identities, business content or original
+exception messages. Errors remain terminal and fail closed. `ResultFailureRule` remains
+separate and is not used for statement semantics.
+
+`VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED=false` is the default. With it disabled,
+provider instructions, input serialization, response schema, model, token policy and
+single-attempt behavior are identical to the previous builder. With it enabled, only
+`numeric_quote_catalog` and `numeric_quote_catalog_guidance` are added to user data.
+The catalog is transient model input, never persisted. Server-side validation still
+requires exact complete quotes and a corresponding statement citation; a hint is not
+source authority. Site attribution and parent hypothesis status remain unchanged.
+
+The catalog uses `context_units()` for already scoped local evidence and
+`parent_context_units()` for accepted, within-scope parent claims. It sorts identities
+and exact quotes, removes duplicate pairs, and keeps at most 64 entries and 16,384 bytes
+of UTF-8 JSON including punctuation, escaping and identities. Individual source leaves
+retain the existing 1,000-character limit. Entries that exceed the total byte budget
+are skipped whole; later smaller entries may fit. Nothing is shortened, normalized,
+combined, calculated or extracted as a substring. Bare scalars remain ineligible.
+A missing or size-excluded hint does not change the server acceptance predicate.
+
+See [the isolated read-only replay runbook](virtual-cmo-numeric-replay.md). No historic
+failure cause is established without the original response or a properly fingerprinted,
+separately authorized replay; even a replay is a new stochastic response.
