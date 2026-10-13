@@ -303,6 +303,9 @@ class BaseExecutor:
         """Optional server policy after original schema/Pydantic validation."""
         return payload
 
+    def observe_output_rejection(self, request, payload, output, evidence, parents, error):
+        """Optional observation after rejection; never part of acceptance."""
+
     async def generate(self, request, evidence):
         output_type = self.output_type_for(request, evidence)
         parents = parent_claims(request)
@@ -353,6 +356,7 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                                      output_budget=self.output_budget_for(request))
         # Provider exceptions occur above this boundary and propagate unchanged.
         stage = OutputFailureStage.JSON_INVALID
+        payload = output = None
         try:
             if type(raw) is not str or len(raw) > 131072:
                 raise ValueError("Expected bounded JSON text")
@@ -371,6 +375,11 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             stage = OutputFailureStage.RESULT_CONTRACT_INVALID
             return self.build_result(request, output, evidence, parents)
         except (ValueError, TypeError, RecursionError, UnicodeError, ValidationError) as exc:
+            try:
+                self.observe_output_rejection(request, payload, output, evidence, parents, exc)
+            except Exception:
+                # Observer failures (and their content) never escape this boundary.
+                pass
             if isinstance(exc, ExecutorOutputError):
                 stage = exc.stage
             diagnostic = None
