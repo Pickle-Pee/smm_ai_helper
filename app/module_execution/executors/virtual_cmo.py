@@ -18,6 +18,7 @@ from .numeric_grounding import (
     bind_numeric_context_citations,
 )
 from .claim_support import StrategyClaim, StoredNumericContext
+from .numeric_diagnostics import observe
 
 
 log = logging.getLogger(__name__)
@@ -84,6 +85,10 @@ without economics."""
         if count:
             log.info("Module output normalized module=VIRTUAL_CMO code=numeric_context_citation_bound normalized_reference_count=%d", count)
         return normalized
+
+    def observe_output_rejection(self, request, payload, output, evidence, parents, error):
+        observe(request, payload, output, evidence, parents, error,
+                catalog_enabled=self._numeric_quote_catalog_enabled)
 
     def support_requirement_for(self, request) -> SupportRequirement:
         return (SupportRequirement.PARENT_REQUIRED if parent_claims(request)
