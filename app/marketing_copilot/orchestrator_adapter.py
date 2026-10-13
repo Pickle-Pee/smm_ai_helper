@@ -1,5 +1,6 @@
 """Adapt proposals to existing planning contracts without invoking the planner."""
-from app.marketing_orchestrator import PlanningContext, RequestInterpretation
+from app.marketing_orchestrator import PlanningContext, PlanningInputKey, RequestInterpretation, Sensitivity
+from app.module_registry import ModuleId
 
 from .contracts import CopilotContractError, ExecutionDecision, ExecutionMode
 
@@ -15,6 +16,20 @@ class OrchestratorAdapter:
         constraints = (*intent.constraints, *context.constraints)
         assumptions = context.assumptions
         business_goal = intent.business_goal
+        if business_goal is None:
+            scenario = decision.scenario_key or "explicit_single_module_v1"
+            # Strategy's required goal consumer also permits module-scoped input.
+            goal_module = ModuleId.VIRTUAL_CMO if scenario == "strategy_builder_v1" else decision.module_id
+            # Resolution already owns layer precedence and presence masks. Carry
+            # only an existing typed goal verbatim; labels/excerpts in other slots
+            # and decision_goal are not permission to infer a commercial objective.
+            business_goal = next((
+                fact.value for fact in (*context.project_context, *context.known_facts)
+                if fact.input_key is PlanningInputKey.BUSINESS_GOAL
+                and fact.authorized and fact.sensitivity is not Sensitivity.SECRET
+                and fact.source and type(fact.value) is str and fact.value.strip()
+                and (scenario in fact.scenario_relevance or goal_module in fact.module_relevance)
+            ), None)
         if business_goal is None:
             # Legacy interpretation requires non-empty business_goal; preserve absence
             # explicitly instead of fabricating a commercial objective.
