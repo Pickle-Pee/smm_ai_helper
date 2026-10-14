@@ -29,6 +29,7 @@ The new migration was validated on a fresh database after the final schema chang
 | Final combined relevant suite below | 207 passed, 70.89 seconds |
 | Offline CLI, graph-worker, model-adapter and provider telemetry tests | 133 passed, 3.24 seconds |
 | Independent reviewer: CLI + graph-worker tests | 65 passed |
+| Migration/lifecycle then Copilot API in container test order | 85 passed, 7.24 seconds |
 | `git diff --check` | Passed |
 
 Final combined command, with `MVP_TEST_DATABASE_URL` and `REDIS_TEST_URL` pointing
@@ -50,6 +51,12 @@ python -m pytest -q --basetemp=.local-test/drain/markers-relevant
 
 Existing Pydantic, Alembic configuration and UTC datetime deprecation warnings
 remain. No tests in that combined run were skipped.
+
+The first container CI run passed the drain tests but exposed a migration-test
+logging isolation defect: Alembic fileConfig disabled loggers used by subsequent
+Copilot API log assertions. The migration roundtrip now preserves test logging,
+consistent with the shared PostgreSQL fixture. The 85-test ordered run above
+verifies that correction without changing application telemetry.
 
 ## Evidence coverage and independent review
 

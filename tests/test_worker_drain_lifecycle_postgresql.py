@@ -149,6 +149,8 @@ def test_sigterm_callback_after_drain_preserves_pending_jobs_and_restart_pause(m
 
 def test_admission_migration_roundtrip_and_metadata_match(mvp_database, monkeypatch):
     monkeypatch.setattr(settings, "DATABASE_URL", os.environ["MVP_TEST_DATABASE_URL"])
+    # Alembic's fileConfig must not disable loggers owned by later tests.
+    monkeypatch.setattr("logging.config.fileConfig", lambda *args, **kwargs: None)
     config = Config("alembic.ini")
     engine = create_engine(settings.DATABASE_URL.replace("+asyncpg", "+psycopg2"))
     try:
