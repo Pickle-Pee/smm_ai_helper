@@ -277,7 +277,7 @@ class GraphExecutionService:
             lease.claim_token, lease.lease_until = uuid.uuid4().hex, now + timedelta(seconds=self.lease_seconds)
             run.status, run.current_step = "running", job.workflow_step
             # Revision comes from immutable routing, validated before external I/O.
-            return GraphWorkItem(job.job_id, run.run_id, 1, job.workflow_step, lease.claim_token)
+            return GraphWorkItem(job.job_id, run.run_id, 1, job.workflow_step, lease.claim_token, lease.attempts)
 
     async def _active(self, session, item):
         run = await self._run(session, item.run_id)

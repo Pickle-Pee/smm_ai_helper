@@ -65,6 +65,7 @@ class GraphWorkItem:
     plan_revision: int
     node_id: str
     claim_token: str
+    attempt: int = 1
 
 
 class NodeFailureMode(str, Enum):

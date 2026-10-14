@@ -15,7 +15,7 @@ from app.module_execution import ModuleExecutorRegistry
 from app.module_execution.errors import ModuleCompatibilityError
 from app.module_execution.executors import ExecutorOutputError
 from app.module_execution.executors.common import OutputFailureStage
-from app.module_registry import ModuleRegistry
+from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime import composition
 from app.orchestration_runtime.worker import ModuleGraphWorker, transient
 from app.worker import main, run_lane
@@ -122,15 +122,18 @@ def test_model_response_reason_controls_retry_even_with_transient_cause(reason):
     wrapper.__cause__ = error
     retryable = reason is ModelResponseFailureReason.INCOMPLETE_EMPTY_MAX_OUTPUT_TOKENS
     assert transient(error) is retryable and transient(wrapper) is retryable
-    item = SimpleNamespace(run_id="run.test", job_id="job.test")
+    item = SimpleNamespace(run_id="run.test", job_id="job.test", plan_revision=1,
+                           node_id="node.test", claim_token="test-claim", attempt=1)
     service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
-        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), object())),
+        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), SimpleNamespace(
+            execution_id=item.job_id, module_id=ModuleId.VIRTUAL_CMO))),
         fail=AsyncMock(), finish=AsyncMock())
     worker = ModuleGraphWorker(service)
     worker.dispatcher.dispatch = AsyncMock(side_effect=error)
     assert asyncio.run(worker.once())
     service.fail.assert_awaited_once_with(
         item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
+    worker.dispatcher.dispatch.assert_awaited_once()
     service.finish.assert_not_awaited()
 
 
@@ -139,15 +142,18 @@ def test_graph_output_failure_matches_direct_terminal_classification(stage):
     from app.marketing_copilot.api_errors import ExecutionInvalid
     exc = ExecutorOutputError("PRIVATE_SENTINEL", stage=stage)
     exc.__cause__ = httpx.ReadTimeout("PRIVATE_SENTINEL")
-    item = SimpleNamespace(run_id="run.test", job_id="job.test")
+    item = SimpleNamespace(run_id="run.test", job_id="job.test", plan_revision=1,
+                           node_id="node.test", claim_token="test-claim", attempt=1)
     service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
-        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), object())),
+        claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), SimpleNamespace(
+            execution_id=item.job_id, module_id=ModuleId.VIRTUAL_CMO))),
         fail=AsyncMock(), finish=AsyncMock())
     worker = ModuleGraphWorker(service)
     worker.dispatcher.dispatch = AsyncMock(side_effect=exc)
     assert asyncio.run(worker.once()) is True
     service.fail.assert_awaited_once_with(item, code="execution_invalid", retryable=False)
     assert service.fail.call_args.kwargs["code"] == ExecutionInvalid().code
+    worker.dispatcher.dispatch.assert_awaited_once()
     service.finish.assert_not_awaited()
     assert transient(exc) is False
 
