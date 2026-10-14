@@ -4,6 +4,7 @@ import logging
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
+from app.llm.telemetry import graph_call_context
 from app.llm.openai_text import ModelResponseError, ModelResponseFailureReason
 
 from app.module_execution import ModuleExecutorDispatcher
@@ -64,8 +65,9 @@ class ModuleGraphWorker:
             if work is None:
                 return False
             binding, request = work
-            async with asyncio.timeout(self.timeout_seconds):
-                result = await self.dispatcher.dispatch(binding, request)
+            async with asyncio.timeout(self.timeout_seconds) as timeout:
+                with graph_call_context(item, request, timeout):
+                    result = await self.dispatcher.dispatch(binding, request)
             if result.normalized_result.module_status is ModuleResultStatus.BLOCKED:
                 await self.service.fail(item, code="module_blocked", blocking_reasons=result.normalized_result.blocking_reasons)
                 return True

@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import hashlib
+import time
+import uuid
 import logging
-import re
 from enum import Enum
 from typing import Any, Dict, List, Tuple
 
 import httpx
 
+from app.llm.telemetry import correlation_fields, cancellation_outcome, safe_label, safe_provider_id
 from app.config import settings, TOKEN_BUDGETS, MAX_OUTPUT_TOKENS_CAP
 from app.model_generation_policy import ModuleOutputBudget, module_output_tokens
 
@@ -95,15 +98,15 @@ def _single_attempt_output(data: Any) -> str:
 
 def _log_response_rejection(
     reason: ModelResponseFailureReason, model: str, budget: int, data: Any,
-    *, request_id: str | None, payload: dict[str, Any],
+    *, request_id: str | None, payload: dict[str, Any], telemetry: dict[str, Any],
 ) -> None:
     fields: dict[str, Any] = {
         "reason": reason.value,
-        "model": model,
+        "model": safe_label(model),
         "max_output_tokens": budget,
     }
     # Provider correlation IDs are bounded opaque labels, never arbitrary headers.
-    if request_id is not None and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", request_id):
+    if safe_provider_id(request_id, "request") is not None:
         fields["x_request_id"] = request_id
     fields["input_text_bytes"] = sum(
         len(message["content"].encode("utf-8")) for message in payload["input"]
@@ -118,20 +121,8 @@ def _log_response_rejection(
         len(json.dumps(schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         if schema is not None else 0
     )
-    usage = data.get("usage") if isinstance(data, dict) else None
-    if isinstance(usage, dict):
-        input_tokens = usage.get("input_tokens")
-        if type(input_tokens) is int and 0 <= input_tokens <= 2 ** 31 - 1:
-            fields["input_tokens"] = input_tokens
-        output_tokens = usage.get("output_tokens")
-        if type(output_tokens) is int and 0 <= output_tokens <= budget:
-            fields["output_tokens"] = output_tokens
-        details = usage.get("output_tokens_details")
-        reasoning_tokens = details.get("reasoning_tokens") if isinstance(details, dict) else None
-        reasoning_cap = fields.get("output_tokens", budget)
-        if type(reasoning_tokens) is int and 0 <= reasoning_tokens <= reasoning_cap:
-            fields["reasoning_tokens"] = reasoning_tokens
     fields.update(_response_metadata(data, budget))
+    fields.update(telemetry)
     log.warning(
         "Structured model response rejected " + " ".join(f"{key}=%s" for key in fields),
         *fields.values(),
@@ -142,10 +133,13 @@ def _log_response_rejection(
 def _response_metadata(data: Any, budget: int) -> dict[str, Any]:
     """Closed labels and capped item counts only; never serialize provider values."""
     if not isinstance(data, dict):
-        return {"response_status": "invalid"}
+        data = {}
+        invalid = True
+    else:
+        invalid = False
     status = data.get("status")
     fields: dict[str, Any] = {
-        "response_status": status if type(status) is str and status in (
+        "response_status": "invalid" if invalid else status if type(status) is str and status in (
             "completed", "incomplete", "failed", "in_progress", "queued", "cancelled"
         ) else "unknown",
         "usage_state": "missing" if "usage" not in data else (
@@ -155,7 +149,14 @@ def _response_metadata(data: Any, budget: int) -> dict[str, Any]:
     usage = data.get("usage")
     output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
     reasoning_cap = output_tokens if type(output_tokens) is int and 0 <= output_tokens <= budget else budget
+    fields["output_tokens_details_state"] = (
+        "missing" if not isinstance(usage, dict) or "output_tokens_details" not in usage else
+        "null" if usage["output_tokens_details"] is None else
+        "present" if isinstance(usage["output_tokens_details"], dict) else "invalid"
+    )
     for name, container, cap in (
+        ("input_tokens", usage, 2 ** 31 - 1),
+        ("total_tokens", usage, 2 ** 31 - 1),
         ("output_tokens", usage, budget),
         ("reasoning_tokens", usage.get("output_tokens_details") if isinstance(usage, dict) else None, reasoning_cap),
     ):
@@ -165,6 +166,8 @@ def _response_metadata(data: Any, budget: int) -> dict[str, Any]:
             "reported" if type(container[name]) is int and 0 <= container[name] <= cap else
             "invalid"
         )
+        if fields[name + "_state"] == "reported":
+            fields[name] = container[name]
     output = data.get("output")
     fields["output_items_state"] = "missing" if "output" not in data else (
         "present" if isinstance(output, list) else "invalid")
@@ -179,6 +182,83 @@ def _response_metadata(data: Any, budget: int) -> dict[str, Any]:
             fields[item_status + "_items"] = sum(
                 isinstance(item, dict) and item.get("status") == item_status for item in output[:32])
     return fields
+
+
+def _log_provider_event(fields, *, level=logging.INFO):
+    # Serialize only the closed contract; no request/response/exception objects.
+    log.log(level, "LLM provider request " + " ".join(f"{key}=%s" for key in fields),
+            *fields.values(), extra=fields)
+
+
+async def _post_response(client, url, *, headers, payload):
+    """Observe exactly one existing POST; never change payloads or retry policy."""
+    schema = payload.get("text", {}).get("format", {}).get("schema")
+    fields = {
+        "telemetry_version": "llm_provider_request.v1",
+        "provider_call_id": uuid.uuid4().hex,
+        **correlation_fields(),
+        "model": safe_label(payload["model"]),
+        "max_output_tokens": payload["max_output_tokens"],
+        "schema_fingerprint": hashlib.sha256(json.dumps(
+            schema, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest() if schema is not None else None,
+    }
+    _log_provider_event({**fields, "event": "started"})
+    started = time.monotonic()
+    response = None
+    data = None
+    reason = None
+    outcome = "transport_error"
+    try:
+        response = await client.post(url, headers=headers, json=payload)
+        try:
+            data = response.json()
+        except ValueError:
+            pass
+        if response.is_error:
+            outcome = "http_error"
+        else:
+            try:
+                _single_attempt_output(data)
+            except ModelResponseError as exc:
+                reason = exc.reason
+                outcome = "rejected"
+            else:
+                outcome = "success"
+        return response
+    except (httpx.TimeoutException, TimeoutError):
+        outcome = "timeout"
+        raise
+    except asyncio.CancelledError:
+        outcome = cancellation_outcome()
+        raise
+    finally:
+        fields.update(
+            event="finished", outcome=outcome,
+            duration_ms=min(max(round((time.monotonic() - started) * 1000), 0), 2 ** 31 - 1),
+            http_status=response.status_code if response is not None else None,
+            response_received=response is not None,
+        )
+        fields.update(_response_metadata(data, payload["max_output_tokens"]))
+        if response is None:
+            # No envelope was observed; distinguish from missing usage in an envelope.
+            fields["response_status"] = "unavailable"
+            fields["usage_state"] = "unavailable"
+        response_id = data.get("id") if isinstance(data, dict) else None
+        if safe_provider_id(response_id, "response") is not None:
+            fields["response_id"] = response_id
+        request_id = response.headers.get("x-request-id") if response is not None else None
+        if safe_provider_id(request_id, "request") is not None:
+            fields["x_request_id"] = request_id
+        details = data.get("incomplete_details") if isinstance(data, dict) else None
+        incomplete = details.get("reason") if isinstance(details, dict) else None
+        fields["incomplete_reason"] = (incomplete if type(incomplete) is str and incomplete in
+            ("max_output_tokens", "content_filter") else "other" if incomplete is not None else None)
+        if reason is not None:
+            _log_response_rejection(reason, payload["model"], payload["max_output_tokens"], data,
+                                    request_id=request_id, payload=payload, telemetry=fields)
+        else:
+            _log_provider_event(fields, level=logging.INFO if outcome == "success" else logging.WARNING)
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:
@@ -304,7 +384,7 @@ async def chat(
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(1 if single_attempt else settings.HTTP_RETRIES + 1):
             try:
-                resp = await client.post(url, headers=headers, json=payload)
+                resp = await _post_response(client, url, headers=headers, payload=payload)
 
                 if single_attempt:
                     # Never log provider bodies or silently drop the response schema.
@@ -317,10 +397,6 @@ async def chat(
                             raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE) from None
                         content = _single_attempt_output(data)
                     except ModelResponseError as exc:
-                        _log_response_rejection(
-                            exc.reason, model, payload["max_output_tokens"], data,
-                            request_id=resp.headers.get("x-request-id"), payload=payload,
-                        )
                         raise exc from None
                     return content, data.get("usage", {}) or {}
 
@@ -339,7 +415,7 @@ async def chat(
                             and "temperature" in payload
                         ):
                             payload.pop("temperature", None)
-                            resp = await client.post(url, headers=headers, json=payload)
+                            resp = await _post_response(client, url, headers=headers, payload=payload)
 
                         elif (
                             resp.status_code == 400
@@ -348,7 +424,7 @@ async def chat(
                             and "text" in payload
                         ):
                             payload.pop("text", None)
-                            resp = await client.post(url, headers=headers, json=payload)
+                            resp = await _post_response(client, url, headers=headers, payload=payload)
 
                         elif resp.status_code not in RETRYABLE_STATUS_CODES:
                             resp.raise_for_status()
@@ -367,7 +443,7 @@ async def chat(
                     payload["max_output_tokens"] = max(2000, prev * 6 if prev else 2000)
                     payload["reasoning"] = {"effort": "low"}
 
-                    resp2 = await client.post(url, headers=headers, json=payload)
+                    resp2 = await _post_response(client, url, headers=headers, payload=payload)
                     resp2.raise_for_status()
                     data2 = resp2.json()
 

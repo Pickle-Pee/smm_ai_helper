@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from functools import partial
 import json
+import logging
 import os
 import uuid
 
@@ -219,6 +220,8 @@ def test_shutdown_leaves_both_active_leases_recoverable(mvp_database):
 def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_database, monkeypatch, caplog, status, body, attempts):
     from tests.test_graph_model_adapter import install_transport
     from tests.test_production_graph_worker import queue
+    caplog.set_level(logging.INFO, logger="app.llm.openai_text")
+    monkeypatch.setattr(logging.getLogger("app.llm.openai_text"), "disabled", False)
     async def exercise():
         calls = []
         def respond(request):
@@ -229,7 +232,8 @@ def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_da
                 raise error("SECRET", request=request)
             if isinstance(body, str):
                 return httpx.Response(status, text=body)
-            return httpx.Response(status, json=body)
+            envelope = {**body, "id": f"resp_retry_{len(calls)}"} if isinstance(body, dict) else body
+            return httpx.Response(status, json=envelope, headers={"x-request-id": f"req_retry_{len(calls)}"})
         clients = install_transport(monkeypatch, respond)
         runtime = build_production_graph_runtime(sessions=mvp_database, queue=queue(), analyzer=analyzer())
         clock = Clock()
@@ -261,6 +265,19 @@ def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_da
             run, jobs, artifacts = await state(mvp_database, rid)
             assert run.status == "failed" and len(jobs) == 1 and not artifacts
             assert jobs[0].status is JobStatus.FAILED
+            events = [r for r in caplog.records if getattr(r, "event", None) == "finished"
+                      and getattr(r, "run_id", None) == rid]
+            assert len(events) == attempts
+            assert [r.graph_attempt for r in events] == list(range(1, attempts + 1))
+            assert len({r.graph_attempt_id for r in events}) == attempts
+            assert len({r.provider_call_id for r in events}) == attempts
+            assert len({r.schema_fingerprint for r in events}) == 1
+            assert all(r.job_id == jobs[0].job_id == r.module_execution_id for r in events)
+            assert all(r.node_id == jobs[0].workflow_step and r.module_id == ModuleId.POSITIONING.value
+                       and r.plan_revision == 1 for r in events)
+            if isinstance(status, int) and not isinstance(body, str):
+                assert [r.x_request_id for r in events] == [f"req_retry_{i}" for i in range(1, attempts + 1)]
+                assert [r.response_id for r in events] == [f"resp_retry_{i}" for i in range(1, attempts + 1)]
             assert len(calls) == attempts and all(c.is_closed for c in clients)
             assert len({request.content for request in calls}) == 1
             assert "SECRET" not in caplog.text
@@ -271,4 +288,79 @@ def test_production_transport_retry_budget_is_owned_only_by_job_execution(mvp_da
                 assert lease.claim_token is None and lease.lease_until is None
         finally:
             await cleanup(mvp_database, rid, owner_id)
+    asyncio.run(exercise())
+
+
+def test_concurrent_successes_correlate_to_committed_graph_claims(mvp_database, monkeypatch, caplog):
+    from app.llm.telemetry import correlation_fields
+    from tests.test_graph_model_adapter import install_transport
+    from tests.test_production_graph_worker import queue
+    import hashlib
+
+    caplog.set_level(logging.INFO, logger="app.llm.openai_text")
+    monkeypatch.setattr(logging.getLogger("app.llm.openai_text"), "disabled", False)
+    async def exercise():
+        model = StrategyModel(use_parents=True)
+        entered, barrier = [], asyncio.Event()
+        async def respond(request):
+            fields = correlation_fields()
+            entered.append(fields)
+            if len(entered) == 2:
+                barrier.set()
+            await asyncio.wait_for(barrier.wait(), 5)
+            payload = json.loads(request.content)
+            text = await model(instruction=payload["input"][0]["content"],
+                text=payload["input"][1]["content"], response_schema=payload["text"]["format"]["schema"])
+            return httpx.Response(200, json={"status": "completed", "output_text": text,
+                "id": "resp_" + fields["run_id"], "usage": {"input_tokens": 4, "output_tokens": 7,
+                "total_tokens": 11, "output_tokens_details": {"reasoning_tokens": 0}}},
+                headers={"x-request-id": "req_" + fields["run_id"]})
+        clients = install_transport(monkeypatch, respond)
+        runtime = build_production_graph_runtime(sessions=mvp_database, queue=queue(), analyzer=analyzer())
+        run_ids = [uuid.uuid4().hex for _ in range(2)]
+        async with mvp_database() as session, session.begin():
+            owner = User(telegram_id=int(uuid.uuid4().hex[:12], 16))
+            session.add(owner)
+            await session.flush()
+            owner_id = owner.id
+        claims = []
+        original_claim = runtime.service.claim
+        async def claim(job_id=None):
+            item = await original_claim(job_id)
+            if item is not None:
+                claims.append(item)
+            return item
+        monkeypatch.setattr(runtime.service, "claim", claim)
+        try:
+            jobs = []
+            for rid in run_ids:
+                await runtime.service.start_compiled_run(owner_id=owner_id, run_id=rid,
+                    plan=strategy_compiled(executors=runtime.executors))
+                jobs.append((await state(mvp_database, rid))[1][0].job_id)
+            assert all(await asyncio.gather(*(runtime.create_worker().once(job) for job in jobs)))
+            finished = [r for r in caplog.records if getattr(r, "event", None) == "finished"
+                        and getattr(r, "run_id", None) in run_ids]
+            assert len(entered) == len(finished) == len(claims) == 2
+            assert len({r.provider_call_id for r in finished}) == 2
+            for item in claims:
+                record = next(r for r in finished if r.job_id == item.job_id)
+                assert record.outcome == "success" and record.response_status == "completed"
+                assert record.run_id == item.run_id and record.module_execution_id == item.job_id
+                assert record.graph_attempt == item.attempt == 1
+                assert record.graph_attempt_id == hashlib.sha256(item.claim_token.encode()).hexdigest()
+                assert record.response_id == "resp_" + item.run_id and record.x_request_id == "req_" + item.run_id
+                assert record.input_tokens == 4 and record.output_tokens == 7 and record.total_tokens == 11
+                assert item.claim_token not in caplog.text
+                async with mvp_database() as session:
+                    lease = await session.get(JobExecution, item.job_id)
+                    assert lease.attempts == record.graph_attempt and lease.claim_token is None
+                _, persisted_jobs, artifacts = await state(mvp_database, item.run_id)
+                assert next(j for j in persisted_jobs if j.job_id == item.job_id).status is JobStatus.SUCCEEDED
+                assert len(artifacts) == 1
+            assert correlation_fields() == {"correlation_state": "unbound"}
+            assert all(c.is_closed for c in clients)
+        finally:
+            async with mvp_database() as session, session.begin():
+                await session.execute(delete(MarketingRun).where(MarketingRun.run_id.in_(run_ids)))
+                await session.execute(delete(User).where(User.id == owner_id))
     asyncio.run(exercise())

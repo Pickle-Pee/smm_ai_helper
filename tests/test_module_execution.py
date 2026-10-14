@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, fields
 from decimal import Decimal
+from importlib.util import resolve_name
 from itertools import permutations
 from pathlib import Path
 import subprocess
@@ -342,10 +343,33 @@ def test_dispatch_rejects_untyped_inputs_before_lookup():
     fake.execute.assert_not_called()
 
 
-def _imports(path):
+def _imports(path, *, resolve_relative=False):
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    return [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and not node.level] + [
-        alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level and not resolve_relative:
+                continue
+            module = (resolve_name("." * node.level + (node.module or ""),
+                      ".".join(path.parent.relative_to(ROOT).parts)) if node.level else node.module or "")
+            imports.extend((module, *(f"{module}.{alias.name}" for alias in node.names)))
+    return imports
+
+
+@pytest.mark.parametrize("source,forbidden", [
+    ("from ..module_execution import ModuleExecutionRequest", True),
+    ("from .. import module_execution", True),
+    ("from app import module_execution", True),
+    ("import app.module_execution.acceptance", True),
+    ('module_execution_id = "identifier"', False),
+    ("from .telemetry import correlation_fields", False),
+])
+def test_reverse_dependency_guard_resolves_imports_not_telemetry_labels(monkeypatch, source, forbidden):
+    monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: source)
+    imports = _imports(ROOT / "app/llm/openai_text.py", resolve_relative=True)
+    assert any(name.startswith("app.module_execution") for name in imports) is forbidden
 
 
 def test_architecture_separates_metadata_from_implementations_and_forbids_reverse_dependencies():
@@ -364,7 +388,8 @@ def test_architecture_separates_metadata_from_implementations_and_forbids_revers
                 ROOT / "app/marketing_copilot/service.py",
                 ROOT / "app/marketing_copilot/api_service.py", ROOT / "app/marketing_copilot/presentation.py",
             }:
-                assert "module_execution" not in path.read_text(encoding="utf-8"), path
+                # Inspect dependencies; a telemetry field named module_execution_id is not an import.
+                assert not [name for name in _imports(path, resolve_relative=True) if name.startswith("app.module_execution")], path
 
 
 @pytest.mark.parametrize("order", tuple(permutations((

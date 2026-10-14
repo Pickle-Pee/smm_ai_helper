@@ -18,7 +18,7 @@ from app.module_execution.executors.common import OutputFailureStage, SemanticRu
 from app.module_execution.executors.schemas import OutputStatement, PositioningOutput
 from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime.model_adapter import production_model_call
-from app.orchestration_runtime.contracts import module_job_id
+from app.orchestration_runtime.contracts import GraphWorkItem, module_job_id
 from app.orchestration_runtime.service import GraphExecutionService
 from app.orchestration_runtime.worker import ModuleGraphWorker, transient
 from tests.positioning_provider import ROWS, PositioningProvider, allowed_kinds
@@ -118,7 +118,7 @@ def test_strategy_first_node_passes_worker_quality_and_unlocks_cmo(monkeypatch):
     job_id = module_job_id("a" * 64, 1, node.node_id)
     invocation = ModuleExecutionRequest(execution_id=job_id, module_id=node.module_id,
         objective=node.objective, expected_outputs=node.expected_outputs, context_packet=node.context_packet)
-    item = SimpleNamespace(run_id="a" * 64, job_id=job_id, node_id=node.node_id)
+    item = GraphWorkItem(job_id, "a" * 64, 1, node.node_id, "test-claim", 1)
     service = SimpleNamespace(executors=executors, lease_seconds=330, claim=AsyncMock(return_value=item),
         load_work=AsyncMock(return_value=(node.binding, invocation)), fail=AsyncMock(), finish=AsyncMock(return_value=True))
     assert not GraphExecutionService._ready(plan, cmo, {}, {})

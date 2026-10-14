@@ -20,6 +20,7 @@ from app.module_execution.executors.intelligence_schemas import StrategyOutput
 from app.module_execution.executors.numeric_grounding import validate_numeric_context
 from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
 from app.module_registry import ModuleId, ModuleResultStatus
+from app.orchestration_runtime.contracts import GraphWorkItem
 from app.orchestration_runtime.worker import ModuleGraphWorker
 from app.orchestration_runtime.serialization import result_to_json
 from tests.test_module_executors import fact, request
@@ -304,7 +305,7 @@ def test_concurrent_graph_failures_use_actual_job_identity_and_terminal_lifecycl
         executor._model_call = concurrent
         services = []
         for i in range(2):
-            item = SimpleNamespace(job_id=f"job.actual.{i}", run_id=f"run.actual.{i}")
+            item = GraphWorkItem(f"job.actual.{i}", f"run.actual.{i}", 1, "virtual_cmo", f"test-claim-{i}", 1)
             service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
                 claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), req(item.job_id))),
                 fail=AsyncMock(), finish=AsyncMock())
