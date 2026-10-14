@@ -127,7 +127,7 @@ def test_model_response_reason_controls_retry_even_with_transient_cause(reason):
     service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
         claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), SimpleNamespace(
             execution_id=item.job_id, module_id=ModuleId.VIRTUAL_CMO))),
-        fail=AsyncMock(), finish=AsyncMock())
+        fail=AsyncMock(), finish=AsyncMock(), release_attempt=AsyncMock())
     worker = ModuleGraphWorker(service)
     worker.dispatcher.dispatch = AsyncMock(side_effect=error)
     assert asyncio.run(worker.once())
@@ -147,7 +147,7 @@ def test_graph_output_failure_matches_direct_terminal_classification(stage):
     service = SimpleNamespace(lease_seconds=330, executors=ModuleExecutorRegistry(),
         claim=AsyncMock(return_value=item), load_work=AsyncMock(return_value=(object(), SimpleNamespace(
             execution_id=item.job_id, module_id=ModuleId.VIRTUAL_CMO))),
-        fail=AsyncMock(), finish=AsyncMock())
+        fail=AsyncMock(), finish=AsyncMock(), release_attempt=AsyncMock())
     worker = ModuleGraphWorker(service)
     worker.dispatcher.dispatch = AsyncMock(side_effect=exc)
     assert asyncio.run(worker.once()) is True

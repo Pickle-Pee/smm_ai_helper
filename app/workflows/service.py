@@ -14,6 +14,7 @@ from app.db import AsyncSessionLocal
 from app.models import BrandProfile, Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, User, WorkflowDelivery
 from app.services.brand_profile_service import BrandProfileService
 from app.services.job_persistence_service import JobPersistenceService
+from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.workflows.schemas import BusinessInput, StartRequest
 
 
@@ -184,8 +185,10 @@ class MarketingWorkflowService:
         return await self.status(actor, run_id)
 
     async def claim(self, job_id=None):
-        now = self.clock()
         async with self.sessions() as session, session.begin():
+            if not await claim_admitted(session):
+                return None
+            now = self.clock()
             query = select(JobExecution).join(Job).where(
                 Job.kind == "marketing.step", Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
                 JobExecution.available_at <= now,
@@ -207,10 +210,14 @@ class MarketingWorkflowService:
             lease.attempts += 1
             lease.claim_token = uuid.uuid4().hex
             lease.lease_until = now + timedelta(seconds=settings.WORKFLOW_TIMEOUT_SECONDS + 30)
+            record_attempt(session, job.job_id, lease.claim_token)
             run.status, run.current_step = "running", job.workflow_step
             artifacts = (await session.scalars(select(MarketingArtifact).where(MarketingArtifact.run_id == run.run_id))).all()
             return WorkItem(job.job_id, run.run_id, job.workflow_step, lease.claim_token,
                             copy.deepcopy(run.input_json), {a.artifact_key: copy.deepcopy(a.payload_json) for a in artifacts})
+
+    async def release_attempt(self, item):
+        await release_attempt(self.sessions, item.job_id, item.token)
 
     async def _active(self, session, item):
         lease = await session.scalar(select(JobExecution).where(JobExecution.job_id == item.job_id).with_for_update())
@@ -227,6 +234,7 @@ class MarketingWorkflowService:
 
     async def finish(self, item, artifact, parts):
         async with self.sessions() as session, session.begin():
+            await end_attempt(session, item.job_id, item.token)
             active = await self._active(session, item)
             if active is None:
                 return False
@@ -250,6 +258,7 @@ class MarketingWorkflowService:
 
     async def fail(self, item, *, retryable: bool, message: str):
         async with self.sessions() as session, session.begin():
+            await end_attempt(session, item.job_id, item.token)
             active = await self._active(session, item)
             if active is None:
                 return False
