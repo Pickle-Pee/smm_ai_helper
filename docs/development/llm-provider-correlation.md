@@ -12,13 +12,14 @@ Every existing Responses POST passes through `_post_response`, which emits one
 `event=finished` record on return, rejection, transport failure or cancellation.
 The same UUID `provider_call_id` joins these records. Fields are structured logging
 extras **and** content-free key/value messages so the existing production formatter
-retains them. Started/success events use INFO; failure events use WARNING. A rejected
+retains them. Started/success events use INFO; other finished outcomes use WARNING. A rejected
 envelope extends the existing `Structured model response rejected` record; there
 is no second rejection event or duplicate diagnostics implementation.
 
 | Fields | Meaning / bounds |
 | --- | --- |
 | telemetry_version, event | Closed version and started/finished labels |
+| request_mode | single_attempt or legacy; selects the caller's existing output policy |
 | provider_call_id | Locally generated UUID hex for each HTTP invocation |
 | correlation_state | graph or unbound |
 | job_id, run_id, node_id, module_id, module_execution_id | Task-local graph identity, labels capped at 128 ASCII characters |
@@ -31,7 +32,7 @@ is no second rejection event or duplicate diagnostics implementation.
 | response_status | completed/incomplete/failed/in_progress/queued/cancelled; unknown/invalid/unavailable otherwise |
 | incomplete_reason | max_output_tokens/content_filter/other or null; never raw provider text |
 | duration_ms | Monotonic duration of the observed invocation including envelope inspection, capped at 2^31-1 ms |
-| outcome | success/rejected/http_error/transport_error/timeout/cancelled |
+| outcome | success/rejected/retry_requested/http_error/transport_error/timeout/cancelled |
 | reason | Existing closed ModelResponseFailureReason, for rejected envelopes only |
 | usage_state | missing/null/present/invalid; unavailable without an observed response |
 | input_tokens_state, output_tokens_state, total_tokens_state, reasoning_tokens_state | missing/null/reported/invalid |
@@ -45,7 +46,20 @@ a null nested container through its container-state field. Existing rejected-res
 byte lengths and bounded output-item diagnostics remain (only the first 32 item
 labels are inspected); no item content or IDs are logged.
 
-`success` means the provider envelope passed the existing Responses output parser.
+`outcome` describes this individual POST under `request_mode`, not the aggregate
+chat invocation. `single_attempt` success means the envelope passed the existing
+strict Responses parser. `legacy` success means the existing text extractor accepts
+the text and this response takes the return path: this includes incomplete/content_filter
+with nonempty output_text and completed envelopes with output_text plus output=null.
+Legacy's first-response empty/max_output_tokens predicate is shared with the caller;
+its existing output retry is recorded as `retry_requested`. The expansion response
+uses the existing nonempty-text check, which can accept incomplete/max_output_tokens
+with text. A later fallback/retry can therefore succeed after an earlier non-success
+POST. Observation neither triggers retries nor changes acceptance policy.
+`http_error` covers every non-2xx response (including 302), matching HTTPX
+raise_for_status; redirects remain unfollowed. Only the caller owns HTTP errors,
+fallbacks and retries. Invalid JSON/envelope diagnostics remain bounded.
+
 Executor JSON/schema/provenance checks, quality gates and fenced artifact commit
 happen later; this event does not establish graph success. A started event proves
 local invocation, not provider receipt. Abrupt process death can leave it without

@@ -190,11 +190,12 @@ def _log_provider_event(fields, *, level=logging.INFO):
             *fields.values(), extra=fields)
 
 
-async def _post_response(client, url, *, headers, payload):
+async def _post_response(client, url, *, headers, payload, single_attempt, allow_output_retry=True):
     """Observe exactly one existing POST; never change payloads or retry policy."""
     schema = payload.get("text", {}).get("format", {}).get("schema")
     fields = {
         "telemetry_version": "llm_provider_request.v1",
+        "request_mode": "single_attempt" if single_attempt else "legacy",
         "provider_call_id": uuid.uuid4().hex,
         **correlation_fields(),
         "model": safe_label(payload["model"]),
@@ -215,16 +216,30 @@ async def _post_response(client, url, *, headers, payload):
             data = response.json()
         except ValueError:
             pass
-        if response.is_error:
+        if not response.is_success:
+            # raise_for_status rejects all non-2xx statuses, including redirects.
             outcome = "http_error"
         else:
             try:
-                _single_attempt_output(data)
+                if single_attempt:
+                    _single_attempt_output(data)
+                    outcome = "success"
+                else:
+                    content = _extract_output_text(data)
+                    if allow_output_retry and _legacy_output_needs_retry(data, content):
+                        outcome = "retry_requested"
+                    elif content:
+                        outcome = "success"
+                    else:
+                        reason = ModelResponseFailureReason.INVALID_ENVELOPE
+                        outcome = "rejected"
             except ModelResponseError as exc:
                 reason = exc.reason
                 outcome = "rejected"
-            else:
-                outcome = "success"
+            except (ValueError, KeyError, TypeError, AttributeError):
+                # Observation must not replace the legacy caller's error/retry path.
+                reason = ModelResponseFailureReason.INVALID_ENVELOPE
+                outcome = "rejected"
         return response
     except (httpx.TimeoutException, TimeoutError):
         outcome = "timeout"
@@ -299,6 +314,10 @@ def _is_incomplete_max_tokens(data: Dict[str, Any]) -> bool:
         data.get("status") == "incomplete"
         and (data.get("incomplete_details") or {}).get("reason") == "max_output_tokens"
     )
+
+
+def _legacy_output_needs_retry(data: Dict[str, Any], content: str) -> bool:
+    return _is_incomplete_max_tokens(data) or not content
 
 
 def _choose_budget(task: str | None, response_format: Dict[str, Any] | None) -> int:
@@ -384,7 +403,8 @@ async def chat(
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(1 if single_attempt else settings.HTTP_RETRIES + 1):
             try:
-                resp = await _post_response(client, url, headers=headers, payload=payload)
+                resp = await _post_response(client, url, headers=headers, payload=payload,
+                                            single_attempt=single_attempt)
 
                 if single_attempt:
                     # Never log provider bodies or silently drop the response schema.
@@ -415,7 +435,8 @@ async def chat(
                             and "temperature" in payload
                         ):
                             payload.pop("temperature", None)
-                            resp = await _post_response(client, url, headers=headers, payload=payload)
+                            resp = await _post_response(client, url, headers=headers, payload=payload,
+                                                        single_attempt=False)
 
                         elif (
                             resp.status_code == 400
@@ -424,7 +445,8 @@ async def chat(
                             and "text" in payload
                         ):
                             payload.pop("text", None)
-                            resp = await _post_response(client, url, headers=headers, payload=payload)
+                            resp = await _post_response(client, url, headers=headers, payload=payload,
+                                                        single_attempt=False)
 
                         elif resp.status_code not in RETRYABLE_STATUS_CODES:
                             resp.raise_for_status()
@@ -438,12 +460,13 @@ async def chat(
 
                 content = _extract_output_text(data)
 
-                if _is_incomplete_max_tokens(data) or not content:
+                if _legacy_output_needs_retry(data, content):
                     prev = int(payload.get("max_output_tokens") or 0)
                     payload["max_output_tokens"] = max(2000, prev * 6 if prev else 2000)
                     payload["reasoning"] = {"effort": "low"}
 
-                    resp2 = await _post_response(client, url, headers=headers, payload=payload)
+                    resp2 = await _post_response(client, url, headers=headers, payload=payload,
+                                                single_attempt=False, allow_output_retry=False)
                     resp2.raise_for_status()
                     data2 = resp2.json()
 
