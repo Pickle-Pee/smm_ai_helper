@@ -59,6 +59,13 @@ class MarketingWorker:
             log.error("Workflow attempt failed job_id=%s error_type=%s", item.job_id, type(exc).__name__)
             await self.service.fail(item, retryable=transient_provider_failure(exc),
                                     message="Не удалось завершить шаг. Обратитесь к администратору с ID проекта.")
+        finally:
+            # Provider contexts have unwound, including cancellation and stale
+            # fencing. A failed cleanup retains the durable marker conservatively.
+            try:
+                await self.service.release_attempt(item)
+            except Exception as exc:
+                log.error("Attempt cleanup unavailable lane=fixed error_type=%s", type(exc).__name__)
         return True
 
 

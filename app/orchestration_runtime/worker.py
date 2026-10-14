@@ -85,4 +85,9 @@ class ModuleGraphWorker:
             log.error("Graph attempt failed run_id=%s job_id=%s error_type=%s", item.run_id, item.job_id, type(exc).__name__)
             retryable = transient(exc)
             await self.service.fail(item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
+        finally:
+            try:
+                await self.service.release_attempt(item)
+            except Exception as exc:
+                log.error("Attempt cleanup unavailable lane=graph error_type=%s", type(exc).__name__)
         return True

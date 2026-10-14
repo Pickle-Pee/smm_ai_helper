@@ -35,6 +35,15 @@ def wait_ready():
             time.sleep(.5)
 
 
+def control(action, *args):
+    # Disposable CI only (main guard below). Never export the DSN or use this
+    # application-role shortcut in the protected production operator procedure.
+    code = ("import os,sys; from app.worker_control import main; "
+            "os.environ['WORKER_DRAIN_DATABASE_URL']=os.environ['DATABASE_URL']; "
+            "sys.exit(main(sys.argv[1:]))")
+    return json.loads(compose("exec", "-T", "worker", "python", "-c", code, action, *args))
+
+
 def main():
     if os.environ.get("CI") != "true" or not os.environ.get("COMPOSE_PROJECT_NAME", "").startswith("smm-mvp-ci-"):
         raise SystemExit("Requires a disposable smm-mvp-ci-* CI Compose project")
@@ -47,12 +56,17 @@ def main():
         compose("start", "redis")
     time.sleep(3)
     assert_running()
+    paused = control("pause")
+    epoch = str(paused["epoch"])
+    assert control("status", "--require-drained", "--expect-epoch", epoch)["drained"]
     compose("stop", "--timeout", "10", "worker")
     state = inspect_worker()["State"]
     assert state["ExitCode"] == 0 and not state["OOMKilled"], "Worker did not handle SIGTERM cleanly"
     compose("start", "worker")
     wait_ready()
-    print("Worker smoke passed: fixed=2 + graph=1, Registry 1.3.0, Redis loss/recovery, clean SIGTERM/restart; providers disabled.")
+    assert control("status", "--require-drained", "--expect-epoch", epoch)["admission"] == "paused"
+    assert control("resume", "--expect-epoch", epoch)["admission"] == "open"
+    print("Worker smoke passed: both lanes, Redis recovery, live drain gate, OS SIGTERM, persisted pause on restart; providers disabled.")
 
 
 if __name__ == "__main__":

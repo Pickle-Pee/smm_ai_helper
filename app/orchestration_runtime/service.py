@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.db import AsyncSessionLocal
 from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, User
 from app.services.job_persistence_service import JobPersistenceService
+from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.module_execution import ModuleExecutionRequest, UpstreamExecutionResult
 from app.module_execution.acceptance import fully_accepted
 from app.marketing_orchestrator.quality_gates import QualityGateEvaluator
@@ -241,8 +242,10 @@ class GraphExecutionService:
         return tuple(wake)
 
     async def claim(self, job_id=None):
-        now = self.clock()
         async with self.sessions() as session, session.begin():
+            if not await claim_admitted(session):
+                return None
+            now = self.clock()
             due = select(Job.job_id).join(JobExecution).where(
                 Job.marketing_run_id == MarketingRun.run_id, Job.kind == JOB_KIND,
                 Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING]), JobExecution.available_at <= now,
@@ -275,9 +278,13 @@ class GraphExecutionService:
                 return None
             lease.attempts += 1
             lease.claim_token, lease.lease_until = uuid.uuid4().hex, now + timedelta(seconds=self.lease_seconds)
+            record_attempt(session, job.job_id, lease.claim_token)
             run.status, run.current_step = "running", job.workflow_step
             # Revision comes from immutable routing, validated before external I/O.
             return GraphWorkItem(job.job_id, run.run_id, 1, job.workflow_step, lease.claim_token, lease.attempts)
+
+    async def release_attempt(self, item):
+        await release_attempt(self.sessions, item.job_id, item.claim_token)
 
     async def _active(self, session, item):
         run = await self._run(session, item.run_id)
@@ -315,6 +322,7 @@ class GraphExecutionService:
     async def finish(self, item, result, quality):
         wake = []
         async with self.sessions() as session, session.begin():
+            await end_attempt(session, item.job_id, item.claim_token)
             active = await self._active(session, item)
             if active is None:
                 return False
@@ -369,6 +377,7 @@ class GraphExecutionService:
         reasons = tuple(sorted(BlockingReason(r).value for r in blocking_reasons))
         wake = []
         async with self.sessions() as session, session.begin():
+            await end_attempt(session, item.job_id, item.claim_token)
             active = await self._active(session, item)
             if active is None:
                 return False

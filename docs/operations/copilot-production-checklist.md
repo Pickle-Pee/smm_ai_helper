@@ -34,6 +34,13 @@ Queue keys are fixed: `smm:marketing:wakeups:v1` and
 
 Deployment order, using the existing Compose deployment:
 
+For an update to a running worker, first satisfy the live PostgreSQL
+[Worker Drain Control](worker-drain-control.md) gate and the
+[revised #122 deployment contract](telemetry122-worker-deployment-plan.md).
+The first installation of the control requires its legacy bootstrap gate; an old
+worker ignores the new row. The fresh-install sequence below is not a drain
+procedure for running workers.
+
 1. Back up PostgreSQL and retain the shared image volume. Verify the target image/tag.
 2. Start PostgreSQL and optionally Redis: `docker compose up -d db redis`.
 3. Apply migrations: `docker compose run --rm migrate` (`alembic upgrade head`).
@@ -41,9 +48,11 @@ Deployment order, using the existing Compose deployment:
 5. Check `/health` and `/ready`, and worker startup lane/Registry logs.
 6. Start bot: `docker compose up -d bot`; verify private-chat commands.
 
-No migration is introduced by Task L. Current Alembic head remains
-`20260917_0009`; `alembic check` must report no upgrade operations. This is an
-additive API/UX change with no existing DTO field renamed.
+Task L introduced no migration and its historical head was `20260917_0009`.
+Worker Drain Control adds `20261014_0012` after `20261006_0011`; use the target
+release's actual Alembic head and require `alembic check` to report no upgrade
+operations. Apply it only through an authorized migration/bootstrap procedure.
+No existing public DTO field is renamed.
 
 ## Liveness, readiness and outages
 
@@ -125,6 +134,11 @@ a new request with a new explicit confirmation.
 
 Workers never hold a DB transaction during provider execution. SIGTERM cancels active
 I/O and closes owned resources without marking a Job failed merely for shutdown.
+For planned worker updates, pause claim admission and wait for the live drained
+gate before SIGTERM. Pending/deferred Jobs may remain durable while drained;
+expired claim tokens and retained markers for superseded attempts still block the
+gate. Pause survives worker restart and
+applies to both lane families across all compatible instances.
 After lease expiry a replacement may call the provider again, including when the
 previous call returned before persistence. External execution is **at-least-once**,
 not exactly-once. Fencing rejects stale completion; artifact, successful Job and
@@ -190,8 +204,15 @@ pool establish a bounded correctness baseline only.
 Stop bot ingress first and gracefully stop worker/backend. Restore the previously
 recorded application images/code/configuration for all three services; keep the
 PostgreSQL and shared image volumes. Do not run `docker compose down --volumes`,
-delete runs/artifacts or manually mutate Job statuses. Task L has no schema change,
-so no downgrade is needed. Preserve migration head `20260917_0009`.
+delete runs/artifacts or manually mutate Job statuses. Task L had no schema change;
+preserve the current migration head for a worker-only rollback.
+
+This historical Task L rollback sequence does not establish safe active-worker
+drain. For a control-aware rollback target, retain durable pause and pass the live
+drained gate before stopping/replacing workers. For any target predating Worker
+Drain Control, use the external maintenance/bootstrap gate; that target ignores
+the new row. Preserve the current migration head rather than downgrading for a
+worker-only rollback.
 
 The direct rollback target (merged PR #65) understands existing graph v1/v2 Jobs
 and accepted artifacts. Its worker can reclaim leases after expiry. Its Telegram

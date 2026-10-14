@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum as SAEnum,
@@ -485,6 +486,25 @@ class JobExecution(Base):
     claim_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkerAdmission(Base):
+    """One durable admission barrier shared by both worker lanes."""
+    __tablename__ = "worker_admission"
+    __table_args__ = (
+        CheckConstraint("id = 'workers'", name="ck_worker_admission_singleton"),
+        CheckConstraint("epoch >= 0", name="ck_worker_admission_epoch"),
+    )
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    paused: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+
+
+class WorkerAttempt(Base):
+    """Retained until this attempt unwinds, even if its Job lease is replaced."""
+    __tablename__ = "worker_attempts"
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id", ondelete="CASCADE"), primary_key=True)
+    claim_token: Mapped[str] = mapped_column(String(32), primary_key=True)
 
 
 class WorkflowDelivery(Base):
