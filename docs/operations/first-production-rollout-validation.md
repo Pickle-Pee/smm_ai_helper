@@ -24,7 +24,7 @@ verification; test data stays under ignored `.local-test/rollout`.
 | Final collector + real SQL + worker CLI + telemetry + graph worker suite | **129 passed**, 6.00 s, no skips |
 | Deterministic source manifest | 221 source/build/prompt/migration files; head exactly 20261014_0012; Git-byte equality and Windows autocrlf regression passed |
 | Safe collection/error boundaries | Host/path/explicit opt-in rejection, fake full-host/Docker collection, no secret echo, config drift, SQL READ ONLY adapter and real PostgreSQL probes passed |
-| Final network-options redaction / collector regression | **13 passed**, 2.13 s, after the final redaction-only change; prior runtime/SQL suites unaffected |
+| Final network-options redaction / host boundary isolation | **13 passed**, 2.12 s, after final redaction/isolation changes; prior runtime/SQL suites unaffected |
 | Full local Docker image build/start/namespace collector | **Not run:** local Docker Desktop engine pipe absent |
 | Full production barrier rehearsal / Telegram replay | **Not run:** actual production runtime/topology unknown; remains a release gate |
 
@@ -90,7 +90,8 @@ Preparation diff was reviewed for read-only behavior, secret exposure, bypass
 paths, shallow CI checkout portability, SQL/schema compatibility, bootstrap/rollback
 ordering and distinction between code/local/production evidence. Material local
 findings (CRLF-dependent hashing, shallow-history test dependency, global empty-DB
-test assumption, arbitrary IPAM driver options in output) were corrected. Independent operator/release review is still
+test assumption, arbitrary IPAM driver options in output, real cron reads in the
+controlled host test) were corrected. Independent operator/release review is still
 required; this is not an assertion that the proposed production barrier passed.
 
 Source manifest SHA256 (UTF-8/LF file):
@@ -98,7 +99,7 @@ Source manifest SHA256 (UTF-8/LF file):
 
 Collector SHA256 (reviewed local file bytes; verify LF Git-export bytes when
 packaging on another platform):
-`7cc31552cc0cb7adb23200f647853b7c8068a5058c2f4c553fbba8d07a92118d`.
+`7fb04af2d56317cd73b5d1b30f3110d528f7e1136cf46be916900f1174db8282`.
 
 These identify preparation artifacts, not release image IDs. Candidate digest,
 rollback image identities, actual production topology/schema/grants and a proven

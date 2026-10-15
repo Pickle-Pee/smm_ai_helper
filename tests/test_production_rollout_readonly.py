@@ -145,6 +145,7 @@ def test_full_collection_is_always_nogo_and_redacts_inspect(monkeypatch, tmp_pat
     monkeypatch.setattr(audit.socket,'gethostname',lambda:audit.HOST)
     monkeypatch.setattr(audit.os,'readlink',lambda p:'net:[1]')
     monkeypatch.setattr(audit,'host_processes',lambda:{'processes':[],'unreadable':0})
+    monkeypatch.setattr(audit,'cron_fingerprint',lambda:audit.digest({}))
     monkeypatch.setattr(audit,'run',runner)
     monkeypatch.setattr(audit,'manifest',lambda p:{'files':{}})
     monkeypatch.delenv('WORKER_DRAIN_DATABASE_URL',raising=False)

@@ -274,6 +274,12 @@ def network_view(network):
     return result
 
 
+def cron_fingerprint():
+    return digest({str(p):sha(p.read_bytes()) for root in
+        ('/etc/crontab','/etc/cron.d','/var/spool/cron') for p in
+        ([Path(root)] if Path(root).is_file() else sorted(Path(root).rglob('*'))) if p.is_file()})
+
+
 def collect(data):
     if socket.gethostname()!=HOST or Path.cwd().resolve()!=PROJECT:
         raise CheckError('host_or_project_mismatch')
@@ -304,9 +310,7 @@ def collect(data):
     report['ip6tables_fingerprint']=optional('ip6tables',lambda:sha(run(['ip6tables-save'])))
     report['systemd_fingerprint']=optional('systemd',lambda:sha(run(['systemctl','list-units','--all','--no-legend','--no-pager'])))
     report['scheduled_tasks_fingerprint']=optional('timers',lambda:sha(run(['systemctl','list-timers','--all','--no-legend','--no-pager'])))
-    report['cron_tree_fingerprint']=digest({str(p):sha(p.read_bytes()) for root in
-        ('/etc/crontab','/etc/cron.d','/var/spool/cron') for p in
-        ([Path(root)] if Path(root).is_file() else sorted(Path(root).rglob('*'))) if p.is_file()})
+    report['cron_tree_fingerprint']=optional('cron',cron_fingerprint)
     report['git_head']=run(['git','rev-parse','HEAD'],cwd=PROJECT).decode().strip()
     report['git_dirty']=bool(run(['git','status','--porcelain=v1','--untracked-files=normal'],cwd=PROJECT).strip())
     report['env_file_fingerprint']=sha((PROJECT/'.env').read_bytes())
