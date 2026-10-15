@@ -1,0 +1,2 @@
+# The trusted rollout package pins these exact UTF-8/LF manifest bytes.
+docs/operations/first-production-rollout.manifest.json text eol=lf

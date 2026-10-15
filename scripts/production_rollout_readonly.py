@@ -22,6 +22,9 @@ import tarfile
 
 TARGET = "c23dfb2cfc3cfab7cd34fe6226b67404d7d0c166"
 BASE = "55b09873001931e2053210e64448fbaac64f8dcc"
+# Trust anchor shipped in the reviewed collector, never supplied by legacy Git
+# or a caller-controlled --expected-hash flag. Exact UTF-8/LF package bytes.
+MANIFEST_SHA256 = "13623f5e33013f9bb515c1f049fc0099b44f16b4d61dd60138bab1fa333ee98d"
 HOST = "nl-vmv2-nano"
 PROJECT = Path("/opt/smm_ai_helper")
 MAX_BYTES = 16 * 1024 * 1024
@@ -42,7 +45,8 @@ def digest(value):
 def run(args, *, cwd=None, input_text=None):
     try:
         result = subprocess.run(args, cwd=cwd, input=input_text, capture_output=True,
-                                timeout=30, env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+                                timeout=30, env={**{k:v for k,v in os.environ.items()
+                                    if k.upper() != "WORKER_DRAIN_DATABASE_URL"}, "GIT_OPTIONAL_LOCKS": "0"})
     except (OSError, subprocess.TimeoutExpired):
         raise CheckError("command_unavailable_or_timeout") from None
     if result.returncode or len(result.stdout) > MAX_BYTES or len(result.stderr) > MAX_BYTES:
@@ -80,6 +84,18 @@ def manifest(repo):
         raise CheckError("unexpected_migration_head")
     return dict(schema="first_rollout_manifest.v1", target=TARGET, prior_telemetry_base=BASE,
                 alembic_heads=sorted(revisions - parents), files=files)
+
+
+def load_target_manifest(path):
+    """Authenticate package bytes without requiring any target Git object."""
+    raw = Path(path).read_bytes()
+    if len(raw)>MAX_BYTES or sha(raw)!=MANIFEST_SHA256:
+        raise CheckError('target_manifest_digest_mismatch')
+    data = json.loads(raw)
+    if (data.get('schema')!='first_rollout_manifest.v1' or data.get('target')!=TARGET
+            or data.get('alembic_heads')!=['20261014_0012']):
+        raise CheckError('target_manifest_identity_mismatch')
+    return data
 
 
 def role(argv):
@@ -159,13 +175,13 @@ except Exception:
     print(json.dumps({'error':'probe_failed'})); sys.exit(2)
 '''
 
-# Kept separate from the app probe: a restricted operator cannot SELECT full
-# tables or session metadata. Values in the input stream are never echoed.
+# Only executed by the separate protected operator command, never docker exec.
+# Its credential comes from that environment, not arguments/stdin or app settings.
 OPERATOR_PROBE = r'''
-import hashlib,json,sys
+import hashlib,json,os,sys
 try:
     import psycopg
-    url=json.load(sys.stdin)['url']
+    url=os.environ['WORKER_DRAIN_DATABASE_URL']
     if not url.startswith('postgresql+asyncpg://'): raise ValueError()
     with psycopg.connect(url.replace('postgresql+asyncpg://','postgresql://',1),autocommit=True,
         connect_timeout=5,options='-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000') as c:
@@ -192,6 +208,87 @@ try:
 except Exception:
     print(json.dumps({'error':'operator_probe_failed'}));sys.exit(2)
 '''
+
+
+def operator_probe():
+    """Protected host/venv subprocess; no Docker, app imports or app environment."""
+    url=os.environ.get('WORKER_DRAIN_DATABASE_URL')
+    if not url:
+        raise CheckError('protected_operator_connection_not_supplied')
+    environment={k:v for k,v in os.environ.items() if k.upper() in
+                 ('SYSTEMROOT','WINDIR','PATH','TEMP','TMP')}
+    environment['WORKER_DRAIN_DATABASE_URL']=url
+    try:
+        response=subprocess.run([sys.executable,'-I','-B','-c',OPERATOR_PROBE],
+            env=environment,capture_output=True,timeout=20)
+    except (OSError,subprocess.TimeoutExpired):
+        raise CheckError('operator_probe_unavailable') from None
+    if response.returncode or response.stderr or len(response.stdout)>MAX_BYTES:
+        raise CheckError('operator_probe_failed')
+    return json.loads(response.stdout)
+
+
+def operator_environment_isolated():
+    # Defence against accidentally invoking this command in the application's
+    # existing container/cwd. ACL/venv/package trust is additionally an operator
+    # prerequisite, not something a local flag can establish.
+    cwd=Path.cwd().resolve()
+    return (not any(p.exists() for p in (Path('/.dockerenv'),Path('/run/.containerenv')))
+            and not any(cwd==p or p in cwd.parents for p in (PROJECT,Path('/app'))))
+
+
+def operator_check(recon_path):
+    result=dict(schema='first_rollout_operator.v1', target=TARGET, verdict='NO_GO',
+        state='operator_unverified', identity_matches=False,
+        observed_at=datetime.now(timezone.utc).isoformat())
+    try:
+        if not operator_environment_isolated():
+            raise CheckError('protected_operator_environment_required')
+        raw=Path(recon_path).read_bytes()
+        if len(raw)>MAX_BYTES:
+            raise CheckError('recon_invalid')
+        recon=json.loads(raw)
+        result['recon_sha256']=sha(raw)
+        if (recon.get('schema')!='first_rollout_recon.v1' or recon.get('target')!=TARGET
+                or recon.get('target_manifest_sha256')!=MANIFEST_SHA256):
+            raise CheckError('recon_identity_invalid')
+        apps=[c for c in recon['containers'] if c['state']['Running']
+              and c['role'] in ('worker','backend','bot')]
+        if not apps or not any(c['role']=='worker' for c in apps):
+            raise CheckError('application_db_identity_unverified')
+        identities=set()
+        for app in apps:
+            db=recon['probes'][app['id']]['db']
+            identity=db['identity_fingerprint']
+            if db['read_only'] is not True or not re.fullmatch('[0-9a-f]{64}',identity):
+                raise CheckError('application_db_identity_unverified')
+            identities.add(identity)
+        if len(identities)!=1:
+            raise CheckError('application_db_identity_mismatch')
+        expected=identities.pop()
+        probe=operator_probe()
+        result['identity_matches']=probe.get('read_only') is True and probe.get('identity_fingerprint')==expected
+        if not result['identity_matches']:
+            raise CheckError('operator_db_identity_mismatch')
+        # Shape/boolean allowlist: never emit arbitrary subprocess/driver fields.
+        flags=probe['role_flags']
+        grants={'worker_admission':{'id':('SELECT','UPDATE'),'paused':('SELECT','UPDATE'),'epoch':('SELECT','UPDATE')},
+            'worker_attempts':{'job_id':('SELECT',),'claim_token':('SELECT',)},
+            'jobs':{'job_id':('SELECT',),'kind':('SELECT',),'status':('SELECT',)},
+            'job_executions':{'job_id':('SELECT',),'claim_token':('SELECT',),'lease_until':('SELECT',),'available_at':('SELECT',)}}
+        passed=(len(flags)==4 and all(flag is False for flag in flags) and probe['payload_select'] is False)
+        for table,columns in grants.items():
+            checks=probe['checks'][table]
+            passed=passed and checks.get('exists') is True and all(
+                checks.get(column+'.'+privilege) is True for column,privileges in columns.items() for privilege in privileges)
+        result['role_metadata_checks_passed']=bool(passed)
+        if not passed:
+            raise CheckError('operator_role_metadata_unverified')
+        result['state']='operator_metadata_checked'
+        result['identity_fingerprint']=expected
+    except Exception as exc:
+        result['reason']=str(exc) if isinstance(exc,CheckError) else 'operator_check_unavailable'
+    return result
 
 
 def host_processes():
@@ -280,11 +377,10 @@ def cron_fingerprint():
         ([Path(root)] if Path(root).is_file() else sorted(Path(root).rglob('*'))) if p.is_file()})
 
 
-def collect(data):
+def collect(manifest_path):
     if socket.gethostname()!=HOST or Path.cwd().resolve()!=PROJECT:
         raise CheckError('host_or_project_mismatch')
-    if data!=manifest(PROJECT):
-        raise CheckError('manifest_not_exact_target')
+    data=load_target_manifest(manifest_path)
     # Force local Docker socket, ignoring DOCKER_HOST/context inherited by shell.
     docker=['docker','--host','unix:///var/run/docker.sock']
     ids=run([*docker,'ps','-aq']).decode().split()
@@ -293,8 +389,9 @@ def collect(data):
     objects=json.loads(run([*docker,'inspect',*ids]))
     report=dict(schema='first_rollout_recon.v1', target=TARGET,
         observed_at=datetime.now(timezone.utc).isoformat(), verdict='NO_GO',
+        target_manifest_sha256=MANIFEST_SHA256,
         blockers=['producer_barrier_unproven','accepted_requests_unproven',
-                  'legacy_superseded_calls_unproven','external_writers_unproven'],
+                  'legacy_superseded_calls_unproven','external_writers_unproven','operator_unverified'],
         host=HOST, project=str(PROJECT), containers=[], probes={}, unavailable=[])
     def optional(name, operation):
         try:
@@ -340,16 +437,9 @@ def collect(data):
             report['probes'][c['Id']]=probe
     if not compose_groups:
         raise CheckError('compose_inventory_missing')
-    operator_url=os.environ.get('WORKER_DRAIN_DATABASE_URL')
-    report['operator']=None
-    if operator_url:
-        app_container=next((v['id'] for v in report['containers'] if v['role']=='worker' and v['state']['Running']),None)
-        if app_container:
-            report['operator']=optional('operator_probe',lambda:json.loads(run(
-                [*docker,'exec','-i',app_container,'python','-B','-c',OPERATOR_PROBE],
-                input_text=json.dumps({'url':operator_url}).encode())))
-    else:
-        report['unavailable'].append('protected_operator_connection_not_supplied')
+    # Runtime reconnaissance cannot verify a protected role. Never read/forward
+    # its DSN to any application container, even if accidentally set in this shell.
+    report['operator']={'state':'operator_unverified'}
     report['compose']=[]
     for (name, files) in compose_groups:
         if not files:
@@ -386,6 +476,9 @@ def main(argv=None):
     remote=sub.add_parser('collect')
     remote.add_argument('--manifest',type=Path,required=True)
     remote.add_argument('--execute-read-only',action='store_true')
+    protected=sub.add_parser('operator',help='run only in a separate protected operator host/venv')
+    protected.add_argument('--recon',type=Path,required=True)
+    protected.add_argument('--execute-read-only',action='store_true')
     args=parser.parse_args(argv)
     try:
         if args.action=='manifest':
@@ -393,11 +486,16 @@ def main(argv=None):
         else:
             if not args.execute_read_only:
                 raise CheckError('explicit_read_only_opt_in_required')
-            result=collect(json.loads(args.manifest.read_text()))
+            result=collect(args.manifest) if args.action=='collect' else operator_check(args.recon)
     except Exception as exc:
         print(json.dumps(dict(verdict='STOP',error=str(exc) if isinstance(exc,CheckError) else 'collector_failed')))
         return 2
-    print(json.dumps(result,sort_keys=True))
+    if args.action=='manifest':
+        raw=(json.dumps(result,sort_keys=True,indent=2)+'\n').encode()
+        # Preserve package bytes through Windows stdout redirection as well.
+        sys.stdout.buffer.write(raw)
+    else:
+        print(json.dumps(result,sort_keys=True))
     return 0 if args.action=='manifest' else 2  # reconnaissance can never authorize cutover
 
 

@@ -17,7 +17,7 @@ spec.loader.exec_module(audit)
 
 def test_local_manifest_uses_exact_git_bytes_and_new_head(tmp_path):
     # Test a self-contained Git fixture: shallow CI checkouts need not contain
-    # the historical release object. Operator collection still requires it.
+    # the historical release object. Only local generation needs that object.
     import shutil
     tree = tmp_path/'repo'
     tree.mkdir()
@@ -55,11 +55,136 @@ def test_cli_requires_opt_in_before_any_host_command():
     assert not result.stderr
 
 
+@pytest.mark.parametrize('change', ['byte', 'target', 'missing', 'truncated'])
+def test_manifest_pin_rejects_before_inventory(monkeypatch, tmp_path, change):
+    package=SCRIPT.parents[1]/'docs/operations/first-production-rollout.manifest.json'
+    data=package.read_bytes()
+    altered=tmp_path/'manifest.json'
+    if change=='byte':
+        altered.write_bytes(data+b' ')
+    elif change=='target':
+        altered.write_bytes(data.replace(audit.TARGET.encode(),b'a'*40))
+    elif change=='truncated':
+        altered.write_bytes(data[:30])
+    monkeypatch.setattr(audit,'PROJECT',tmp_path)
+    monkeypatch.setattr(audit.Path,'cwd',lambda:tmp_path)
+    monkeypatch.setattr(audit.socket,'gethostname',lambda:audit.HOST)
+    monkeypatch.setattr(audit,'run',lambda *a,**k:pytest.fail('inventory before manifest authentication'))
+    if change=='missing':
+        with pytest.raises(OSError): audit.collect(altered)
+    else:
+        with pytest.raises(audit.CheckError,match='target_manifest_digest_mismatch'):
+            audit.collect(altered)
+
+
+def test_pinned_manifest_package_and_canonical_cli_generation(monkeypatch, capsys):
+    package=SCRIPT.parents[1]/'docs/operations/first-production-rollout.manifest.json'
+    data=audit.load_target_manifest(package)
+    assert audit.sha(package.read_bytes())==audit.MANIFEST_SHA256
+    monkeypatch.setattr(audit,'manifest',lambda p:data)
+    assert audit.main(['manifest'])==0
+    assert audit.sha(capsys.readouterr().out.encode())==audit.MANIFEST_SHA256
+
+
+def test_collect_cli_rejects_untrusted_manifest_without_echoing_contents(monkeypatch,tmp_path,capsys):
+    path=tmp_path/'bad-manifest.json'
+    path.write_text('SENTINEL_SECRET_IN_MANIFEST')
+    monkeypatch.setattr(audit,'PROJECT',tmp_path)
+    monkeypatch.setattr(audit.Path,'cwd',lambda:tmp_path)
+    monkeypatch.setattr(audit.socket,'gethostname',lambda:audit.HOST)
+    monkeypatch.setattr(audit,'run',lambda *a,**k:pytest.fail('unauthenticated inventory'))
+    assert audit.main(['collect','--manifest',str(path),'--execute-read-only'])==2
+    captured=capsys.readouterr()
+    assert not captured.err and 'SENTINEL' not in captured.out
+    assert json.loads(captured.out)=={'verdict':'STOP','error':'target_manifest_digest_mismatch'}
+
+
+def test_operator_secret_is_removed_from_all_inventory_subprocess_environments(monkeypatch):
+    monkeypatch.setenv('WORKER_DRAIN_DATABASE_URL','SENTINEL_OPERATOR_URL')
+    def child(args,**kwargs):
+        assert 'WORKER_DRAIN_DATABASE_URL' not in kwargs['env']
+        assert 'SENTINEL_OPERATOR_URL' not in json.dumps(kwargs)
+        return subprocess.CompletedProcess(args,0,b'{}',b'')
+    monkeypatch.setattr(audit.subprocess,'run',child)
+    assert audit.run(['docker','inspect','offline'])==b'{}'
+
+
+def recon_record(identity='a'*64):
+    return {'schema':'first_rollout_recon.v1','target':audit.TARGET,
+        'target_manifest_sha256':audit.MANIFEST_SHA256,
+        'containers':[{'id':'worker','role':'worker','state':{'Running':True}},
+                      {'id':'bot','role':'bot','state':{'Running':True}}],
+        'probes':{key:{'db':{'read_only':True,'identity_fingerprint':identity}} for key in ('worker','bot')}}
+
+
+def good_operator_probe(identity='a'*64):
+    grants={'worker_admission':('id.SELECT','id.UPDATE','paused.SELECT','paused.UPDATE','epoch.SELECT','epoch.UPDATE'),
+        'worker_attempts':('job_id.SELECT','claim_token.SELECT'),
+        'jobs':('job_id.SELECT','kind.SELECT','status.SELECT'),
+        'job_executions':('job_id.SELECT','claim_token.SELECT','lease_until.SELECT','available_at.SELECT')}
+    return {'identity_fingerprint':identity,'read_only':True,'role_flags':[False]*4,'payload_select':False,
+        'checks':{t:{'exists':True,**{k:True for k in cols}} for t,cols in grants.items()}}
+
+
+@pytest.mark.parametrize('failure', ['none','mismatch','missing_app','mixed_db','role','control_missing','isolation'])
+def test_operator_identity_grant_and_environment_gates(monkeypatch,tmp_path,failure):
+    recon=recon_record()
+    probe=good_operator_probe()
+    if failure=='mismatch': probe['identity_fingerprint']='b'*64
+    if failure=='missing_app': recon['probes']['bot']=None
+    if failure=='mixed_db': recon['probes']['bot']['db']['identity_fingerprint']='b'*64
+    if failure=='role': probe['role_flags']=[True]*4
+    if failure=='control_missing': probe['checks']['worker_admission']={'exists':False}
+    path=tmp_path/'recon.json'
+    path.write_text(json.dumps(recon))
+    monkeypatch.setattr(audit,'operator_environment_isolated',lambda:failure!='isolation')
+    def invoke():
+        assert failure not in ('missing_app','mixed_db','isolation')
+        return {**probe,'untrusted':'SENTINEL_OPERATOR_CREDENTIAL'}
+    monkeypatch.setattr(audit,'operator_probe',invoke)
+    result=audit.operator_check(path)
+    assert result['verdict']=='NO_GO'
+    assert result['state']==('operator_metadata_checked' if failure=='none' else 'operator_unverified')
+    assert 'SENTINEL' not in json.dumps(result)
+
+
+def test_operator_subprocess_is_separate_and_failures_do_not_echo_secrets(monkeypatch):
+    secret='postgresql+asyncpg://user:SENTINEL_OPERATOR_PASSWORD@host/db'
+    monkeypatch.setenv('WORKER_DRAIN_DATABASE_URL',secret)
+    monkeypatch.setenv('DATABASE_URL','SENTINEL_APP_ENV')
+    def failed(args,**kwargs):
+        assert args==[sys.executable,'-I','-B','-c',audit.OPERATOR_PROBE]
+        assert secret not in json.dumps(args)
+        assert 'input' not in kwargs
+        assert kwargs['env']['WORKER_DRAIN_DATABASE_URL']==secret
+        assert 'DATABASE_URL' not in kwargs['env']
+        return subprocess.CompletedProcess(args,2,secret.encode(),secret.encode())
+    monkeypatch.setattr(audit.subprocess,'run',failed)
+    with pytest.raises(audit.CheckError,match='operator_probe_failed'):
+        audit.operator_probe()
+
+
+def test_real_operator_cli_is_fail_closed_and_never_echoes_credential(tmp_path):
+    import os
+    path=tmp_path/'recon.json'
+    path.write_text(json.dumps(recon_record()))
+    env={**os.environ,'WORKER_DRAIN_DATABASE_URL':'SENTINEL_INVALID_OPERATOR_CREDENTIAL'}
+    args=[sys.executable,'-B',str(SCRIPT),'operator','--recon',str(path)]
+    refused=subprocess.run(args,capture_output=True,text=True,env=env,cwd=tmp_path,timeout=30)
+    assert refused.returncode==2 and json.loads(refused.stdout)['verdict']=='STOP'
+    result=subprocess.run([*args,'--execute-read-only'],capture_output=True,text=True,env=env,cwd=tmp_path,timeout=30)
+    assert result.returncode==2
+    output=json.loads(result.stdout)
+    assert output['verdict']=='NO_GO' and output['state']=='operator_unverified'
+    assert not result.stderr and not refused.stderr
+    assert 'SENTINEL' not in result.stdout+result.stderr+refused.stdout+refused.stderr
+
+
 def test_host_mismatch_precedes_manifest_or_docker(monkeypatch):
     monkeypatch.setattr(audit.socket, 'gethostname', lambda: 'offline-test')
     monkeypatch.setattr(audit, 'run', lambda *a, **k: pytest.fail('external command'))
     with pytest.raises(audit.CheckError, match='host_or_project_mismatch'):
-        audit.collect({})
+        audit.collect('missing.json')
 
 
 def test_container_and_listener_output_hides_arguments_environment_and_labels():
@@ -110,13 +235,22 @@ def test_network_driver_options_are_never_printed():
     assert 'SENTINEL' not in json.dumps(safe)
 
 
-def test_full_collection_is_always_nogo_and_redacts_inspect(monkeypatch, tmp_path):
+def test_legacy_only_collection_cli_is_nogo_and_redacts_inspect(monkeypatch, tmp_path, capsys):
     secret='SENTINEL_SECRET'
     cid='a'*64
     image='sha256:'+'b'*64
     compose=tmp_path/'docker-compose.yaml'
     compose.write_text('services: {}')
     (tmp_path/'.env').write_text('KEY='+secret)
+    subprocess.run(['git','init','-q',str(tmp_path)],check=True)
+    subprocess.run(['git','-C',str(tmp_path),'add','docker-compose.yaml'],check=True)
+    subprocess.run(['git','-C',str(tmp_path),'-c','user.name=Offline Test','-c','user.email=offline@example.invalid',
+                    'commit','-qm','legacy-only'],check=True)
+    actual_head=subprocess.check_output(['git','-C',str(tmp_path),'rev-parse','HEAD']).decode().strip()
+    missing=subprocess.run(['git','-C',str(tmp_path),'cat-file','-e',audit.TARGET],capture_output=True)
+    assert missing.returncode!=0
+    git_runner=audit.run
+    calls=[]
     c={'Id':cid,'Image':image,'Config':{'Cmd':['python','-m','app.worker'],
         'Env':['KEY='+secret], 'Labels':{'com.docker.compose.project':'project',
         'com.docker.compose.service':'worker','com.docker.compose.project.working_dir':str(tmp_path),
@@ -127,7 +261,11 @@ def test_full_collection_is_always_nogo_and_redacts_inspect(monkeypatch, tmp_pat
         'environment':{'KEY':secret},'restart':'unless-stopped'}},
         'networks':{'default':{'name':'project_default'}}}
     def runner(args,**kwargs):
-        if args[0]=='git': return b'clean-sha' if args[1]=='rev-parse' else b''
+        calls.append(args)
+        assert secret not in json.dumps({'args':args,'input':kwargs.get('input_text',b'').decode()})
+        if args[0]=='git':
+            assert args[1] in ('rev-parse','status')
+            return git_runner(args,**kwargs)
         if args[0]=='docker':
             cmd=args[3:]
             if cmd==['ps','-aq']: return cid.encode()
@@ -135,7 +273,10 @@ def test_full_collection_is_always_nogo_and_redacts_inspect(monkeypatch, tmp_pat
             if cmd[:2]==['image','inspect']: return json.dumps([{'Id':image,'Config':{'Env':['KEY='+secret]}}]).encode()
             if cmd[0] in ('network','volume'): return b''
             if cmd[0]=='compose': return json.dumps(resolved).encode()
-            if cmd[0]=='exec': return json.dumps({'source_hashes':{}}).encode()
+            if cmd[0]=='exec':
+                assert cmd[-1]==audit.PROBE
+                assert set(json.loads(kwargs['input_text']))=={'files','database'}
+                return json.dumps({'source_hashes':{}}).encode()
             pytest.fail('unexpected Docker operation')
         if args[0]=='nft': raise audit.CheckError('unavailable')
         if args[0] in ('ss','nsenter'): return b'tcp LISTEN 0 100 0.0.0.0:8000 0.0.0.0:*\n'
@@ -147,19 +288,30 @@ def test_full_collection_is_always_nogo_and_redacts_inspect(monkeypatch, tmp_pat
     monkeypatch.setattr(audit,'host_processes',lambda:{'processes':[],'unreadable':0})
     monkeypatch.setattr(audit,'cron_fingerprint',lambda:audit.digest({}))
     monkeypatch.setattr(audit,'run',runner)
-    monkeypatch.setattr(audit,'manifest',lambda p:{'files':{}})
-    monkeypatch.delenv('WORKER_DRAIN_DATABASE_URL',raising=False)
-    report=audit.collect({'files':{}})
+    package=SCRIPT.parents[1]/'docs/operations/first-production-rollout.manifest.json'
+    monkeypatch.setenv('WORKER_DRAIN_DATABASE_URL',secret)
+    monkeypatch.setattr(audit,'operator_probe',lambda:pytest.fail('operator credential boundary'))
+    monkeypatch.setattr(audit,'manifest',lambda p:pytest.fail('target Git object not available'))
+    assert audit.main(['collect','--manifest',str(package),'--execute-read-only'])==2
+    captured=capsys.readouterr()
+    assert not captured.err
+    report=json.loads(captured.out)
     assert report['verdict']=='NO_GO' and not report['inventory_complete']
     assert 'nft' in report['unavailable']
     assert report['containers'][0]['image_id']==image
+    assert report['git_head']==actual_head
+    assert any(args[0]=='docker' and args[3:]==['network','ls','-q'] for args in calls)
+    assert report['operator']=={'state':'operator_unverified'}
+    assert 'operator_unverified' in report['blockers']
     assert secret not in json.dumps(report)
 
 
 @pytest.mark.parametrize('probe', [audit.PROBE, audit.OPERATOR_PROBE])
 def test_probe_errors_are_bounded_in_real_subprocess(probe):
+    import os
+    env={k:v for k,v in os.environ.items() if k.upper() not in ('WORKER_DRAIN_DATABASE_URL','DATABASE_URL')}
     result = subprocess.run([sys.executable, '-B', '-c', probe], input='{"files":["../../secret"]}',
-                            capture_output=True, text=True)
+                            capture_output=True, text=True,env=env)
     assert result.returncode == 2
     assert json.loads(result.stdout)['error'] in ('probe_failed', 'operator_probe_failed')
     assert not result.stderr
@@ -180,7 +332,7 @@ def test_probe_sql_is_read_only_and_does_not_select_payloads():
 
 
 @pytest.mark.parametrize('probe,probe_request', [(audit.PROBE, {'files':[], 'database':True}),
-                                         (audit.OPERATOR_PROBE, {'url':'postgresql+asyncpg://local'})])
+                                         (audit.OPERATOR_PROBE, {})])
 def test_real_probe_process_with_strict_readonly_adapter(tmp_path, probe, probe_request):
     # A real subprocess executes every query. The adapter rejects writes and
     # returns only aggregate metadata; it cannot hide provider/runtime imports.
@@ -212,7 +364,10 @@ def connect(url,**kwargs):
     return Connection()
 ''')
     import os
-    env = {**os.environ, 'PYTHONPATH':str(tmp_path), 'DATABASE_URL':'postgresql://offline'}
+    env = {k:v for k,v in os.environ.items() if k.upper() not in ('WORKER_DRAIN_DATABASE_URL','DATABASE_URL')}
+    env['PYTHONPATH']=str(tmp_path)
+    env['DATABASE_URL' if probe==audit.PROBE else 'WORKER_DRAIN_DATABASE_URL']=(
+        'postgresql://offline' if probe==audit.PROBE else 'postgresql+asyncpg://local')
     result = subprocess.run([sys.executable,'-B','-c',probe], cwd=tmp_path,env=env,
                             input=json.dumps(probe_request),capture_output=True,text=True)
     assert result.returncode == 0, result.stdout

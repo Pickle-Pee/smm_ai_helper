@@ -94,11 +94,19 @@ installer; он не переносит старые cutover predicates и не 
 python scripts/production_rollout_readonly.py manifest --repo . > release-manifest.json
 ```
 
-Проверить побайтовое совпадение с
+Команда `manifest` предназначена только для локальной release-подготовки, где есть
+target Git object. Для production collection использовать готовый
 [`first-production-rollout.manifest.json`](first-production-rollout.manifest.json)
-после JSON decode (formatting несущественен). Manifest — source identity, не image
-digest и не разрешение. Для collector нужен доступ к Git object точного target SHA;
-его отсутствие даёт STOP, collector сам не fetch'ит на сервере.
+из доверенного reviewed пакета. Его **точные UTF-8/LF bytes** проверяются по
+встроенному pin `MANIFEST_SHA256`:
+`13623f5e33013f9bb515c1f049fc0099b44f16b4d61dd60138bab1fa333ee98d`.
+Нельзя менять formatting/newlines/BOM или подставлять другой checksum через CLI.
+`.gitattributes` сохраняет LF для этого файла; manifest CLI пишет те же bytes
+также при Windows redirection. Manifest — source identity, не image digest или
+разрешение. Collector **не требует target Git object на legacy host**: он не
+вызывает `manifest()`/`git archive`, fetch или checkout. Фактический HEAD/status
+legacy checkout и runtime image provenance собираются отдельно; их несовпадение
+с target ожидаемо до rollout, а не причина пропустить inventory.
 
 **Только после отдельного разрешения на чтение**, через существующий проверенный
 операторский доступ, доставить reviewed script + manifest в защищённый staging
@@ -133,13 +141,46 @@ SQL работает с read-only transaction, connect/statement/lock timeouts �
 `docker exec python -B` создаёт короткий **read-only helper process**, не worker;
 это единственное выполнение внутри существующих containers, не restart/startup.
 
-Optional protected `WORKER_DRAIN_DATABASE_URL` из operator environment передаётся
-отдельному restricted-role probe через stdin, никогда через args/Compose environment
-override. Collector не сохраняет URL. Без него operator role остаётся unverified.
-До 0012 отсутствие control tables ожидаемо, privileges повторно проверяются после
-миграции. Прямой operator DB connect должен иметь тот же identity fingerprint,
-что app/worker probes; при proxy/socket разнице требуется отдельное доказательство
-того же кластера/DB, простое несовпадение не разрешается игнорировать.
+`collect` не выполняет operator probe: всегда сохраняет `operator_unverified` и
+NO-GO. Operator DSN нельзя загружать в shell/runtime приложения для этой команды;
+защита дополнительно удаляет `WORKER_DRAIN_DATABASE_URL` из environment всех её
+дочерних Git/Docker/host commands. В `docker exec` поступают только source paths
+и признак read-only app DB query, без operator credential.
+
+После отдельного разрешения на DB read использовать **отдельный защищённый
+operator host/account/venv**, reviewed package и psycopg, вне application directory
+и containers. Не устанавливать probe/dependencies в worker/backend/bot и не
+пробрасывать туда DSN через args, stdin, env или mounts. Использовать существующий
+approved DB access, без новых SSH users/tunnels/access infrastructure; если его
+нет, сохранить `operator_unverified` и NO-GO. Secrets поступают только из approved
+operator secret injection в environment, не из `.env` приложения или CLI history.
+
+Пример **будущего** запуска там (не запускать на production без разрешения):
+
+```bash
+umask 077
+/PROTECTED-OPERATOR-VENV/bin/python -I -B /REVIEWED-STAGING/production_rollout_readonly.py \
+  operator --recon /REVIEWED-EVIDENCE/recon.json --execute-read-only \
+  > /REVIEWED-EVIDENCE/operator.json
+# Exit 2 always: even matching metadata is not a cutover authorization.
+```
+
+Команда отказывает внутри container/из `/app` или `/opt/smm_ai_helper`; это только
+дополнительный guard, не доказательство protected ACL/venv. Она запускает свой
+isolated Python interpreter (`-I -B`) с отдельным allowlisted operator environment,
+без Docker/app imports, args/stdin secrets и application environment. Отсутствие
+DSN/library/access, ошибка SQL, missing control tables, избыточная role или
+несовпадение DB identity оставляют `operator_unverified`/NO-GO; driver stdout/stderr
+не экспортируются. При успешных metadata checks получается
+`operator_metadata_checked`, но verdict остаётся NO-GO и роль требует DBA review.
+
+Report привязан к SHA256 исходного recon. Нужен один и тот же live DB identity
+fingerprint у **всех** running app/worker/bot probes и operator connection;
+missing probe, несколько DB или любое несовпадение блокируют проверку. Proxy/socket
+разницу нельзя игнорировать или заменить wildcard/ручным `verified=true`.
+Collector snapshot не заменяет live identity/status проверку непосредственно перед
+cutover. До 0012 отсутствие control tables ожидаемо; privileges повторно
+проверяются после отдельно разрешённой миграции из protected operator environment.
 
 Collector всегда `NO_GO`, `inventory_complete=false`; успешная collection никогда
 не превращается в deploy gate. Snapshot не атомарен между host/Docker/DB; повторить
