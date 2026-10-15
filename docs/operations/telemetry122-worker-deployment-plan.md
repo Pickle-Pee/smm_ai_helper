@@ -1,5 +1,10 @@
 # Telemetry #122: revised worker deployment contract
 
+The consolidated [first-production-rollout runbook](first-production-rollout.md)
+now supplies the #122/#123 source manifest, reconnaissance collector, bootstrap
+design, ordered cutover and rollback plan. Production remains NO-GO pending
+independent topology/evidence review and separate authorization.
+
 Status: prepared for review, **no production access or rollout authorized**. The
 first production installation remains **NO-GO** until the legacy bootstrap gate in
 [Worker Drain Control](worker-drain-control.md#first-rollout-legacy-bootstrap) is

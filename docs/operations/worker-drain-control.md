@@ -1,5 +1,10 @@
 # Worker Drain Control
 
+First #122/#123 installation: use the consolidated
+[first-production-rollout runbook](first-production-rollout.md), including its
+read-only collector and explicit NO-GO evidence gaps. It is prepared for review,
+not authorization for production access or cutover.
+
 Worker Drain Control closes **claim admission**, while API and Telegram continue
 to save durable work in PostgreSQL. It covers the fixed `marketing.step` and graph
 `orchestration.module` lane families across all compatible worker instances using
