@@ -36,13 +36,15 @@ def test_local_manifest_uses_exact_git_bytes_and_new_head(tmp_path):
     with patch.object(audit,'TARGET',target):
         first = audit.manifest(tree)
         assert first == audit.manifest(tree)
-    first['target']=wanted['target']
-    assert first==wanted
-    assert first['target'] == audit.TARGET
+    # The historical package fixes the file list and format, not today's source
+    # hashes. Verify every copied file against this fixture's committed Git bytes.
+    assert set(first) == set(wanted)
+    assert set(first['files']) == set(wanted['files'])
+    assert first['target'] == target
+    assert {key: value for key, value in first.items() if key not in ('target', 'files')} == {
+        key: value for key, value in wanted.items() if key not in ('target', 'files')}
     assert first['alembic_heads'] == ['20261014_0012']
-    for name in ('app/worker.py', 'app/worker_control.py', 'app/services/worker_drain_service.py',
-                 'app/models.py', 'app/workflows/service.py', 'app/orchestration_runtime/service.py',
-                 'app/llm/telemetry.py', 'migrations/versions/20261014_0012_worker_admission.py'):
+    for name in wanted['files']:
         expected = subprocess.check_output(['git', 'show', f'{target}:{name}'], cwd=tree)
         assert first['files'][name] == audit.sha(expected)
 
