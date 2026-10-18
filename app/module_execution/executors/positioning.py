@@ -14,6 +14,9 @@ from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
     PositioningWithoutSeedsOutput,
 )
+from .product_support import (
+    PRODUCT_OUTPUTS, PRODUCT_CATEGORIES, WIRE_VERSION, product_wire_schema, decode_product_wire,
+)
 
 POSITIONING_INPUTS = ("product", "target_or_target_hypothesis", "product_truth")
 POSITIONING_SEEDS = ("customer_job_or_need", "relevant_alternative")
@@ -50,11 +53,31 @@ Never treat an upstream hypothesis as observed evidence. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
-    def __init__(self, *, model_call, composer=None, provider_schema_projection=False):
+    def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
+                 product_support_wire=False):
         if type(provider_schema_projection) is not bool:
             raise TypeError("Expected boolean POSITIONING projection policy")
         super().__init__(model_call=model_call, composer=composer)
         self._provider_schema_projection = provider_schema_projection
+        if type(product_support_wire) is not bool:
+            raise TypeError("Expected boolean POSITIONING product support wire policy")
+        self._product_support_wire = product_support_wire
+        if product_support_wire:
+            self.instruction += f"\nUse wire_contract_version {WIRE_VERSION}. For each of " + ", ".join(sorted(PRODUCT_OUTPUTS)) + """:
+select product_support_id explicitly from AllowedProductSupportId. It is mandatory
+for every kind, including HYPOTHESIS. evidence_ids contains only additional local
+support (at most 31); do not repeat the selected ID there. parent_claim_ids remains
+available for materially used accepted parents. No inferred or fabricated IDs."""
+
+    def wire_schema_for(self, request, validation_schema, evidence):
+        if self._product_support_wire:
+            return product_wire_schema(validation_schema, evidence)
+        return super().wire_schema_for(request, validation_schema, evidence)
+
+    def decode_wire_payload(self, request, payload, evidence):
+        if self._product_support_wire:
+            return decode_product_wire(payload, evidence)
+        return super().decode_wire_payload(request, payload, evidence)
 
     def provider_schema_for(self, request, validation_schema):
         collapsed = 0
@@ -75,6 +98,10 @@ COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
             "schema_projection_applied": collapsed > 0, "schema_projection_nodes": collapsed,
             "validation_schema_bytes": original["bytes"], "validation_schema_sha256": original["sha256"],
             "provider_schema_bytes": provider["bytes"], "provider_schema_sha256": provider["sha256"]}
+        if self._product_support_wire:
+            fields["wire_contract_version"] = WIRE_VERSION
+            fields["wire_schema_bytes"] = fields.pop("validation_schema_bytes")
+            fields["wire_schema_sha256"] = fields.pop("validation_schema_sha256")
         log.info("POSITIONING provider schema " + " ".join(f"{key}=%s" for key in fields),
                  *fields.values(), extra=fields)
         return provider_schema
@@ -135,6 +162,6 @@ COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
                 raise StatementSemanticsError(SemanticRule.MISSING_SEED_REQUIRES_HYPOTHESIS)
         if statement.output_name in ("differentiation", "points_of_difference", "USP_directions") and statement.kind != "HYPOTHESIS":
             raise StatementSemanticsError(SemanticRule.DIFFERENTIATION_REQUIRES_HYPOTHESIS)
-        if statement.output_name in ("RTB", "value_proposition", "positioning_statement", "offer"):
-            if not any(local[e].input_key in ("product_truth", "existing_proof") for e in statement.evidence_ids):
+        if statement.output_name in PRODUCT_OUTPUTS:
+            if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
