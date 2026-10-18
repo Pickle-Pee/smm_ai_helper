@@ -26,6 +26,8 @@ from app.module_registry import ModuleId, ModuleRegistry, ModuleResultStatus
 from app.services.expert_instruction_composer import ExpertInstructionComposer
 
 from .schemas import OutputBase
+from .diagnostics import statement_metadata
+from .provider_schema import schema_measurement
 from .support_schema import SupportRequirement, support_response_schema
 
 
@@ -131,6 +133,7 @@ class StatementSemanticsError(ExecutorOutputError):
         self.numeric_context_reason = numeric_context_reason
         self.output_index = output_index
         self.numeric_context_index = numeric_context_index
+        self.statement_metadata = None
 
 
 class NumericLocation(str, Enum):
@@ -392,6 +395,17 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
                             self.module_id.value, stage.value, diagnostic.failure_rule.value,
                             diagnostic.output_index, diagnostic.experiment_index)
             elif isinstance(exc, StatementSemanticsError) and type(exc.rule) is SemanticRule:
+                fields = {
+                    "module_id": self.module_id.value,
+                    "execution_id": request.execution_id,
+                    "schema_version": self.schema_version,
+                    "validation_schema_sha256": schema_measurement(validation_schema)["sha256"],
+                    "provider_schema_sha256": schema_measurement(provider_schema)["sha256"],
+                    "rule": exc.rule.value,
+                    **(exc.statement_metadata or {}),
+                }
+                log.info("Module statement diagnostic " + " ".join(f"{key}=%s" for key in fields),
+                         *fields.values(), extra=fields)
                 if exc.numeric_context_reason is not None:
                     log.warning("Module output rejected module=%s stage=%s rule=%s field=%s reason=%s output_index=%s numeric_context_index=%s",
                                 self.module_id.value, stage.value, exc.rule.value, exc.numeric_location.value,
@@ -443,9 +457,13 @@ supplied product_truth/confirmed_business_fact may support confirmed product cla
             except ResultContractError as exc:
                 raise ResultContractError(exc.failure_rule, stage=exc.stage, output_index=i) from None
             except StatementSemanticsError as exc:
-                raise StatementSemanticsError(exc.rule, numeric_location=exc.numeric_location,
+                diagnostic = StatementSemanticsError(exc.rule, numeric_location=exc.numeric_location,
                     numeric_context_reason=exc.numeric_context_reason, output_index=i,
-                    numeric_context_index=exc.numeric_context_index) from None
+                    numeric_context_index=exc.numeric_context_index)
+                diagnostic.statement_metadata = statement_metadata(
+                    i, statement, local,
+                    ModuleRegistry.load("1.1.0").get(self.module_id).outputs)
+                raise diagnostic from None
             except (ValueError, TypeError):
                 raise ExecutorOutputError(stage=OutputFailureStage.STATEMENT_SEMANTICS_INVALID) from None
             supports = [local[eid].confidence for eid in statement.evidence_ids]
