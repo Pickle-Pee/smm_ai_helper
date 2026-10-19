@@ -58,6 +58,7 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
     executors = build_module_executor_registry(model_call=model_call, analyzer=analyzer,
         market_analyzer=analyzer, registry_version="1.3.0",
         positioning_schema_projection=settings.POSITIONING_SCHEMA_PROJECTION_ENABLED,
+        positioning_product_support_wire=settings.POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED,
         experiments_schema_projection=settings.EXPERIMENTS_SCHEMA_PROJECTION_ENABLED,
         virtual_cmo_numeric_quote_catalog=settings.VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED)
     validate_executor_coherence(metadata, executors)
