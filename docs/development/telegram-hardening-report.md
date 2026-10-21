@@ -2,6 +2,7 @@
 
 Base: `a51a12d44da602d96a22cb99e26026898c8006a2` (`origin/master`).
 Branch: `codex/telegram-production-hardening`. One Draft PR; no merge/deployment.
+Draft PR: [#129](https://github.com/Pickle-Pee/smm_ai_helper/pull/129), base `master`.
 See the baseline and `../operations/telegram-production-runbook.md`.
 
 ## Behavior and compatibility
@@ -222,7 +223,7 @@ remain explicit; this report does not authorize production deployment.
 | 07 Compatibility | PASS | full standalone/fixed MVP/Copilot/graph/database/Redis suites pass |
 | 08 Tests | BLOCKED | local offline checks pass; local container daemon absent, remote CI tracked on Draft PR |
 | 09 Documentation | PASS | baseline, this report, operational runbook |
-| 10 Reviewability | NOT_VERIFIED | independent review fixes applied, logical commits complete; PR publication recorded on GitHub |
+| 10 Reviewability | PASS | independent review fixes applied, logical commits complete; Draft PR #129 published and attached |
 | 11 BOT-16 | PASS | saved accepted strategy explanation and Telegram/HTTP/DB tests |
 
 Verdict: **READY_WITH_LIMITATIONS**. Required local offline checks pass. Container
