@@ -83,7 +83,7 @@ async def feedback(message: types.Message, state: FSMContext):
             raise ValueError()
         await send_text(message, "Обратная связь сохранена как ваше сообщение о результате; это не независимая проверка эффективности. Профиль бизнеса не изменён.")
     except (backend.BackendError, AttributeError, TypeError, ValueError):
-        await send_text(message, "Не удалось сохранить обратную связь. Повторите команду позже.")
+        await send_text(message, "Не удалось подтвердить сохранение обратной связи. Она могла сохраниться; проверьте следующий ответ наставника перед повтором.")
 
 
 @router.message(StateFilter(MentorStates.question), F.text, ~F.text.startswith("/"))

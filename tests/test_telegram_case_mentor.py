@@ -80,6 +80,7 @@ def test_malformed_feedback_ack_never_claims_saved(monkeypatch):
         await state.update_data(mentor_run_id=RID)
         await state.set_state(mentor.MentorStates.question)
         await mentor.feedback(msg, state)
-        assert "Не удалось сохранить" in text_sent(msg)
+        assert "Не удалось подтвердить сохранение" in text_sent(msg)
+        assert "могла сохраниться" in text_sent(msg)
         assert "Обратная связь сохранена" not in text_sent(msg)
     asyncio.run(check())
