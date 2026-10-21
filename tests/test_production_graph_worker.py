@@ -18,7 +18,7 @@ from app.module_execution.executors.common import OutputFailureStage
 from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime import composition
 from app.orchestration_runtime.worker import ModuleGraphWorker, transient
-from app.worker import main, run_lane
+from app.worker import MarketingWorker, main, run_lane
 from app.workflows.queue import FIXED_WAKEUP_KEY, GRAPH_WAKEUP_KEY
 
 
@@ -243,3 +243,65 @@ def test_architecture_worker_execution_has_no_context_acquisition_or_ingress():
         assert "marketing_copilot" not in source and "orchestration_runtime" not in source
     assert FIXED_WAKEUP_KEY == "smm:marketing:wakeups:v1"
     assert GRAPH_WAKEUP_KEY == "smm:orchestration:wakeups:v1" != FIXED_WAKEUP_KEY
+
+
+@pytest.mark.parametrize("boundary", ["scan", "wait", "hint"])
+def test_main_shutdown_when_lane_dependency_swallows_cancellation(monkeypatch, boundary):
+    monkeypatch.setattr(settings, "WORKER_CONCURRENCY", 1)
+    monkeypatch.setattr(settings, "GRAPH_WORKER_CONCURRENCY", 1)
+
+    async def exercise():
+        entered = asyncio.Event()
+        queues, calls, lane_tasks, cancelled_tasks = [], [], set(), set()
+
+        async def swallowed_cancel():
+            lane_tasks.add(asyncio.current_task())
+            if len(lane_tasks) == 2:
+                entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                current = asyncio.current_task()
+                if current in cancelled_tasks:
+                    raise
+                cancelled_tasks.add(current)
+
+        async def once(self, hint=None):
+            calls.append(hint)
+            if boundary == "scan" or boundary == "hint" and hint:
+                await swallowed_cancel()
+            return False
+
+        def queues_factory(**kwargs):
+            result = queue(**kwargs)
+
+            async def wait():
+                if boundary == "wait" or kwargs["key"] == GRAPH_WAKEUP_KEY:
+                    await swallowed_cancel()
+                return "stale-hint"
+
+            result.wait = wait
+            queues.append(result)
+            return result
+
+        monkeypatch.setattr(MarketingWorker, "once", once)
+        monkeypatch.setattr(ModuleGraphWorker, "once", once)
+        task = asyncio.create_task(main(queue_factory=queues_factory))
+        try:
+            await asyncio.wait_for(entered.wait(), 3)
+            before = len(calls)
+            task.cancel()
+            done, _ = await asyncio.wait({task}, timeout=3)
+            assert task in done, "TaskGroup waited forever for a cancelled lane"
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert len(calls) == before
+            for wakeups in queues:
+                wakeups.close.assert_awaited_once()
+        finally:
+            for lane_task in lane_tasks:
+                lane_task.cancel()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise())

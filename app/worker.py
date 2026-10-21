@@ -71,16 +71,21 @@ class MarketingWorker:
 
 async def run_lane(worker, queue, *, lane):
     """Every iteration scans PostgreSQL before consulting an expendable hint."""
-    while True:
+    # Python 3.11 asyncio.wait_for (used by Redis socket writes) can return
+    # a completed result while swallowing a simultaneous CancelledError. The
+    # cancellation request remains set: never admit another scan or hinted job.
+    task = asyncio.current_task()
+    while not task.cancelling():
         try:
-            if not await worker.once():
+            if not await worker.once() and not task.cancelling():
                 hint = await queue.wait()
-                if hint:
+                if hint and not task.cancelling():
                     await worker.once(hint)
         except Exception as exc:
             # Cancellation is BaseException: leave the active lease recoverable.
             log.error("Worker loop unavailable lane=%s error_type=%s", lane, type(exc).__name__)
             await asyncio.sleep(2)
+    raise asyncio.CancelledError
 
 
 async def main(*, sessions=AsyncSessionLocal, queue_factory=RedisWakeups,
