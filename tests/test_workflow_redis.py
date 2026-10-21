@@ -57,3 +57,53 @@ def test_real_fixed_and_graph_lists_do_not_consume_each_others_hints():
             await fixed.close()
             await graph.close()
     asyncio.run(run())
+
+
+@pytest.mark.skipif(not os.getenv("REDIS_TEST_URL"), reason="REDIS_TEST_URL is not configured")
+def test_lane_shutdown_when_cancel_races_with_redis_send_completion():
+    from redis.asyncio.connection import Connection, ConnectionPool
+    from app.worker import run_lane
+
+    async def exercise():
+        injected = asyncio.Event()
+
+        class CancelAtSendCompletion(Connection):
+            async def send_packed_command(self, command, **kwargs):
+                # Redis uses asyncio.wait_for for socket writes. On Python 3.11
+                # a completed write can swallow the caller's simultaneous cancel.
+                caller = asyncio.current_task()
+                original = self._send_packed_command
+
+                async def send(packed):
+                    await original(packed)
+                    if b"BLPOP" in b"".join(packed) and not injected.is_set():
+                        injected.set()
+                        asyncio.get_running_loop().call_soon(caller.cancel)
+
+                self._send_packed_command = send
+                try:
+                    return await super().send_packed_command(command, **kwargs)
+                finally:
+                    self._send_packed_command = original
+
+        pool = ConnectionPool.from_url(os.environ["REDIS_TEST_URL"],
+            connection_class=CancelAtSendCompletion, decode_responses=True,
+            socket_connect_timeout=1, socket_timeout=2)
+        wakeups = RedisWakeups(Redis(connection_pool=pool),
+            key="smm:test:cancel:" + uuid.uuid4().hex)
+        worker = SimpleNamespace(once=AsyncMock(return_value=False))
+        task = asyncio.create_task(run_lane(worker, wakeups, lane="fixed-0"))
+        try:
+            await asyncio.wait_for(injected.wait(), 3)
+            done, _ = await asyncio.wait({task}, timeout=3)
+            assert task in done, "worker kept scanning after Redis swallowed cancellation"
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            worker.once.assert_awaited_once_with()
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await wakeups.close()
+            await pool.aclose()
+
+    asyncio.run(exercise())
