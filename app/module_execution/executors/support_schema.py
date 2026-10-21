@@ -74,6 +74,13 @@ def support_response_schema(output_type, evidence_ids, parent_ids, *,
             schema.setdefault("$defs", {})[definition] = {
                 "type": "string", "minLength": 1, "maxLength": 128, "enum": allowed[field],
             }
+    check_schema_bounds(schema)
+    Draft202012Validator.check_schema(schema)
+    return schema
+
+
+def check_schema_bounds(schema):
+    """Apply the same complete-schema budget after request-specific extensions."""
     enum_count = 0
     string_characters = 0
 
@@ -95,5 +102,3 @@ def support_response_schema(output_type, evidence_ids, parent_ids, *,
     count(schema)
     if enum_count > MAX_SCHEMA_ENUM_VALUES or string_characters > MAX_SCHEMA_STRING_CHARACTERS:
         raise ModuleExecutionContractError("Request-scoped response schema exceeds provider bounds")
-    Draft202012Validator.check_schema(schema)
-    return schema

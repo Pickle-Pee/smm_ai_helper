@@ -1,0 +1,407 @@
+{
+  "baseline": "0441c49e3938c962f5165adae4f96916df164e1a",
+  "date": "2026-10-18",
+  "identities": "synthetic only; execution_id=c repeated 32 times",
+  "provider_post_performed": false,
+  "provider_compatibility": "documented schema subset for standard non-fine-tuned models; not live certification",
+  "source": "https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses",
+  "bounds": {
+    "local_ids": 250,
+    "parent_ids": 250,
+    "id_characters": 128,
+    "selected_product_ids": 1,
+    "additional_product_evidence_ids": 31,
+    "normalized_local_evidence_ids": 32,
+    "statement_parent_ids": 32,
+    "enum_values": 1000,
+    "schema_string_characters": 120000,
+    "object_properties": 5000,
+    "expanded_nesting": 10
+  },
+  "schemas": [
+    {
+      "customer_job_seed": true,
+      "alternative_seed": true,
+      "profile": "local_only",
+      "parser_type": "PositioningOutput",
+      "local_ids": 6,
+      "parent_ids": 0,
+      "server_v1": {
+        "bytes": 4503,
+        "sha256": "64a878e53e62c78f9fc889ac1148d8d0e28070866fed35f351cd662c35fa04da",
+        "enum_values": 62,
+        "object_properties": 27,
+        "string_characters": 1246,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 5639,
+        "sha256": "88c69ce0b911a8e7f5643daaf7786443617951ac8f2cfd281fb5f2c0c2403e9c",
+        "enum_values": 69,
+        "object_properties": 35,
+        "string_characters": 1535,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 4006,
+        "sha256": "d6ed8d8c43e058d02903995d6805463ceeb9d98e8838b1d411d46016d7c4c912",
+        "enum_values": 45,
+        "object_properties": 23,
+        "string_characters": 1162,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": true,
+      "alternative_seed": true,
+      "profile": "accepted_parent",
+      "parser_type": "PositioningOutput",
+      "local_ids": 6,
+      "parent_ids": 1,
+      "server_v1": {
+        "bytes": 6293,
+        "sha256": "9d985f1ef84b7fce7644966bb82921772e9214b0c5a1bc91551e7f5e03f67519",
+        "enum_values": 91,
+        "object_properties": 39,
+        "string_characters": 1737,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 7364,
+        "sha256": "c0ae9ae233db70fd457da2d5d44b7c1e19f53fcba1841dd9b8942b54d88369a1",
+        "enum_values": 94,
+        "object_properties": 47,
+        "string_characters": 1980,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 7364,
+        "sha256": "c0ae9ae233db70fd457da2d5d44b7c1e19f53fcba1841dd9b8942b54d88369a1",
+        "enum_values": 94,
+        "object_properties": 47,
+        "string_characters": 1980,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": true,
+      "alternative_seed": true,
+      "profile": "maximum_wire_bounds",
+      "parser_type": "PositioningOutput",
+      "local_ids": 250,
+      "parent_ids": 250,
+      "server_v1": {
+        "bytes": 71408,
+        "sha256": "bf9a6c52e4302893b42ab9c55ec45cba3001a77d4da80639bea20e19af01a865",
+        "enum_values": 584,
+        "object_properties": 39,
+        "string_characters": 65373,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 105119,
+        "sha256": "c46c42dddfb3defeef893eb9bf1ad5866f4ff6f81ccf98ad4fe84230d952e561",
+        "enum_values": 835,
+        "object_properties": 47,
+        "string_characters": 97512,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 105119,
+        "sha256": "c46c42dddfb3defeef893eb9bf1ad5866f4ff6f81ccf98ad4fe84230d952e561",
+        "enum_values": 835,
+        "object_properties": 47,
+        "string_characters": 97512,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": true,
+      "profile": "local_only",
+      "parser_type": "PositioningWithoutJobOutput",
+      "local_ids": 5,
+      "parent_ids": 0,
+      "server_v1": {
+        "bytes": 7600,
+        "sha256": "c03af9d4eb986045dc6ab117f7b5b41c06a5341dfd8bf317a360b4e58998ba5a",
+        "enum_values": 85,
+        "object_properties": 51,
+        "string_characters": 1678,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 8736,
+        "sha256": "f4209f723cc8246cf9835971f49e45c22b7552edd751949140c4c2b88559f1a6",
+        "enum_values": 92,
+        "object_properties": 59,
+        "string_characters": 1967,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 5671,
+        "sha256": "0ead369b9738f9e5a92c2c86f55d5cb4c67ad43907bfb119dd6678cc99f7473e",
+        "enum_values": 56,
+        "object_properties": 35,
+        "string_characters": 1386,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": true,
+      "profile": "accepted_parent",
+      "parser_type": "PositioningWithoutJobOutput",
+      "local_ids": 5,
+      "parent_ids": 1,
+      "server_v1": {
+        "bytes": 10786,
+        "sha256": "9e84abd12d18eaf02062606943ecced23d0a5013946fdc7e26e465b26cd2d1e7",
+        "enum_values": 126,
+        "object_properties": 75,
+        "string_characters": 2377,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 11857,
+        "sha256": "2970d3ec3865f6b42da745ad04de8653f3d6a6bf02142043470de573b4245cb5",
+        "enum_values": 129,
+        "object_properties": 83,
+        "string_characters": 2620,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 11857,
+        "sha256": "2970d3ec3865f6b42da745ad04de8653f3d6a6bf02142043470de573b4245cb5",
+        "enum_values": 129,
+        "object_properties": 83,
+        "string_characters": 2620,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": true,
+      "profile": "maximum_wire_bounds",
+      "parser_type": "PositioningWithoutJobOutput",
+      "local_ids": 250,
+      "parent_ids": 250,
+      "server_v1": {
+        "bytes": 75956,
+        "sha256": "2384779abf465b689b77389ed4314d0abef3414e01923b5e3e2847d402c971b7",
+        "enum_values": 620,
+        "object_properties": 75,
+        "string_characters": 66065,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 109667,
+        "sha256": "f127092b66a3d9bcd7b1d03f22b76585a249d15c69b9a05b672f094d11a4cb59",
+        "enum_values": 871,
+        "object_properties": 83,
+        "string_characters": 98204,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 109667,
+        "sha256": "f127092b66a3d9bcd7b1d03f22b76585a249d15c69b9a05b672f094d11a4cb59",
+        "enum_values": 871,
+        "object_properties": 83,
+        "string_characters": 98204,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": true,
+      "alternative_seed": false,
+      "profile": "local_only",
+      "parser_type": "PositioningWithoutAlternativeOutput",
+      "local_ids": 5,
+      "parent_ids": 0,
+      "server_v1": {
+        "bytes": 7608,
+        "sha256": "e06471eff31842db218f7191ce4d76f8caf39249c8fac944635afb618970611b",
+        "enum_values": 85,
+        "object_properties": 51,
+        "string_characters": 1678,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 8744,
+        "sha256": "e9f023839ac659c11fb9125a0e078556f95bc47e07addeab98c67a85c304be9b",
+        "enum_values": 92,
+        "object_properties": 59,
+        "string_characters": 1967,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 5679,
+        "sha256": "eb07c6c51d067a4434287512631ad4b5bfbaaab2a7c809ed3844d571ef791624",
+        "enum_values": 56,
+        "object_properties": 35,
+        "string_characters": 1386,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": true,
+      "alternative_seed": false,
+      "profile": "accepted_parent",
+      "parser_type": "PositioningWithoutAlternativeOutput",
+      "local_ids": 5,
+      "parent_ids": 1,
+      "server_v1": {
+        "bytes": 10794,
+        "sha256": "d5855c06ad452fae056214dfcb6e2c5001c77823707e18f759d7dd3e9a9aaee3",
+        "enum_values": 126,
+        "object_properties": 75,
+        "string_characters": 2377,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 11865,
+        "sha256": "ce3af56331dd95bf9f5f133bdec2dd3741de9e96649b2a5a4ece0879ebb0eba1",
+        "enum_values": 129,
+        "object_properties": 83,
+        "string_characters": 2620,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 11865,
+        "sha256": "ce3af56331dd95bf9f5f133bdec2dd3741de9e96649b2a5a4ece0879ebb0eba1",
+        "enum_values": 129,
+        "object_properties": 83,
+        "string_characters": 2620,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": true,
+      "alternative_seed": false,
+      "profile": "maximum_wire_bounds",
+      "parser_type": "PositioningWithoutAlternativeOutput",
+      "local_ids": 250,
+      "parent_ids": 250,
+      "server_v1": {
+        "bytes": 75964,
+        "sha256": "81dbd9add3f4cb26b9c9fe853dd93bc22c08877090a16efb57dd1902034fbb8b",
+        "enum_values": 620,
+        "object_properties": 75,
+        "string_characters": 66065,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 109675,
+        "sha256": "ad7b84edf703bef53ab6745d60bdfd0fd088bf4ac264dff92368b5556db64428",
+        "enum_values": 871,
+        "object_properties": 83,
+        "string_characters": 98204,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 109675,
+        "sha256": "ad7b84edf703bef53ab6745d60bdfd0fd088bf4ac264dff92368b5556db64428",
+        "enum_values": 871,
+        "object_properties": 83,
+        "string_characters": 98204,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": false,
+      "profile": "local_only",
+      "parser_type": "PositioningWithoutSeedsOutput",
+      "local_ids": 4,
+      "parent_ids": 0,
+      "server_v1": {
+        "bytes": 7489,
+        "sha256": "216ff310c601b214890ff1ac9c9eca8708e8f9dd6324be63eea6d0d547ebad01",
+        "enum_values": 76,
+        "object_properties": 51,
+        "string_characters": 1568,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 8625,
+        "sha256": "c97701c62270e32de8f497a1a4a6bec422f3b6be4b49cf5c07cc8394e5e32d21",
+        "enum_values": 83,
+        "object_properties": 59,
+        "string_characters": 1857,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 5604,
+        "sha256": "a920bcbf173d11b8c1788e8b8f0be9234a194114efc9e6629ca1929452d57c77",
+        "enum_values": 51,
+        "object_properties": 35,
+        "string_characters": 1310,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": false,
+      "profile": "accepted_parent",
+      "parser_type": "PositioningWithoutSeedsOutput",
+      "local_ids": 4,
+      "parent_ids": 1,
+      "server_v1": {
+        "bytes": 10631,
+        "sha256": "64b669306c4a8d5935f0c2784cbdce4e9147139f059f87157ec7714327ed4619",
+        "enum_values": 113,
+        "object_properties": 75,
+        "string_characters": 2233,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 11702,
+        "sha256": "bf5559515b12f65ef1250bdce1866ce6cc5eea545b1c6207e2625d7199aa1054",
+        "enum_values": 116,
+        "object_properties": 83,
+        "string_characters": 2476,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 11702,
+        "sha256": "bf5559515b12f65ef1250bdce1866ce6cc5eea545b1c6207e2625d7199aa1054",
+        "enum_values": 116,
+        "object_properties": 83,
+        "string_characters": 2476,
+        "expanded_nesting": 4
+      }
+    },
+    {
+      "customer_job_seed": false,
+      "alternative_seed": false,
+      "profile": "maximum_wire_bounds",
+      "parser_type": "PositioningWithoutSeedsOutput",
+      "local_ids": 250,
+      "parent_ids": 250,
+      "server_v1": {
+        "bytes": 75856,
+        "sha256": "2668beba665c7df5b21604a59b23325db1d7a83c61e10dbdf8c4fd7760346754",
+        "enum_values": 608,
+        "object_properties": 75,
+        "string_characters": 65973,
+        "expanded_nesting": 4
+      },
+      "wire_v2": {
+        "bytes": 109567,
+        "sha256": "ac1e6d461ed4295780815099293ccc441474cd44e140d82901ae106ca103d119",
+        "enum_values": 859,
+        "object_properties": 83,
+        "string_characters": 98112,
+        "expanded_nesting": 4
+      },
+      "projected_wire_v2": {
+        "bytes": 109567,
+        "sha256": "ac1e6d461ed4295780815099293ccc441474cd44e140d82901ae106ca103d119",
+        "enum_values": 859,
+        "object_properties": 83,
+        "string_characters": 98112,
+        "expanded_nesting": 4
+      }
+    }
+  ]
+}
