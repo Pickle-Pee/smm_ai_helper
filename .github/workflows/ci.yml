@@ -10,6 +10,7 @@ on:
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       redis:
@@ -43,7 +44,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: test-telegram-token
       API_BASE_URL: http://localhost:8000
       OPENAI_API_KEY: test-openai-key
-      OPENAI_BASE_URL: https://api.openai.com/v1
+      OPENAI_BASE_URL: http://127.0.0.1:9
       IMAGE_STORAGE_PATH: /tmp/smm-ai-helper-images
 
     steps:
@@ -76,7 +77,7 @@ jobs:
         run: alembic check
 
       - name: Run tests
-        run: python -m pytest
+        run: python -m pytest -vv -o faulthandler_timeout=120 --durations=25
 
   container-smoke:
     runs-on: ubuntu-latest
