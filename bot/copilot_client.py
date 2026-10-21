@@ -33,7 +33,7 @@ class CopilotClient:
         if response.status_code >= 400:
             status = response.status_code
             log.warning("Copilot HTTP status=%s actor_id=%s", status, actor)
-            category = {401: "auth", 403: "auth", 404: "not_found", 422: "invalid_state",
+            category = {400: "invalid_state", 429: "temporary", 401: "auth", 403: "auth", 404: "not_found", 422: "invalid_state",
                         503: "temporary"}.get(status, "server")
             owned = None
             if status == 500:

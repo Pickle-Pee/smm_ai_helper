@@ -1,6 +1,10 @@
 """Shared credentials and actor mapping for trusted backend requests."""
 from app.config import settings
+import asyncio
+import re
 import httpx
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 class BackendError(RuntimeError):
@@ -32,11 +36,62 @@ async def request(method, path, actor_id, *, payload=None):
             response = await client.request(method, settings.API_BASE_URL.rstrip("/") + path,
                                             headers=actor_headers(actor_id), json=payload)
     except httpx.HTTPError as exc:
-        raise BackendError("Сервер временно недоступен. Повторите команду позже.") from exc
+        raise BackendError("Ответ сервера не получен. Запрос мог быть принят; проверьте /runs перед повтором."
+            if method.upper() in {"POST", "PATCH", "PUT"}
+            else "Сервер временно недоступен. Повторите просмотр позже.") from exc
     if response.status_code >= 400:
-        try:
-            detail = response.json().get("detail")
-        except ValueError:
-            detail = None
-        raise BackendError(detail if isinstance(detail, str) else "Проверьте формат команды и повторите запрос.")
-    return response.json()
+        messages = {
+            401: "Не удалось подтвердить доступ к серверу. Обратитесь к администратору.",
+            403: "Доступ к этому действию запрещён.",
+            404: "Сохранённый результат не найден или недоступен.",
+            409: "Действие конфликтует с текущим состоянием. Проверьте статус проекта.",
+            429: "Слишком много запросов. Повторите команду позже.",
+        }
+        raise BackendError(messages.get(response.status_code,
+            "Сервер временно недоступен. Проверьте статус проекта перед повтором."
+            if response.status_code >= 500 else "Проверьте формат команды и повторите запрос."))
+    try:
+        data = response.json()
+        if not isinstance(data, (dict, list)):
+            raise ValueError()
+        return data
+    except ValueError as exc:
+        raise BackendError("Сервер вернул некорректный ответ. Проверьте статус проекта позже.") from exc
+
+
+async def fetch_image(client, url: str, actor_id: int) -> bytes:
+    """Fetch only owned backend image resources with bounded time and memory.
+
+    All supported image producers return /images/{id}.png. Never forward the
+    trusted service credentials to a model-supplied URL or a redirect target.
+    """
+    try:
+        if not isinstance(url, str):
+            raise ValueError()
+        base = httpx.URL(settings.API_BASE_URL.rstrip("/"))
+        target = httpx.URL(url)
+        if target.is_relative_url:
+            if target.host or not url.startswith("/images/"):
+                raise ValueError()
+            target = httpx.URL(str(base).rstrip("/") + url)
+        if ((target.scheme, target.host, target.port) != (base.scheme, base.host, base.port)
+                or target.userinfo or target.query or target.fragment
+                or not re.fullmatch(re.escape(base.path.rstrip("/")) + r"/images/[A-Za-z0-9_-]+\.png", target.path)):
+            raise ValueError()
+        async with asyncio.timeout(30):
+            async with client.stream("GET", target, headers=actor_headers(actor_id), follow_redirects=False) as response:
+                if response.status_code != 200:
+                    raise BackendError("Не удалось получить сохранённое изображение. Повторите просмотр позже.")
+                length = response.headers.get("content-length")
+                if length is not None and int(length) > MAX_IMAGE_BYTES:
+                    raise ValueError()
+                data = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                    if len(data) + len(chunk) > MAX_IMAGE_BYTES:
+                        raise ValueError()
+                    data.extend(chunk)
+                if not data:
+                    raise ValueError()
+                return bytes(data)
+    except (ValueError, TypeError, httpx.HTTPError, TimeoutError) as exc:
+        raise BackendError("Не удалось загрузить изображение: недоступный адрес, файл или превышен размер.") from exc

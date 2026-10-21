@@ -169,6 +169,25 @@ started analysis cannot be cancelled through Telegram v1; no graph status is cha
 
 ## Restart and delivery limits (Task L)
 
+### Hardening and saved case mentorship
+
+The outer operation guard responds to `/new` or `/cancel` during a pending HTTP
+execution immediately, explaining that active execution cannot be canceled here.
+It does not reset an in-flight FSM or allow a second same-user request to overwrite
+it. Once execution responds, `/new` clears local pending input as before. Update
+tasks and delivery are drained before the Telegram session closes.
+
+A completed saved strategy offers «Объяснить решение». The `cm:` callback embeds
+the same compact reversible run ID as `cs:`; the backend independently authorizes
+the clicking actor. POST `/copilot/runs/{id}/mentor` creates or replays a persisted
+eight-section explanation based only on accepted strategy/lineage/context. There
+is no provider generation, including on first view. The source strategy is unchanged.
+Followup text is explicitly bound to this case in a separate local mentor state;
+`/new` or `/cancel` leaves that mode. After restart reopen the strategy's button.
+Explicit `/case_feedback` stores reported outcomes/metrics separately from AI
+forecasts, without updating BrandProfile. Comparisons use saved tradeoffs and
+admit missing counterfactual data. See the hardening report for limits and tests.
+
 No automatic status polling or new delivery loop is introduced. User-triggered GETs
 are the only Copilot status checks; the existing fixed-workflow delivery poller is
 unchanged. Backend PostgreSQL is authoritative and workers continue independently.

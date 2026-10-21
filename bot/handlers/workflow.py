@@ -140,8 +140,7 @@ async def saved_run(message: types.Message):
                 await send_text(message, render_artifact(artifact), reply_markup=types.InlineKeyboardMarkup.model_validate(markup) if markup else None)
                 for image in artifact["images"]:
                     async with httpx.AsyncClient(timeout=20) as client:
-                        response = await client.get(settings.API_BASE_URL.rstrip("/") + image["url"], headers=backend.actor_headers(message.from_user.id))
-                        response.raise_for_status()
-                    await message.answer_photo(types.BufferedInputFile(response.content, filename="creative.png"))
+                        content = await backend.fetch_image(client, image["url"], message.from_user.id)
+                    await message.answer_photo(types.BufferedInputFile(content, filename="creative.png"))
     except (backend.BackendError, httpx.HTTPError):
         await message.answer("Не удалось получить сохранённый результат. Повторите команду позже.")

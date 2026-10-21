@@ -295,8 +295,19 @@ def test_single_timeout_is_bounded_safe_and_never_starts_graph(mvp_database, mon
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor, entered = int(uuid.uuid4().hex[:12], 16), asyncio.Event()
+        execution_timeout = None
+        real_timeout = asyncio.timeout
+        def provider_deadline(delay):
+            nonlocal execution_timeout
+            if delay == .05:
+                # Arm at the boundary this test measures. A slow disposable DB
+                # must not consume the provider's 50ms failure-injection window.
+                execution_timeout = real_timeout(None)
+                return execution_timeout
+            return real_timeout(delay)
         async def provider(**_kw):
             entered.set()
+            execution_timeout.reschedule(asyncio.get_running_loop().time() + .05)
             await asyncio.Event().wait()
         api = configured(mvp_database, IntentKind.POST_GENERATION, module_model=provider)
         monkeypatch.setattr(settings, "GRAPH_TIMEOUT_SECONDS", .05)
@@ -307,12 +318,40 @@ def test_single_timeout_is_bounded_safe_and_never_starts_graph(mvp_database, mon
             owner, _ = await api._identity_context(actor)
             interpreted = await api.copilot.interpreter.interpret_request(request["message"])
             await api.interpretations.save(owner, request["request_key"], request["message"], interpreted)
+            monkeypatch.setattr(asyncio, "timeout", provider_deadline)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
                 async with asyncio.timeout(5):
                     result = await client.post("/copilot/execute", headers=headers(actor), json=request)
                 assert entered.is_set() and result.status_code == 503
                 assert result.json()["code"] == "temporarily_unavailable"
                 assert (await client.get("/copilot/runs", headers=headers(actor))).json()["items"] == []
+                api.queue.wake.assert_not_awaited()
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
+
+
+def test_timeout_before_provider_is_safe_and_never_starts_graph(mvp_database, monkeypatch):
+    """The real overall timeout also bounds stalled durable-context loading."""
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        provider = AsyncMock()
+        api = configured(mvp_database, IntentKind.POST_GENERATION, module_model=provider)
+        entered = asyncio.Event()
+        async def blocked_load(*args):
+            entered.set()
+            await asyncio.Event().wait()
+        monkeypatch.setattr(api.interpretations, "load", blocked_load)
+        monkeypatch.setattr(settings, "GRAPH_TIMEOUT_SECONDS", .05)
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+                async with asyncio.timeout(5):
+                    response = await client.post("/copilot/execute", headers=headers(actor), json=payload())
+                assert entered.is_set() and response.status_code == 503
+                assert response.json()["code"] == "temporarily_unavailable"
+                assert (await client.get("/copilot/runs", headers=headers(actor))).json()["items"] == []
+                provider.assert_not_awaited()
                 api.queue.wake.assert_not_awaited()
         finally:
             await remove_actor(mvp_database, actor)

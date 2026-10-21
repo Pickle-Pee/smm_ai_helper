@@ -115,7 +115,7 @@ def test_callback_uses_clicking_actor_for_payload_and_new_actions(monkeypatch):
             captures.append(kwargs)
             return SimpleNamespace(status_code=200, json=lambda: {"reply": "done", "actions": [{"text": "continue"}]})
     status = SimpleNamespace(edit_text=AsyncMock(), delete=AsyncMock())
-    message = SimpleNamespace(from_user=SimpleNamespace(id=999), answer=AsyncMock(return_value=status))
+    message = SimpleNamespace(from_user=SimpleNamespace(id=999), chat=SimpleNamespace(type="private"), answer=AsyncMock(return_value=status))
     callback = SimpleNamespace(data="action:key", from_user=SimpleNamespace(id=100), message=message, answer=AsyncMock())
     monkeypatch.setattr(chat.httpx, "AsyncClient", Client)
     monkeypatch.setattr(chat, "_chat_action_indicator", AsyncMock())

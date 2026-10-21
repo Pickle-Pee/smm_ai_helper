@@ -26,6 +26,15 @@ Use a real publicly accessible competitor page instead of `example.com`. Alterna
 
 The analysis arrives in the background. Press **Создать креативный пакет** to generate the offer, headline, CTA, banner and a 15–60-second video script. Press **Объяснить решение** for the mentor explanation of that saved package. `/runs`, `/status ID`, `/result ID` retrieve progress and saved results after restart; `/redeliver ID` retries failed delivery without generation. A new `/analyze` message deliberately starts a new run; replaying the same update or continuation reuses existing work.
 
+Completed Copilot strategies in `/copilot_runs` also offer **Объяснить решение**:
+an opt-in saved case explanation using accepted decisions, context and evidence,
+with no new provider call. Followup questions stay bound to that strategy until
+`/new` or `/cancel`; after restart reopen its button. `/case_feedback worked | observations | metrics`
+records explicit user-reported outcomes for subsequent same-case questions.
+This does not synthesize a new strategy or automatically update the business profile.
+See [Telegram hardening report](docs/development/telegram-hardening-report.md) and
+[operations runbook](docs/operations/telegram-production-runbook.md).
+
 ## Run without Docker
 
 Use Python 3.11+ (the verified Windows environment uses `.venv/Scripts/python.exe`), PostgreSQL 15+ and Redis 7. Install `requirements.txt`, point `DATABASE_URL` and `REDIS_URL` at your local services, set `API_BASE_URL=http://127.0.0.1:8000` and `IMAGE_STORAGE_PATH` to one persistent absolute directory accessible by backend and worker. Set the same credentials as above in `.env`. Install DejaVu Sans on Linux for Cyrillic banner text; Windows uses Arial.

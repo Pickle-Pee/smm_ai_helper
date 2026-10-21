@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from io import BytesIO
+import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from aiogram import F, Router, types
-from aiogram.enums import ChatAction, ParseMode
+from aiogram.enums import ChatAction
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
-from bot.backend import actor_headers
+from bot.backend import actor_headers, fetch_image, BackendError
 from bot.rendering import send_text
 from bot.copilot_flow import CopilotStates, receive
 
@@ -42,7 +43,7 @@ def _short_action_label(text: str, limit: int = ACTION_LABEL_MAX_CHARS) -> str:
 
 
 def _make_action_key(user_id: int, text: str) -> str:
-    digest = hashlib.sha256(f"{user_id}:{text}".encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(f"{user_id}:{secrets.token_hex(16)}:{text}".encode("utf-8")).hexdigest()[:32]
     return digest
 
 
@@ -57,7 +58,8 @@ def _actions_keyboard(user_id: int, actions: Any):
     for action in actions:
         if not isinstance(action, dict):
             continue
-        text = (action.get("text") or "").strip()
+        value = action.get("text")
+        text = value.strip() if isinstance(value, str) else ""
         if not text:
             continue
         key = _make_action_key(user_id, text)
@@ -153,16 +155,6 @@ def _wants_image(text: str) -> bool:
     return any(k in t for k in triggers)
 
 
-def _abs_url(url: str) -> str:
-    # url может быть относительный: /images/{id}.png
-    base = (settings.API_BASE_URL or "").rstrip("/")
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    if not url.startswith("/"):
-        url = "/" + url
-    return f"{base}{url}"
-
-
 def _extract_images_anywhere(data: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     Поддерживаем несколько вариантов структуры ответа.
@@ -209,29 +201,19 @@ def _extract_images_anywhere(data: Dict[str, Any]) -> List[Dict[str, str]]:
 
 async def _send_images_from_response(message: types.Message, data: Dict[str, Any], *, actor_id: int) -> None:
     """
-    Вытаскивает ссылки на картинки из ответа бэка и отправляет до 3 изображений.
+    Отправляет все сохранённые изображения через ограниченный backend media client.
     """
     images = _extract_images_anywhere(data)
     if not images:
         return
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        for img in images[:3]:
-            url = img.get("url")
-            if not url:
-                continue
-            full_url = _abs_url(url)
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for img in images:
             try:
-                r = await client.get(full_url, headers=actor_headers(actor_id))
-                if r.status_code >= 400:
-                    continue
-                bio = BytesIO(r.content)
-                await message.answer_photo(
-                    types.BufferedInputFile(bio.getvalue(), filename="image.png")
-                )
-            except Exception:
-                # не валим весь ответ из-за одного изображения
-                continue
+                content = await fetch_image(client, img["url"], actor_id)
+                await message.answer_photo(types.BufferedInputFile(content, filename="image.png"))
+            except (BackendError, httpx.HTTPError, TelegramAPIError):
+                await message.answer("Не удалось доставить изображение. Генерация не запускается повторно; проверьте сохранённый результат позже.")
 
 
 async def _chat_action_indicator(message: types.Message, wants_image: bool) -> None:
@@ -302,6 +284,8 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
             return
 
         data: Dict[str, Any] = resp.json()
+        if not isinstance(data, dict) or not isinstance(data.get("reply", ""), str):
+            raise ValueError("Invalid chat response")
 
         reply = (data.get("reply") or "").strip()
         follow_up = data.get("follow_up_question")
@@ -339,9 +323,22 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
         except Exception:
             pass
 
+    except (httpx.HTTPError, ValueError, TypeError):
+        text = "Не удалось получить ответ сервера. Запрос мог быть обработан; повторная отправка может создать новый результат."
+        try:
+            await status_msg.edit_text(text)
+        except TelegramAPIError:
+            await message.answer(text)
+    except asyncio.CancelledError:
+        try:
+            await status_msg.edit_text("Ожидание прервано. Запрос мог быть принят сервером.")
+        except TelegramAPIError:
+            pass
+        raise
     finally:
         action_task.cancel()
         long_task.cancel()
+        await asyncio.gather(action_task, long_task, return_exceptions=True)
 
 
 @router.message(StateFilter(None, CopilotStates.pending), F.text & ~F.text.startswith("/"))
@@ -351,9 +348,13 @@ async def chat_message(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("action:"))
 async def on_action(callback: types.CallbackQuery):
+    if callback.message is None or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом.")
+        return
     key = callback.data.split(":", 1)[1]
     store = ACTION_STORE.get(str(callback.from_user.id), {})
-    text = store.get(key)
+    # Consume before the first await: concurrent deliveries cannot execute twice.
+    text = store.pop(key, None)
 
     if not text:
         await callback.answer("Действие устарело", show_alert=True)

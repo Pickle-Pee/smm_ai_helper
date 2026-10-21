@@ -893,7 +893,7 @@ def test_pending_edit_failure_does_not_execute_or_reactivate_old_token(monkeypat
         api.execute.assert_not_awaited()
         active = (await state.get_data())["copilot_pending"]
         assert active["phase"] == "retry" and active["token"] != old.data.split(":")[1]
-        assert "Не удалось связаться с сервером" in text_sent(msg)
+        assert "Запрос ещё не отправлен" in text_sent(msg)
         buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
         assert buttons == ["Повторить", "Начать новый запрос", "Отмена"]
         old.id = "fresh-click"

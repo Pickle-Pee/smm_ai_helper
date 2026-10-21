@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.security import require_actor
 from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, RunListResponse, StartedResponse, ErrorResponse
 from app.marketing_copilot.api_errors import CopilotAPIError
+from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorQuestion, MentorAnswer, CaseFeedback, SavedFeedback
 from app.marketing_copilot.production import build_production_copilot_api
 
 log = logging.getLogger(__name__)
@@ -80,3 +81,27 @@ async def recent_runs(limit: Annotated[int, Query(ge=1, le=50)] = 10,
 async def get_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
                   actor: int = Depends(require_actor), api=Depends(service)):
     return await api.reader.get(actor, run_id)
+
+
+@router.post("/runs/{run_id}/mentor", response_model=MentorExplanation)
+async def explain_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                      actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.explain(actor, run_id)
+
+
+@router.get("/runs/{run_id}/mentor", response_model=MentorExplanation)
+async def saved_explanation(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                            actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.get(actor, run_id)
+
+
+@router.post("/runs/{run_id}/mentor/questions", response_model=MentorAnswer)
+async def question_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: MentorQuestion,
+                       actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.question(actor, run_id, payload)
+
+
+@router.post("/runs/{run_id}/mentor/feedback", response_model=SavedFeedback)
+async def feedback_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: CaseFeedback,
+                       actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.feedback(actor, run_id, payload)

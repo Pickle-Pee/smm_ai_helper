@@ -27,6 +27,7 @@ from .provider_adapters import expected_provider_failure
 from .run_reader import GraphRunReader
 from .observability import stage_timing
 from .interpretation_store import InterpretationStore
+from .mentor import CaseMentorService
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class CopilotAPIService:
     def __init__(self, *, sessions, copilot, acquisition, queue):
         self.sessions, self.copilot, self.acquisition, self.queue = sessions, copilot, acquisition, queue
         self.reader = GraphRunReader(sessions, copilot.graph_service)
+        self.mentor = CaseMentorService(sessions, copilot.graph_service)
         self.snapshots = OwnedSnapshotStore(sessions)
         self.interpretations = InterpretationStore(sessions)
 

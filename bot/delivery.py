@@ -7,7 +7,7 @@ from aiogram import types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 
 from app.config import settings
-from bot.backend import actor_headers
+from bot.backend import fetch_image
 
 log = logging.getLogger(__name__)
 
@@ -25,9 +25,8 @@ async def deliver_once(bot, client):
     try:
         async with asyncio.timeout(60):
             if payload["kind"] == "image":
-                image = await client.get(base + f"/images/{payload['image_id']}.png", headers=actor_headers(actor))
-                image.raise_for_status()
-                sent = await bot.send_photo(actor, types.BufferedInputFile(image.content, filename="creative.png"), request_timeout=30)
+                image = await fetch_image(client, f"/images/{payload['image_id']}.png", actor)
+                sent = await bot.send_photo(actor, types.BufferedInputFile(image, filename="creative.png"), request_timeout=30)
             else:
                 markup = payload.get("reply_markup")
                 sent = await bot.send_message(actor, payload["text"], parse_mode=None,

@@ -71,6 +71,22 @@ acceptance. This is **at-least-recoverable**, not exactly-once Telegram delivery
 [Telegram Copilot UX](docs/development/telegram-copilot-ux.md) for exact identity,
 confirmation, retry, rendering and recovery semantics.
 
+An outer `OperationGuard` owns active Telegram update tasks before FSM isolation.
+During an in-flight request `/new` and `/cancel` respond immediately with the
+actual cancellation limitation, without changing that request's FSM. Shutdown
+cancels and drains owned updates and delivery before closing the Bot session.
+
+Completed graph strategies expose opt-in case explanations through
+`CaseMentorService` and `/copilot/runs/{id}/mentor`. The deterministic explanation
+reads accepted strategy/context/evidence/lineage/experiments, with no provider
+call or modification of source artifacts. Existing MarketingRun/MarketingArtifact
+storage groups saved explanations, questions and explicit user-reported feedback
+under a deterministic `case_mentor.v1` companion run; it has no execution jobs or
+worker lane. Source-row locking serializes creation. Existing graph and fixed-MVP
+run lists remain scoped to their own workflow types. Followups reuse the saved
+case; new counterfactual strategy synthesis and cross-case learning remain outside
+this interface. The fixed creative-workflow Mentor remains unchanged.
+
 
 ### Chat flow
 

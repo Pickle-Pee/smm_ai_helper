@@ -161,7 +161,8 @@ async def prompt_confirmation(message, state, pending, owned):
 
 
 ERRORS = {
-    "unavailable": "Не удалось связаться с сервером. Повторите запрос позже.",
+    "presentation": "Не удалось обновить сообщение. Запрос ещё не отправлен. Повторите действие.",
+    "unavailable": "Не удалось получить подтверждение сервера. Запрос мог быть принят: проверьте /copilot_runs. Повтор использует тот же запрос.",
     "auth": "Не удалось подключиться к сервису: требуется проверка настройки доступа. Сообщите администратору.",
     "not_found": "Результат не найден.",
     "invalid_state": "Не удалось принять данные запроса. Начните новый запрос: /new",
@@ -194,7 +195,7 @@ async def error(message, state, pending, exc):
             pending["fields"] = ["product_truth"]
             await prompt_fields(message, state, pending)
         return
-    pending["phase"] = "retry" if exc.category in {"unavailable", "temporary", "server", "invalid_response"} else "stopped"
+    pending["phase"] = "retry" if exc.category in {"presentation", "unavailable", "temporary", "server", "invalid_response"} else "stopped"
     await save(state, pending, renew=True)
     buttons = [("Повторить", action(pending, "retry"))] if pending["phase"] == "retry" else []
     buttons += [("Начать новый запрос", action(pending, "new")), ("Отмена", action(pending, "cancel"))]
@@ -208,7 +209,7 @@ async def execute(message, actor, state, pending, *, processing_text=None):
         try:
             await message.edit_text(processing_text, parse_mode=None, reply_markup=None)
         except TelegramAPIError:
-            await error(message, state, pending, CopilotError("unavailable"))
+            await error(message, state, pending, CopilotError("presentation"))
             return
     try:
         payload = dto.ExecuteRequest.model_validate(pending["payload"])
@@ -402,6 +403,8 @@ async def status(message, actor, run_id):
         return
     sections = render.run(response)
     markup = status_keyboard(run_id) if response.status in {dto.RunStatus.QUEUED, dto.RunStatus.RUNNING} else None
+    if response.strategy and response.status in {dto.RunStatus.COMPLETED, dto.RunStatus.COMPLETED_WITH_LIMITATIONS}:
+        markup = keyboard([("Объяснить решение", run_callback(run_id).replace("cs:", "cm:", 1))])
     for i, section in enumerate(sections):
         await send_text(message, section, reply_markup=markup if i == len(sections) - 1 else None)
 
