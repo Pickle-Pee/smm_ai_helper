@@ -11,6 +11,7 @@ from bot.rendering import send_text
 router = Router()
 FEEDBACK_OUTCOMES = {"применена": "applied", "проверена": "hypothesis_tested", "сработало": "worked",
                      "не_сработало": "did_not_work", "исправлено": "corrected"}
+SECTION_KEYS = ("goal", "inputs", "principle", "rationale", "alternatives", "limitations", "verification", "takeaway")
 
 
 class MentorStates(StatesGroup):
@@ -21,7 +22,9 @@ async def show_case(message, actor, run_id, state):
     try:
         data = await backend.request("POST", f"/copilot/runs/{run_id}/mentor", actor)
         sections = data["sections"]
-        if data.get("schema_version") != "case_mentor.v1" or data.get("run_id") != run_id or len(sections) != 8:
+        if (data.get("schema_version") != "case_mentor.v1" or data.get("run_id") != run_id
+                or data.get("status") != "COMPLETED" or len(sections) != 8
+                or tuple(section["key"] for section in sections) != SECTION_KEYS):
             raise ValueError()
         rendered = []
         for section in sections:
@@ -70,11 +73,16 @@ async def feedback(message: types.Message, state: FSMContext):
         await send_text(message, "Откройте разбор стратегии и укажите: /case_feedback сработало | наблюдения | метрики (необязательно).")
         return
     try:
-        await backend.request("POST", f"/copilot/runs/{run_id}/mentor/feedback", message.from_user.id, payload={
+        payload = {
             "request_key": f"tg:{message.from_user.id}:{message.chat.id}:{message.message_id}",
-            "outcome": fields[0], "notes": fields[1], "metrics": fields[2] if len(fields) == 3 else ""})
+            "outcome": fields[0], "notes": fields[1], "metrics": fields[2] if len(fields) == 3 else ""}
+        saved = await backend.request("POST", f"/copilot/runs/{run_id}/mentor/feedback", message.from_user.id, payload=payload)
+        if (saved.get("schema_version") != "case_feedback.v1" or saved.get("run_id") != run_id
+                or saved.get("verification") != "user_reported"
+                or any(saved.get(key) != payload[key] for key in ("outcome", "notes", "metrics"))):
+            raise ValueError()
         await send_text(message, "Обратная связь сохранена как ваше сообщение о результате; это не независимая проверка эффективности. Профиль бизнеса не изменён.")
-    except backend.BackendError:
+    except (backend.BackendError, AttributeError, TypeError, ValueError):
         await send_text(message, "Не удалось сохранить обратную связь. Повторите команду позже.")
 
 
@@ -91,7 +99,9 @@ async def question(message: types.Message, state: FSMContext):
         data = await backend.request("POST", f"/copilot/runs/{run_id}/mentor/questions", message.from_user.id, payload={
             "request_key": f"tg:{message.from_user.id}:{message.chat.id}:{message.message_id}", "question": message.text})
         paragraphs = data["paragraphs"]
-        if data.get("run_id") != run_id or not isinstance(paragraphs, list) or not paragraphs or not all(isinstance(p, str) for p in paragraphs):
+        if (data.get("schema_version") != "case_mentor_answer.v1" or data.get("run_id") != run_id
+                or data.get("question") != message.text.strip()
+                or not isinstance(paragraphs, list) or not paragraphs or not all(isinstance(p, str) for p in paragraphs)):
             raise ValueError()
         await send_text(message, "\n\n".join(paragraphs))
     except (backend.BackendError, KeyError, TypeError, ValueError):

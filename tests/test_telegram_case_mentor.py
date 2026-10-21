@@ -10,12 +10,14 @@ from tests.test_telegram_copilot import message, context, text_sent, RID
 
 
 def explanation():
-    return {"schema_version": "case_mentor.v1", "run_id": RID, "sections": [
-        {"title": f"Раздел {i}", "paragraphs": ["Сохранённое основание <b>буквально</b>"]} for i in range(8)]}
+    return {"schema_version": "case_mentor.v1", "run_id": RID, "status": "COMPLETED", "sections": [
+        {"key": key, "title": f"Раздел {i}", "paragraphs": ["Сохранённое основание <b>буквально</b>"]}
+        for i, key in enumerate(mentor.SECTION_KEYS)]}
 
 
 def test_restart_callback_uses_clicking_actor_and_binds_questions(monkeypatch):
-    request = AsyncMock(side_effect=[explanation(), {"run_id": RID, "paragraphs": ["Проверить сохранённую гипотезу"]}])
+    request = AsyncMock(side_effect=[explanation(), {"schema_version": "case_mentor_answer.v1", "run_id": RID,
+        "question": "Что проверить первым?", "paragraphs": ["Проверить сохранённую гипотезу"]}])
     monkeypatch.setattr(backend, "request", request)
     async def check():
         msg, state = message(actor=42), context(42)
@@ -57,7 +59,8 @@ def test_malformed_group_and_failure_leave_original_case_available(monkeypatch):
 
 
 def test_feedback_preserves_reported_metrics(monkeypatch):
-    request = AsyncMock(return_value={})
+    request = AsyncMock(return_value={"schema_version": "case_feedback.v1", "run_id": RID, "verification": "user_reported",
+        "outcome": "worked", "notes": "получили заявки", "metrics": "CPL 400"})
     monkeypatch.setattr(backend, "request", request)
     async def check():
         msg, state = message("/case_feedback сработало | получили заявки | CPL 400"), context()
@@ -67,4 +70,16 @@ def test_feedback_preserves_reported_metrics(monkeypatch):
         payload = request.call_args.kwargs["payload"]
         assert payload["outcome"] == "worked" and payload["metrics"] == "CPL 400"
         assert "не независимая проверка" in text_sent(msg)
+    asyncio.run(check())
+
+
+def test_malformed_feedback_ack_never_claims_saved(monkeypatch):
+    monkeypatch.setattr(backend, "request", AsyncMock(return_value={}))
+    async def check():
+        msg, state = message("/case_feedback worked | report"), context()
+        await state.update_data(mentor_run_id=RID)
+        await state.set_state(mentor.MentorStates.question)
+        await mentor.feedback(msg, state)
+        assert "Не удалось сохранить" in text_sent(msg)
+        assert "Обратная связь сохранена" not in text_sent(msg)
     asyncio.run(check())
