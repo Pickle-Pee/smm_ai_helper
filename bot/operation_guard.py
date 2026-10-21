@@ -49,4 +49,3 @@ class OperationGuard(BaseMiddleware):
             self.counts[key] -= 1
             if not self.counts[key]:
                 del self.counts[key]
-

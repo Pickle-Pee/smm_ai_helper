@@ -332,7 +332,7 @@ def test_single_timeout_is_bounded_safe_and_never_starts_graph(mvp_database, mon
 
 
 def test_timeout_before_provider_is_safe_and_never_starts_graph(mvp_database, monkeypatch):
-    """The real overall timeout also bounds stalled durable-context loading."""
+    """The real execution budget also bounds stalled durable-context loading."""
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
