@@ -75,6 +75,7 @@ def test_delivery_stops_before_telegram_session_closes(monkeypatch):
         finally:
             events.append("delivery_stopped")
     class OfflineDispatcher:
+        _handle_update_tasks = set()
         def __getitem__(self, key):
             return self
         async def close(self):
@@ -112,6 +113,44 @@ def test_guard_drains_active_update_cleanup_before_resource_close():
         assert task.cancelled() and cleanup == ["cleaned"]
         assert not guard.tasks and not guard.counts
     asyncio.run(check())
+
+
+def test_shutdown_drains_dispatcher_task_before_middleware_entry(monkeypatch):
+    import bot.main as runtime
+    events = []
+    class OfflineBot:
+        def __init__(self, token):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            events.append("session_closed")
+    class OfflineDispatcher:
+        def __init__(self):
+            self._handle_update_tasks = set()
+        def __getitem__(self, key):
+            return self
+        async def close(self):
+            assert all(task.done() for task in self._handle_update_tasks)
+            events.append("updates_drained")
+        async def start_polling(self, *args, **kwargs):
+            async def awaiting_middleware():
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    events.append("pre_middleware_stopped")
+            task = asyncio.create_task(awaiting_middleware())
+            self._handle_update_tasks.add(task)
+            await asyncio.sleep(0)
+    async def delivery(bot):
+        await asyncio.Event().wait()
+    monkeypatch.setattr(runtime, "Bot", OfflineBot)
+    monkeypatch.setattr(runtime, "create_dispatcher", OfflineDispatcher)
+    monkeypatch.setattr(runtime, "validate_configuration", lambda: None)
+    monkeypatch.setattr(runtime, "setup_logging", lambda: None)
+    monkeypatch.setattr(runtime, "delivery_loop", delivery)
+    asyncio.run(runtime.main())
+    assert events == ["pre_middleware_stopped", "updates_drained", "session_closed"]
 
 @pytest.mark.parametrize("command", ["/new", "/cancel"])
 def test_guard_drains_slow_busy_command_response_before_session_close(monkeypatch, command):

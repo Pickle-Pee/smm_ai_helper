@@ -41,6 +41,13 @@ async def main():
                 await dp.start_polling(bot, close_bot_session=False)
             finally:
                 delivery_task.cancel()
+                # Aiogram owns tasks before they enter our middleware (including
+                # tasks waiting for its concurrency semaphore). start_polling
+                # does not drain this set when polling stops.
+                updates = tuple(dp._handle_update_tasks)
+                for task in updates:
+                    task.cancel()
+                await asyncio.gather(*updates, return_exceptions=True)
                 await dp["operation_guard"].close()
 
 
