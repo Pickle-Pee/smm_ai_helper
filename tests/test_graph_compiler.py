@@ -195,6 +195,9 @@ def test_no_production_ingress_imports_graph_runtime():
                 root / "app/worker.py",  # Worker consumes persisted graphs; never public ingress.
                 root / "app/marketing_copilot/api_service.py", root / "app/marketing_copilot/production.py",
                 root / "app/marketing_copilot/run_reader.py", root / "app/marketing_copilot/provider_adapters.py",
+                # CaseMentor reads validated persisted graphs like run_reader;
+                # it creates no graph jobs and never starts execution.
+                root / "app/marketing_copilot/mentor.py",
             }:
                 assert "orchestration_runtime" not in path.read_text(encoding="utf-8"), path
 

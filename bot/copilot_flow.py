@@ -161,7 +161,8 @@ async def prompt_confirmation(message, state, pending, owned):
 
 
 ERRORS = {
-    "unavailable": "Не удалось связаться с сервером. Повторите запрос позже.",
+    "presentation": "Не удалось обновить сообщение. Запрос ещё не отправлен. Повторите действие.",
+    "unavailable": "Не удалось получить подтверждение сервера. Запрос мог быть принят. Кнопка «Повторить» восстановит сохранённый ответ с тем же ключом, если выполнение завершено. Статус стратегий доступен в /copilot_runs. Если исход неизвестен, повторная генерация автоматически не запускается.",
     "auth": "Не удалось подключиться к сервису: требуется проверка настройки доступа. Сообщите администратору.",
     "not_found": "Результат не найден.",
     "invalid_state": "Не удалось принять данные запроса. Начните новый запрос: /new",
@@ -194,11 +195,14 @@ async def error(message, state, pending, exc):
             pending["fields"] = ["product_truth"]
             await prompt_fields(message, state, pending)
         return
-    pending["phase"] = "retry" if exc.category in {"unavailable", "temporary", "server", "invalid_response"} else "stopped"
+    pending["phase"] = "retry" if exc.category in {"presentation", "unavailable", "temporary", "server", "invalid_response"} else "stopped"
     await save(state, pending, renew=True)
     buttons = [("Повторить", action(pending, "retry"))] if pending["phase"] == "retry" else []
     buttons += [("Начать новый запрос", action(pending, "new")), ("Отмена", action(pending, "cancel"))]
-    await send_text(message, ERRORS[exc.category], reply_markup=keyboard(buttons))
+    recovery = ""
+    if exc.category in {"unavailable", "temporary", "server", "invalid_response"}:
+        recovery = "\nПосле перезапуска можно проверить сохранённый ответ (30 дней): /copilot_result " + pending["payload"]["request_key"]
+    await send_text(message, ERRORS[exc.category] + recovery, reply_markup=keyboard(buttons))
 
 
 async def execute(message, actor, state, pending, *, processing_text=None):
@@ -208,7 +212,7 @@ async def execute(message, actor, state, pending, *, processing_text=None):
         try:
             await message.edit_text(processing_text, parse_mode=None, reply_markup=None)
         except TelegramAPIError:
-            await error(message, state, pending, CopilotError("unavailable"))
+            await error(message, state, pending, CopilotError("presentation"))
             return
     try:
         payload = dto.ExecuteRequest.model_validate(pending["payload"])
@@ -402,8 +406,31 @@ async def status(message, actor, run_id):
         return
     sections = render.run(response)
     markup = status_keyboard(run_id) if response.status in {dto.RunStatus.QUEUED, dto.RunStatus.RUNNING} else None
+    if response.strategy and response.status in {dto.RunStatus.COMPLETED, dto.RunStatus.COMPLETED_WITH_LIMITATIONS}:
+        markup = keyboard([("Объяснить решение", run_callback(run_id).replace("cs:", "cm:", 1))])
     for i, section in enumerate(sections):
         await send_text(message, section, reply_markup=markup if i == len(sections) - 1 else None)
+
+
+async def saved_result(message, actor, request_key):
+    """Read a completed receipt only; recovery never delegates to generation."""
+    try:
+        response = await client.saved_execution(actor, request_key)
+    except CopilotError as exc:
+        await send_text(message, ERRORS.get(exc.category, ERRORS["server"]))
+        return
+    if isinstance(response, dto.StartedResponse):
+        await status(message, actor, response.run_id)
+    elif isinstance(response, dto.DirectResponse):
+        for section in render.calculation(response.calculation):
+            await send_text(message, section)
+    elif isinstance(response, dto.ModuleResponse):
+        for section in render.module(response.result):
+            await send_text(message, section)
+    elif isinstance(response, dto.ConversationResponse):
+        await send_text(message, "Этот ключ относится к обычному чату. Сохранённого ответа Copilot для него нет; повторная генерация не запускалась.")
+    else:
+        await send_text(message, "Запрос требовал уточнения. Готовый результат ещё не сохранён. Для продолжения начните новый запрос: /new")
 
 
 async def recent_runs(message, actor, *, offset=0):

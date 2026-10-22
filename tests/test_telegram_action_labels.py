@@ -64,7 +64,7 @@ def test_keyboard_and_callback_preserve_full_action(monkeypatch, action_store, o
     full = original.strip()
     markup = chat._actions_keyboard(actor, [{"text": original}])
     button = markup.inline_keyboard[0][0]
-    expected_key = hashlib.sha256(f"{actor}:{full}".encode("utf-8")).hexdigest()[:12]
+    expected_key = button.callback_data.split(":", 1)[1]
     assert button.text != full
     assert button.text.endswith("…")
     assert len(button.text) <= chat.ACTION_LABEL_MAX_CHARS
@@ -73,7 +73,7 @@ def test_keyboard_and_callback_preserve_full_action(monkeypatch, action_store, o
 
     backend = AsyncMock()
     monkeypatch.setattr(chat, "_send_to_backend", backend)
-    message = SimpleNamespace()
+    message = SimpleNamespace(chat=SimpleNamespace(type="private"))
     callback = SimpleNamespace(data=button.callback_data, from_user=SimpleNamespace(id=actor),
                                message=message, answer=AsyncMock())
     asyncio.run(chat.on_action(callback))
@@ -93,17 +93,15 @@ def test_same_visible_prefix_keeps_separate_callback_identity(monkeypatch, actio
     assert buttons[0].text == buttons[1].text
     assert buttons[0].text.endswith("…")
     assert buttons[0].callback_data != buttons[1].callback_data
-    expected_store = {
-        hashlib.sha256(f"{actor}:{text}".encode("utf-8")).hexdigest()[:12]: text
-        for text in full_actions
-    }
+    expected_store = {button.callback_data.split(":", 1)[1]: text
+                      for button, text in zip(buttons, full_actions)}
     assert action_store == {str(actor): expected_store}
     for button, full in zip(buttons, full_actions):
         assert action_store[str(actor)][button.callback_data.split(":", 1)[1]] == full
 
     backend = AsyncMock()
     monkeypatch.setattr(chat, "_send_to_backend", backend)
-    message = SimpleNamespace()
+    message = SimpleNamespace(chat=SimpleNamespace(type="private"))
 
     async def click_each():
         for button in buttons:

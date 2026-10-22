@@ -25,11 +25,13 @@ def pipeline_with_doubles(session, sessions, state, counts, agent_hook=None, cla
 
     async def external(stage):
         assert not session.in_transaction(), f"transaction held during {stage}"
-        # A second connection can immediately lock the row while the provider runs.
-        async with sessions() as observer:
+        # The provider owner must release its transaction. A competing claimant
+        # can legitimately lock the same row briefly, so bound acquisition rather
+        # than treating its transient NOWAIT conflict as an owner leak.
+        async with asyncio.timeout(2), sessions() as observer:
             row = await observer.scalar(select(TaskSessionRecord).where(
                 TaskSessionRecord.session_id == state.session_id,
-            ).with_for_update(nowait=True))
+            ).with_for_update())
             assert row.finalization_token is not None
             await observer.commit()
         counts[stage] += 1
