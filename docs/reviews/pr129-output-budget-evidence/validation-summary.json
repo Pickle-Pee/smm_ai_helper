@@ -1,0 +1,9 @@
+{
+  "tests": 350,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "junit_sha256": "1ed520add33fbc577e416f457213b23c32f9b1e41ab81ba38d22722cbcaa0d5f",
+  "compileall": "passed",
+  "git_diff_check": "passed"
+}

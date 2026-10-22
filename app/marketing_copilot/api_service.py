@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.config import settings
+from app.llm.controlled_live import provider_operation
 from app.models import User
 from app.module_execution.executors import ExecutorOutputError
 from app.orchestration_runtime.errors import StartIdentityConflict
@@ -124,7 +125,7 @@ class CopilotAPIService:
                     interpreted = await self.interpretations.load(owner, payload.request_key, payload.message)
                 source = "persisted"
                 if interpreted is None:
-                    with stage_timing("intent_interpretation_provider", request_key=payload.request_key, user_id=owner):
+                    with stage_timing("intent_interpretation_provider", request_key=payload.request_key, user_id=owner), provider_operation("intent", owner, payload.request_key, payload.message):
                         interpreted = await self.copilot.interpreter.interpret_request(payload.message)
                     with stage_timing("intent_interpretation_save", request_key=payload.request_key, user_id=owner):
                         interpreted = await self.interpretations.save(owner, payload.request_key, payload.message, interpreted)

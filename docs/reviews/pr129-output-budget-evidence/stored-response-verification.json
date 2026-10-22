@@ -1,0 +1,29 @@
+{
+  "http_status": 200,
+  "metadata": {
+    "id": "resp_0ab155ea39f8bc9c006ada9a7cc88087d28e9e5e17fa28cea9",
+    "model": "gpt-5-mini-2025-08-07",
+    "created_at": 1792711292,
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "error": null,
+    "usage": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "max_output_tokens": 128000,
+    "service_tier": "default"
+  },
+  "output_item_count": 0,
+  "get_request_id": "req_e56a62540cf0435eb05d19e4deff476e"
+}

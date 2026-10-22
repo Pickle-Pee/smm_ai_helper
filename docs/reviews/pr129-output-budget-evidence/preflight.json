@@ -1,0 +1,35 @@
+{
+  "model_lookup": {
+    "status": 200,
+    "body": {
+      "id": "gpt-5-mini",
+      "object": "model",
+      "created": 1754425928,
+      "owned_by": "system",
+      "shutdown_date": null
+    },
+    "headers": {
+      "x-request-id": "123a2a2d-a90e-4a53-a1b0-60c5be864afa"
+    }
+  },
+  "input_tokens": {
+    "status": 200,
+    "body": {
+      "object": "response.input_tokens",
+      "input_tokens": 12026
+    },
+    "headers": {
+      "x-request-id": "req_cf2a384aa37d42a7abd8ae5ec2b1e426"
+    }
+  },
+  "raw_body_preserved": false,
+  "generation_posts": 0,
+  "schema_sha256": "d0e0361566b1adb9b1ef59136713914f55d2f39675f206734068259bfffeb277",
+  "context_headroom_128k": 259974,
+  "upper_usd_by_cap": {
+    "128000": 0.25900650000000003,
+    "32000": 0.0670065,
+    "64000": 0.1310065
+  },
+  "campaign_upper_usd": 0.4570195
+}

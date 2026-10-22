@@ -1,0 +1,601 @@
+{
+  "$defs": {
+    "PositioningAlternativeHypothesisStatement": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "output_name": {
+              "enum": [
+                "category",
+                "frame_of_reference",
+                "points_of_parity"
+              ],
+              "title": "Output Name",
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "kind": {
+              "const": "HYPOTHESIS",
+              "title": "Kind",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "UNKNOWN",
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/AllowedEvidenceId"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Evidence Ids",
+              "type": "array"
+            },
+            "parent_claim_ids": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 0,
+              "title": "Parent Claim Ids",
+              "type": "array"
+            }
+          },
+          "required": [
+            "output_name",
+            "text",
+            "kind",
+            "confidence",
+            "evidence_ids",
+            "parent_claim_ids"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "output_name": {
+          "enum": [
+            "category",
+            "frame_of_reference",
+            "points_of_parity"
+          ],
+          "title": "Output Name",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HYPOTHESIS",
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "UNKNOWN",
+            "LOW",
+            "MEDIUM",
+            "HIGH"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/AllowedEvidenceId"
+          },
+          "maxItems": 32,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "parent_claim_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 0,
+          "title": "Parent Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "output_name",
+        "text",
+        "kind",
+        "confidence",
+        "evidence_ids",
+        "parent_claim_ids"
+      ],
+      "title": "PositioningAlternativeHypothesisStatement",
+      "type": "object"
+    },
+    "PositioningCoreStatement": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "output_name": {
+              "enum": [
+                "target",
+                "value_proposition",
+                "RTB",
+                "positioning_statement",
+                "offer",
+                "message_hierarchy",
+                "claim_risks",
+                "validation_plan."
+              ],
+              "title": "Output Name",
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "OBSERVATION",
+                "INFERENCE",
+                "HYPOTHESIS",
+                "RECOMMENDATION"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "UNKNOWN",
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/AllowedEvidenceId"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Evidence Ids",
+              "type": "array"
+            },
+            "parent_claim_ids": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 0,
+              "title": "Parent Claim Ids",
+              "type": "array"
+            }
+          },
+          "required": [
+            "output_name",
+            "text",
+            "kind",
+            "confidence",
+            "evidence_ids",
+            "parent_claim_ids"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "output_name": {
+          "enum": [
+            "target",
+            "value_proposition",
+            "RTB",
+            "positioning_statement",
+            "offer",
+            "message_hierarchy",
+            "claim_risks",
+            "validation_plan."
+          ],
+          "title": "Output Name",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "OBSERVATION",
+            "INFERENCE",
+            "HYPOTHESIS",
+            "RECOMMENDATION"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "UNKNOWN",
+            "LOW",
+            "MEDIUM",
+            "HIGH"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/AllowedEvidenceId"
+          },
+          "maxItems": 32,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "parent_claim_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 0,
+          "title": "Parent Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "output_name",
+        "text",
+        "kind",
+        "confidence",
+        "evidence_ids",
+        "parent_claim_ids"
+      ],
+      "title": "PositioningCoreStatement",
+      "type": "object"
+    },
+    "PositioningHypothesisStatement": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "output_name": {
+              "enum": [
+                "differentiation",
+                "points_of_difference",
+                "USP_directions"
+              ],
+              "title": "Output Name",
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "kind": {
+              "const": "HYPOTHESIS",
+              "title": "Kind",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "UNKNOWN",
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/AllowedEvidenceId"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Evidence Ids",
+              "type": "array"
+            },
+            "parent_claim_ids": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 0,
+              "title": "Parent Claim Ids",
+              "type": "array"
+            }
+          },
+          "required": [
+            "output_name",
+            "text",
+            "kind",
+            "confidence",
+            "evidence_ids",
+            "parent_claim_ids"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "output_name": {
+          "enum": [
+            "differentiation",
+            "points_of_difference",
+            "USP_directions"
+          ],
+          "title": "Output Name",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HYPOTHESIS",
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "UNKNOWN",
+            "LOW",
+            "MEDIUM",
+            "HIGH"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/AllowedEvidenceId"
+          },
+          "maxItems": 32,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "parent_claim_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 0,
+          "title": "Parent Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "output_name",
+        "text",
+        "kind",
+        "confidence",
+        "evidence_ids",
+        "parent_claim_ids"
+      ],
+      "title": "PositioningHypothesisStatement",
+      "type": "object"
+    },
+    "PositioningJobHypothesisStatement": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "output_name": {
+              "enum": [
+                "JTBD_frame",
+                "demand_context"
+              ],
+              "title": "Output Name",
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "kind": {
+              "const": "HYPOTHESIS",
+              "title": "Kind",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "UNKNOWN",
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/AllowedEvidenceId"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Evidence Ids",
+              "type": "array"
+            },
+            "parent_claim_ids": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 0,
+              "title": "Parent Claim Ids",
+              "type": "array"
+            }
+          },
+          "required": [
+            "output_name",
+            "text",
+            "kind",
+            "confidence",
+            "evidence_ids",
+            "parent_claim_ids"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "output_name": {
+          "enum": [
+            "JTBD_frame",
+            "demand_context"
+          ],
+          "title": "Output Name",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "const": "HYPOTHESIS",
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "UNKNOWN",
+            "LOW",
+            "MEDIUM",
+            "HIGH"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/AllowedEvidenceId"
+          },
+          "maxItems": 32,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "parent_claim_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 0,
+          "title": "Parent Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "output_name",
+        "text",
+        "kind",
+        "confidence",
+        "evidence_ids",
+        "parent_claim_ids"
+      ],
+      "title": "PositioningJobHypothesisStatement",
+      "type": "object"
+    },
+    "AllowedEvidenceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "enum": [
+        "evd_05b6e0255948592de751f606575a7305a91abf85633b98cf",
+        "evd_1be36ced6ca28d72de8f21a1fe3014940f45a64e8274b5d2",
+        "evd_21e9c34359f0572385a3d13767c992c5cbae8bb6077cd176",
+        "evd_5a4cafe9c81828f7c3ddb7104b506a1a3805d3c9a78113df",
+        "evd_6104661b1711d94e0b7ecb3f956eac8fe047637030569ed6",
+        "evd_8290b9ba76b5a5108af0871b13a0072847062868b8238f42",
+        "evd_9457f2ca19c14787847c5cb9cb1cf3d2b61c54c777fe9a97",
+        "evd_bb188940b4f672e38659d65e8185bbf7d740e6ffea9d91b9"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "maxLength": 4000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "maxLength": 4000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Limitations",
+      "type": "array"
+    },
+    "outputs": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/PositioningCoreStatement"
+          },
+          {
+            "$ref": "#/$defs/PositioningJobHypothesisStatement"
+          },
+          {
+            "$ref": "#/$defs/PositioningAlternativeHypothesisStatement"
+          },
+          {
+            "$ref": "#/$defs/PositioningHypothesisStatement"
+          }
+        ]
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Outputs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "assumptions",
+    "limitations",
+    "outputs"
+  ],
+  "title": "PositioningWithoutSeedsOutput",
+  "type": "object"
+}

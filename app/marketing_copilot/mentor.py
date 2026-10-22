@@ -25,6 +25,7 @@ from .mentor_contracts import (MentorExplanation, MentorSection, MentorAnswer, S
     MentorGeneration, MentorHistory, MentorTurn)
 from .mentor_metrics import analyze_metrics
 from .provider_adapters import application_model_call, expected_provider_failure
+from app.llm.controlled_live import provider_operation
 from app.services.expert_instruction_composer import ExpertInstructionComposer
 from .presentation import sources
 
@@ -316,9 +317,10 @@ class CaseMentorService:
             await asyncio.sleep(0.05)
         try:
             instruction = ExpertInstructionComposer().compose(MENTOR_INSTRUCTIONS).rendered_text
-            async with asyncio.timeout(PROVIDER_TIMEOUT_SECONDS):
-                raw = await self.model_call(instruction=instruction,
-                    text=json.dumps(claimed, ensure_ascii=False), response_schema=MentorGeneration.model_json_schema())
+            with provider_operation("mentor", actor, run_id, request.request_key):
+                async with asyncio.timeout(PROVIDER_TIMEOUT_SECONDS):
+                    raw = await self.model_call(instruction=instruction,
+                        text=json.dumps(claimed, ensure_ascii=False), response_schema=MentorGeneration.model_json_schema())
             generated = MentorGeneration.model_validate_json(raw)
             answer = MentorAnswer(run_id=run_id, question=request.question, focus=generated.focus,
                 paragraphs=[*generated.paragraphs, *["Неизвестно / нужно уточнить: " + value for value in generated.unknowns]])

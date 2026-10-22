@@ -14,6 +14,7 @@ import httpx
 from app.llm.telemetry import correlation_fields, cancellation_outcome, safe_label, safe_provider_id
 from app.config import settings, TOKEN_BUDGETS, MAX_OUTPUT_TOKENS_CAP
 from app.model_generation_policy import ModuleOutputBudget, module_output_tokens
+from app.llm import controlled_live
 
 log = logging.getLogger(__name__)
 
@@ -204,6 +205,8 @@ async def _post_response(client, url, *, headers, payload, single_attempt, allow
             schema, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest() if schema is not None else None,
     }
+    gate = controlled_live.admission() if settings.CONTROLLED_LIVE_ENABLED else None
+    receipt = await gate.reserve(payload) if gate is not None else None
     _log_provider_event({**fields, "event": "started"})
     started = time.monotonic()
     response = None
@@ -248,6 +251,8 @@ async def _post_response(client, url, *, headers, payload, single_attempt, allow
         outcome = cancellation_outcome()
         raise
     finally:
+        if gate is not None:
+            await gate.finish(receipt, success=outcome == "success")
         fields.update(
             event="finished", outcome=outcome,
             duration_ms=min(max(round((time.monotonic() - started) * 1000), 0), 2 ** 31 - 1),
@@ -355,6 +360,8 @@ async def chat(
     schema fallback or token-budget expansion; JobExecution owns retries.
     Other callers retain the existing transport policy.
     """
+    if settings.CONTROLLED_LIVE_ENABLED:
+        single_attempt = True
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
 
@@ -384,6 +391,9 @@ async def chat(
                 or response_format.get("type") != "json_schema" or response_format.get("strict") is False):
             raise ValueError("Module output budget requires a strict single attempt")
         payload["max_output_tokens"] = module_output_tokens(output_budget)
+        experiment = settings.POSITIONING_OUTPUT_BUDGET_EXPERIMENT
+        if experiment is not None and output_budget is ModuleOutputBudget.POSITIONING_FULL:
+            payload["max_output_tokens"] = experiment
 
     if response_format is not None:
         fmt = dict(response_format)

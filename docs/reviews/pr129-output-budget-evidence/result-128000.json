@@ -1,0 +1,53 @@
+{
+  "cap": 128000,
+  "run_id": "obe20261023-128000",
+  "job_id": "1b1a65d99f5b83bb9028ac1cdcc24b81",
+  "fixture_module_execution_id": "c88e4588fa0d9bbb73a55a9b8d4bbc37",
+  "TRANSPORT_ACCEPTED": false,
+  "SCHEMA_ACCEPTED": null,
+  "SEMANTICS_ACCEPTED": null,
+  "QUALITY_ACCEPTED": null,
+  "model_requested": "gpt-5-mini",
+  "post_count": 1,
+  "http_status": 200,
+  "provider_request_id": "req_9d91440a0c044395939aa855f490e014",
+  "rate_limit_headers": {},
+  "id": "resp_0ab155ea39f8bc9c006ada9a7cc88087d28e9e5e17fa28cea9",
+  "model": "gpt-5-mini-2025-08-07",
+  "status": "incomplete",
+  "incomplete_details": {
+    "reason": "max_output_tokens"
+  },
+  "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 0
+  },
+  "output_item_count": 0,
+  "duration_seconds": 2.298,
+  "executor_error_type": "ModelResponseError",
+  "executor_error_stage": null,
+  "semantic_rule": null,
+  "job_status": "failed",
+  "run_status": "failed",
+  "run_error": "controlled_outcome_unknown",
+  "attempts": 1,
+  "active_lease": false,
+  "ledger": {
+    "status": "blocked",
+    "calls": 1,
+    "budgets": [
+      128000
+    ]
+  },
+  "estimated_usd": 0.0,
+  "visible_output_tokens": 0,
+  "budget_fraction": 0.0
+}
