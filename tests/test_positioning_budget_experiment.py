@@ -131,3 +131,36 @@ def test_real_postgresql_experiment_receipt_survives_replacement(monkeypatch,mvp
             async with mvp_database() as session,session.begin():
                 await session.execute(delete(MarketingRun).where(MarketingRun.run_id==gate.ledger_id))
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize('failure', ['empty_incomplete','timeout','cancel','http429'])
+def test_128k_uncertain_or_rejected_response_never_replays(monkeypatch,failure):
+    import httpx
+    from app.llm.openai_text import ModelResponseError
+    calls=[]
+    def respond(req):
+        calls.append(json.loads(req.content))
+        if failure=='timeout': raise httpx.ReadTimeout('offline',request=req)
+        if failure=='cancel': raise asyncio.CancelledError()
+        if failure=='http429': return httpx.Response(429,json={'error':{'code':'rate_limit_exceeded'}})
+        return httpx.Response(200,json={'status':'incomplete','incomplete_details':{'reason':'max_output_tokens'},
+            'output':[],'usage':{'input_tokens':0,'output_tokens':0,
+                'output_tokens_details':{'reasoning_tokens':0}}})
+    install_transport(monkeypatch,respond)
+    configure(monkeypatch)
+    rows=ReceiptRows()
+    monkeypatch.setattr(live,'admission',lambda:live.ControlledLiveAdmission(rows.sessions))
+    payload=frozen_payload()
+    async def exercise():
+        from app.model_generation_policy import ModuleOutputBudget
+        async def call():
+            return await production_model_call(instruction='frozen',text='frozen',
+                response_schema=payload['text']['format']['schema'],output_budget=ModuleOutputBudget.POSITIONING_FULL)
+        error={'empty_incomplete':ModelResponseError,'timeout':httpx.ReadTimeout,
+               'cancel':asyncio.CancelledError,'http429':httpx.HTTPStatusError}[failure]
+        with pytest.raises(error): await call()
+        assert rows.ledger.status=='blocked'
+        with pytest.raises(live.ControlledLiveBlocked): await call()
+        assert len(calls)==1 and calls[0]['max_output_tokens']==128000
+        assert rows.ledger.state_json['calls']==1
+    asyncio.run(exercise())

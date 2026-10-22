@@ -1,0 +1,55 @@
+{
+  "production": [
+    {
+      "id": "bbce2df9e9cb5105c185c22a12f327d69b09b95dfa0bda401ef2f177e2df4e3e",
+      "name": "/smm_ai_helper-backend-1",
+      "image": "sha256:389f1c45b0fc7b46f5b59b9a371057227d4abd0ab68bf078ce409c0cacfee8c7",
+      "started": "2026-10-21T12:38:11.464567609Z",
+      "status": "running",
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "id": "f54aaecf896010ebdbe02414b7cb7e1d9ab5cd1f3d25dd229779acc5f941e073",
+      "name": "/smm_ai_helper-worker-1",
+      "image": "sha256:2204a2f905ae12ecaf1ef367b466828313ad393c0ff181167e3915026cdaeef5",
+      "started": "2026-10-21T12:38:12.205092373Z",
+      "status": "running",
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "id": "e166f0a8fc62d24178b5b6bdb22fc9d8db41895c0e3f41d95c8486b01f0e5d10",
+      "name": "/smm_ai_helper-bot-1",
+      "image": "sha256:edf78df9fbe5ac3ad033f45834d08593020e23e1f6683c200948e8a26bc06b4a",
+      "started": "2026-10-21T12:38:23.674413152Z",
+      "status": "running",
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "id": "3e76646eacb762117a1546a004a736ef91f6abe12a41d70d467ecf2e79c387ca",
+      "name": "/smm_ai_helper-db-1",
+      "image": "sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3",
+      "started": "2026-10-06T12:47:49.497624639Z",
+      "status": "running",
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "id": "259881501b6e9829985acaf55897fb0e24d5702d1c475f045b57319f3f506362",
+      "name": "/smm_ai_helper-redis-1",
+      "image": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+      "started": "2026-10-06T12:47:50.180575397Z",
+      "status": "running",
+      "health": "healthy",
+      "restarts": 0
+    }
+  ],
+  "production_unchanged": true,
+  "old_evidence_unchanged": true,
+  "new_db_stopped": true,
+  "new_volumes_retained": true,
+  "new_private_key_copy_removed": true,
+  "ledger_snapshot_exit_code": 0
+}

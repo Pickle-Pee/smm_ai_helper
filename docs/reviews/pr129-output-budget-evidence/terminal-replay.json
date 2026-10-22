@@ -1,0 +1,12 @@
+{
+  "replacement_worker_did_work": false,
+  "attempts": 1,
+  "active_lease": false,
+  "ledger_status": "blocked",
+  "ledger_calls": 1,
+  "receipt_count": 1,
+  "receipt_states": [
+    "unknown"
+  ],
+  "provider_calls": 0
+}

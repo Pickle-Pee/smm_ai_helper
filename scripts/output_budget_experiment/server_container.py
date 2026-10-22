@@ -7,15 +7,15 @@ import sys
 root=Path('/opt/smm_ai_helper_e2e/output-budget-experiment')
 image='sha256:389f1c45b0fc7b46f5b59b9a371057227d4abd0ab68bf078ce409c0cacfee8c7'
 mode=sys.argv[1]
-assert mode in ('test','verify','migrate','128000','32000','64000')
+assert mode in ('test','verify','replay','migrate','128000','32000','64000')
 env={'DATABASE_URL':'postgresql+asyncpg://output_budget_test:isolated_test_only@smm-obe-db:5432/smm_mvp_test_output_budget',
     'MVP_TEST_DATABASE_URL':'postgresql+asyncpg://output_budget_test:isolated_test_only@smm-obe-db:5432/smm_mvp_test_output_budget',
     'TELEGRAM_BOT_TOKEN':'123456:offline-only','OPENAI_API_KEY':'offline-not-a-key',
     'OPENAI_BASE_URL':'http://127.0.0.1:9','BOT_BACKEND_TOKEN':'offline',
-    'API_BASE_URL':'http://127.0.0.1:9','PYTHONDONTWRITEBYTECODE':'1',
+    'API_BASE_URL':'http://127.0.0.1:9','PYTHONDONTWRITEBYTECODE':'1','PYTHONPATH':'/workspace',
     'CONTROLLED_LIVE_ENABLED':'false'}
 paid=mode.isdigit()
-if paid or mode=='migrate':
+if paid or mode in ('migrate','replay'):
     env['DATABASE_URL']=env['DATABASE_URL'].replace('smm_mvp_test_output_budget','output_budget_campaign')
 if paid:
     private=dict(line.split('=',1) for line in Path('/opt/smm_ai_helper_e2e/secrets/staging.env').read_text().splitlines() if '=' in line)
@@ -51,6 +51,7 @@ if mode=='test':
         'tests/test_provider_request_telemetry.py','tests/test_positioning_output.py',
         'tests/test_positioning_seed_contract.py']
 elif mode=='verify': args += ['python','-m','scripts.output_budget_experiment.verify_payload']
+elif mode=='replay': args += ['python','/campaign/check_terminal_replay.py']
 elif mode=='migrate': args += ['alembic','upgrade','head']
 else: args += ['python','-m','scripts.output_budget_experiment.run_one']
 code=subprocess.call(args)
