@@ -55,11 +55,12 @@ def evaluate_result(job_id, result, upstream):
 
 class GraphExecutionService:
     def __init__(self, sessions=AsyncSessionLocal, *, executors, queue=None, clock=utcnow,
-                 lease_seconds=330, max_attempts=3):
+                 lease_seconds=330, max_attempts=3, controlled_live=False):
         if lease_seconds <= 0 or not 1 <= max_attempts <= 10:
             raise ValueError("invalid execution policy")
         self.sessions, self.executors, self.queue, self.clock = sessions, executors, queue, clock
-        self.lease_seconds, self.max_attempts = lease_seconds, max_attempts
+        self.controlled_live = controlled_live
+        self.lease_seconds, self.max_attempts = lease_seconds, 1 if controlled_live else max_attempts
         self.jobs = JobPersistenceService(clock)
 
     async def _wake(self, jobs):
@@ -274,7 +275,8 @@ class GraphExecutionService:
             if job.status is JobStatus.PENDING:
                 job = await self.jobs.transition_job(session, job.job_id, job.version, JobStatus.RUNNING)
             if lease.attempts >= self.max_attempts:
-                await self._terminal(session, run, job, lease, "attempts_exhausted")
+                code = "controlled_outcome_unknown" if self.controlled_live else "attempts_exhausted"
+                await self._terminal(session, run, job, lease, code)
                 return None
             lease.attempts += 1
             lease.claim_token, lease.lease_until = uuid.uuid4().hex, now + timedelta(seconds=self.lease_seconds)
@@ -382,6 +384,8 @@ class GraphExecutionService:
             if active is None:
                 return False
             run, job, lease = active
+            if self.controlled_live and retryable:
+                code, retryable = "controlled_outcome_unknown", False
             if retryable and code == "provider_transient" and lease.attempts < self.max_attempts:
                 lease.claim_token = lease.lease_until = None
                 lease.available_at = self.clock() + timedelta(seconds=5 * 2 ** (lease.attempts - 1))

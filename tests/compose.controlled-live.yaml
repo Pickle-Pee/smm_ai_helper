@@ -1,0 +1,38 @@
+# Disposable offline infrastructure, no app/poller and no external network.
+# Run with --project-name smm-pr129-e2e-offline, never overlay production compose.
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: smm_mvp_test_pr129
+      POSTGRES_USER: offline_test
+      POSTGRES_PASSWORD: offline_test_only
+    volumes:
+      - database:/var/lib/postgresql/data
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "offline_test", "-d", "smm_mvp_test_pr129"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - redis:/data
+volumes:
+  database:
+  redis:
+networks:
+  default:
+    internal: true

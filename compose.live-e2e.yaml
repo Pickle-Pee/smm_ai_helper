@@ -1,0 +1,96 @@
+# Standalone staging only. Never combine with docker-compose.yaml.
+# Supply --project-name pr129-live-e2e --env-file <approved-absolute-path> explicitly.
+x-application: &application
+  build: .
+  environment: &environment
+    DEPLOYMENT_ENVIRONMENT: staging
+    CONTROLLED_LIVE_ENABLED: "true"
+    DATABASE_URL: postgresql+asyncpg://live_e2e:${STAGING_DB_PASSWORD:?approved staging password required}@db:5432/pr129_live_e2e
+    REDIS_URL: redis://redis:6379/0
+    API_BASE_URL: http://backend:8000
+    IMAGE_STORAGE_PATH: /data/images
+    BOT_BACKEND_TOKEN: ${STAGING_BACKEND_TOKEN:?new staging backend token required}
+    TELEGRAM_BOT_TOKEN: ${STAGING_TELEGRAM_TOKEN:?approved separate staging bot required}
+    OPENAI_API_KEY: ${STAGING_OPENAI_API_KEY:?approved staging project key required}
+    OPENAI_BASE_URL: https://api.openai.com/v1
+    DEFAULT_TEXT_MODEL_HARD: ${STAGING_TEXT_MODEL:?approved model required}
+    HTTP_RETRIES: "0"
+    WORKER_CONCURRENCY: "1"
+    GRAPH_WORKER_CONCURRENCY: "1"
+  restart: "no"
+  mem_limit: 512m
+  cpus: 0.5
+  pids_limit: 128
+
+services:
+  db:
+    image: postgres:15
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    environment:
+      POSTGRES_DB: pr129_live_e2e
+      POSTGRES_USER: live_e2e
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?approved staging password required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "live_e2e", "-d", "pr129_live_e2e"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: "no"
+  redis:
+    image: redis:7-alpine
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: "no"
+  migrate:
+    <<: *application
+    command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+  backend:
+    <<: *application
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8129:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - images:/data/images
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+  worker:
+    <<: *application
+    command: python -m app.worker
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - images:/data/images
+  bot:
+    <<: *application
+    profiles: ["polling"]
+    command: python -m bot.main
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  database:
+  images:

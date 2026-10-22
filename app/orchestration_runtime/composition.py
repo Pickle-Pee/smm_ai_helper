@@ -63,5 +63,6 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
         virtual_cmo_numeric_quote_catalog=settings.VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED)
     validate_executor_coherence(metadata, executors)
     service = GraphExecutionService(sessions, executors=executors, queue=queue,
-        lease_seconds=settings.GRAPH_LEASE_SECONDS, max_attempts=3)
+        lease_seconds=settings.GRAPH_LEASE_SECONDS, max_attempts=3,
+        controlled_live=settings.CONTROLLED_LIVE_ENABLED)
     return ProductionGraphRuntime(metadata, executors, service, settings.GRAPH_TIMEOUT_SECONDS)

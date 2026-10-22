@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from app.config import settings
+from app.llm.controlled_live import ControlledLiveBlocked
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,8 @@ async def generate_image(
     - Для gpt-image-* API всегда возвращает b64_json (response_format не передаем).
     - Для dall-e-3 / dall-e-2 можно просить b64_json.
     """
+    if settings.CONTROLLED_LIVE_ENABLED:
+        raise ControlledLiveBlocked("controlled_live_images_disabled")
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/images/generations"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
 

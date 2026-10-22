@@ -37,8 +37,13 @@ class Settings(BaseSettings):
     HTTP_RETRIES: int = 2
     HTTP_BACKOFF: float = 0.5
 
+    DEPLOYMENT_ENVIRONMENT: str = "production"
+    CONTROLLED_LIVE_ENABLED: bool = False
+
     @model_validator(mode="after")
     def graph_execution_window(self):
+        if self.CONTROLLED_LIVE_ENABLED and self.DEPLOYMENT_ENVIRONMENT != "staging":
+            raise ValueError("Controlled live execution requires an isolated staging environment")
         if not 0 < self.HTTP_TIMEOUT < self.GRAPH_TIMEOUT_SECONDS < self.GRAPH_LEASE_SECONDS:
             raise ValueError("Require 0 < HTTP_TIMEOUT < GRAPH_TIMEOUT_SECONDS < GRAPH_LEASE_SECONDS")
         return self

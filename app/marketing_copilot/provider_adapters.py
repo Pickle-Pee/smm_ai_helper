@@ -3,6 +3,7 @@ import httpx
 from copy import deepcopy
 
 from app.llm.openai_text import ModelResponseError
+from app.llm.controlled_live import ControlledLiveBlocked
 from app.orchestration_runtime.model_adapter import production_model_call
 from app.product_context.errors import ExtractorUnavailableError
 from .api_errors import ProviderUnavailable
@@ -14,7 +15,7 @@ def expected_provider_failure(exc):
     seen = set()
     while exc is not None and id(exc) not in seen:
         seen.add(id(exc))
-        if isinstance(exc, (httpx.HTTPError, TimeoutError, ModelResponseError)):
+        if isinstance(exc, (httpx.HTTPError, TimeoutError, ModelResponseError, ControlledLiveBlocked)):
             return True
         # Only the project's transport wrapper is traversed, never arbitrary
         # application ValueError/AssertionError with an unrelated chained cause.
