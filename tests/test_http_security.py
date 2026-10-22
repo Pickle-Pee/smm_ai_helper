@@ -116,11 +116,14 @@ def test_callback_uses_clicking_actor_for_payload_and_new_actions(monkeypatch):
             return SimpleNamespace(status_code=200, json=lambda: {"reply": "done", "actions": [{"text": "continue"}]})
     status = SimpleNamespace(edit_text=AsyncMock(), delete=AsyncMock())
     message = SimpleNamespace(from_user=SimpleNamespace(id=999), chat=SimpleNamespace(type="private"), answer=AsyncMock(return_value=status))
-    callback = SimpleNamespace(data="action:key", from_user=SimpleNamespace(id=100), message=message, answer=AsyncMock())
     monkeypatch.setattr(chat.httpx, "AsyncClient", Client)
     monkeypatch.setattr(chat, "_chat_action_indicator", AsyncMock())
     monkeypatch.setattr(chat, "_long_request_indicator", AsyncMock())
-    monkeypatch.setattr(chat, "ACTION_STORE", {"100": {"key": "Continue"}})
+    monkeypatch.setattr(chat, "ACTION_STORE", {})
+    monkeypatch.setattr(chat, "ACTION_EXPIRES", {})
+    markup = chat._actions_keyboard(100, [{"text": "Continue"}])
+    callback = SimpleNamespace(data=markup.inline_keyboard[0][0].callback_data,
+        from_user=SimpleNamespace(id=100), message=message, answer=AsyncMock())
     asyncio.run(chat.on_action(callback))
     assert captures[0]["json"]["user_id"] == "tg:100"
     assert captures[0]["headers"]["X-Telegram-User-ID"] == "100"

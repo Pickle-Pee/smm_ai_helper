@@ -69,7 +69,12 @@ def test_ten_concurrent_execute_authoritative_identity(mvp_database, monkeypatch
                 async with db() as session:
                     runs = (await session.scalars(select(MarketingRun).join(User).where(User.telegram_id == actor))).all()
                     plans = (await session.scalars(select(OrchestrationPlanRecord).where(OrchestrationPlanRecord.run_id == rid))).all()
-                    assert len(runs) == len(plans) == 1 and plans[0].revision == 1
+                    graph_runs = [run for run in runs if run.run_id == rid]
+                    receipts = [run for run in runs if run.workflow_type == "copilot_execution.v1"]
+                    assert len(runs) == 2 and len(graph_runs) == len(receipts) == len(plans) == 1
+                    assert plans[0].revision == 1
+                    assert receipts[0].status == "completed"
+                    assert receipts[0].state_json["response"]["run_id"] == rid
                     winning = next(b for b, r in zip(bodies, responses) if r.status_code == 202)
                     assert winning["context"]["product_truth"] in json.dumps(plans[0].compiled_plan_json)
                 await drain(api, db, rid)

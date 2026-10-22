@@ -113,6 +113,27 @@ def test_ambiguous_provider_timeout_is_not_reexecuted_after_restart(mvp_database
     asyncio.run(check())
 
 
+def test_identical_pending_clarifications_validate_without_reacquisition(mvp_database, monkeypatch):
+    from tests.test_product_context import acquisition, OWN
+    acquired, _, _ = acquisition()
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        api = configured(mvp_database, IntentKind.POSITIONING)
+        api.acquisition.acquire = AsyncMock(return_value=acquired)
+        request = payload(context={}, owned_site_url=OWN)
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
+                responses = await asyncio.gather(*(client.post("/copilot/execute", headers=headers(actor), json=request) for _ in range(10)))
+            assert {response.status_code for response in responses} == {200}
+            assert all(response.json() == responses[0].json() for response in responses)
+            assert responses[0].json()["kind"] == "NEEDS_INPUT"
+            api.acquisition.acquire.assert_awaited_once()
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
+
+
 def test_provider_observes_committed_claim_without_database_row_lock(mvp_database, monkeypatch):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():

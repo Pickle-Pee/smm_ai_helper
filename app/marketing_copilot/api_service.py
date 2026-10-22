@@ -59,6 +59,12 @@ class CopilotAPIService:
             owner, brand = await self._identity_context(actor)
         token, replay = await self.executions.claim(owner, payload)
         if replay is not None:
+            if replay.kind == "NEEDS_INPUT":
+                # Clarification remains subject to its authoritative meaning
+                # contract. Validate without repeating acquisition/extraction.
+                interpreted = await self.interpretations.load(owner, payload.request_key, payload.message)
+                if interpreted is None:
+                    raise CopilotAPIError(500, "temporarily_unavailable")
             return replay
         try:
             response = await self._execute_claimed(owner, brand, payload, started)

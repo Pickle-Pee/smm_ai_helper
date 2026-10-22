@@ -50,7 +50,7 @@ class Delivery(WireModel):
     part: Annotated[int, Field(ge=0)]
 
 
-class Job(WireModel):
+class WorkflowJobSummary(WireModel):
     job_id: str
     step: Step
     status: Literal["pending", "running", "succeeded", "failed"]
@@ -70,7 +70,7 @@ class WorkflowResponse(WireModel):
     error: str | None
     missing_fields: list[Literal["product", "audience", "goal"]]
     artifacts: dict[Step, Artifact]
-    jobs: list[Job]
+    jobs: list[WorkflowJobSummary]
     delivery: list[Delivery]
 
     @model_validator(mode="after")

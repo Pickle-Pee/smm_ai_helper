@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app.config import settings
 from bot import copilot_flow as flow, backend
 from bot.handlers import mentor
+from tests.postgresql_support import mvp_database
 from tests.test_telegram_copilot import started
 from tests.test_marketing_mvp_postgresql import setup_mvp, request as fixed_request, actor_id
 
