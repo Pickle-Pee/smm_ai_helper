@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.security import require_actor
 from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, RunListResponse, StartedResponse, ErrorResponse
 from app.marketing_copilot.api_errors import CopilotAPIError
-from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorQuestion, MentorAnswer, CaseFeedback, SavedFeedback
+from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorQuestion, MentorAnswer, CaseFeedback, SavedFeedback, MentorHistory
 from app.marketing_copilot.production import build_production_copilot_api
 
 log = logging.getLogger(__name__)
@@ -70,6 +70,12 @@ async def execute(payload: ExecuteRequest, response: Response, actor: int = Depe
     return result
 
 
+@router.get("/executions/{request_key}", response_model=ExecuteResponse)
+async def saved_execution(request_key: Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")],
+                          actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.saved_execution(actor, request_key)
+
+
 @router.get("/runs", response_model=RunListResponse)
 async def recent_runs(limit: Annotated[int, Query(ge=1, le=50)] = 10,
                       offset: Annotated[int, Query(ge=0, le=10000)] = 0,
@@ -99,6 +105,13 @@ async def saved_explanation(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$
 async def question_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: MentorQuestion,
                        actor: int = Depends(require_actor), api=Depends(service)):
     return await api.mentor.question(actor, run_id, payload)
+
+
+@router.get("/runs/{run_id}/mentor/questions", response_model=MentorHistory)
+async def mentor_history(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                         limit: Annotated[int, Query(ge=1, le=50)] = 50,
+                         actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.history(actor, run_id, limit=limit)
 
 
 @router.post("/runs/{run_id}/mentor/feedback", response_model=SavedFeedback)

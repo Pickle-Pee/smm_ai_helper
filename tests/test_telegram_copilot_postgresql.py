@@ -96,7 +96,7 @@ def test_telegram_explicit_competitor_and_ignored_url_use_real_http_composition(
     (IntentKind.POST_GENERATION, "Напиши пост", "Use the supplied product"),
     (IntentKind.CONVERSATION, "Привет", "legacy"),
 ])
-def test_telegram_sync_real_api_never_creates_run(mvp_database, monkeypatch, kind, request_text, expected):
+def test_telegram_sync_real_api_saves_receipt_without_graph_run(mvp_database, monkeypatch, kind, request_text, expected):
     from bot.handlers import chat
     legacy = AsyncMock()
     monkeypatch.setattr(chat, "_send_to_backend", legacy)
@@ -115,7 +115,15 @@ def test_telegram_sync_real_api_never_creates_run(mvp_database, monkeypatch, kin
                 assert expected in text_sent(msg)
             async with mvp_database() as session:
                 owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
-                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                rows = (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                assert len(rows) == 1
+                assert rows[0].workflow_type == "copilot_execution.v1"
+                assert rows[0].status == "completed"
+                assert rows[0].state_json["response"]["kind"] == {
+                    IntentKind.LEAD_FUNNEL_CALCULATION: "DIRECT_RESULT",
+                    IntentKind.POST_GENERATION: "MODULE_RESULT",
+                    IntentKind.CONVERSATION: "CONVERSATION",
+                }[kind]
         finally:
             await remove_actor(mvp_database, actor)
     asyncio.run(check())

@@ -22,6 +22,15 @@ class CopilotError(Exception):
 
 
 class CopilotClient:
+    async def saved_execution(self, actor: int, request_key: str) -> dto.ExecuteResponse:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", request_key):
+            raise CopilotError("not_found")
+        raw = await self._request("GET", f"/copilot/executions/{request_key}", actor)
+        try:
+            return EXECUTE_RESPONSE.validate_json(raw)
+        except (ValidationError, ValueError):
+            raise CopilotError("invalid_response") from None
+
     async def _request(self, method, path, actor, *, payload=None):
         try:
             # Total wall-clock bound as well as connect/read/write/pool timeouts.

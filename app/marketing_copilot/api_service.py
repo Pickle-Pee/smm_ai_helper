@@ -23,20 +23,22 @@ from .api_errors import CopilotAPIError, ExecutionInvalid, ProviderUnavailable
 from .application_contracts import CopilotRequest, ResultKind
 from .http_context import current_entries, brand_entries
 from .presentation import owned_result, module_presentation, calculation_presentation
-from .provider_adapters import expected_provider_failure
+from .provider_adapters import expected_provider_failure, application_model_call
 from .run_reader import GraphRunReader
 from .observability import stage_timing
 from .interpretation_store import InterpretationStore
 from .mentor import CaseMentorService
+from .execution_store import ExecutionStore
 
 log = logging.getLogger(__name__)
 
 
 class CopilotAPIService:
-    def __init__(self, *, sessions, copilot, acquisition, queue):
+    def __init__(self, *, sessions, copilot, acquisition, queue, mentor_model=application_model_call):
         self.sessions, self.copilot, self.acquisition, self.queue = sessions, copilot, acquisition, queue
         self.reader = GraphRunReader(sessions, copilot.graph_service)
-        self.mentor = CaseMentorService(sessions, copilot.graph_service)
+        self.mentor = CaseMentorService(sessions, copilot.graph_service, model_call=mentor_model)
+        self.executions = ExecutionStore(sessions)
         self.snapshots = OwnedSnapshotStore(sessions)
         self.interpretations = InterpretationStore(sessions)
 
@@ -55,6 +57,30 @@ class CopilotAPIService:
         started = time.monotonic()
         with stage_timing("identity_context", request_key=payload.request_key, user_id=None):
             owner, brand = await self._identity_context(actor)
+        token, replay = await self.executions.claim(owner, payload)
+        if replay is not None:
+            return replay
+        try:
+            response = await self._execute_claimed(owner, brand, payload, started)
+        except CopilotAPIError as exc:
+            if exc.code in {"confirmation_unavailable", "invalid_confirmation", "confirmation_changed"}:
+                await self.executions.abandon_validation(owner, payload, token)
+            else:
+                await self.executions.finish(owner, payload, token)
+            raise
+        except BaseException:
+            # Persist unknown external outcome before returning a safe failure.
+            # Cancellation is propagated; it is never permission to regenerate.
+            await asyncio.shield(self.executions.finish(owner, payload, token))
+            raise
+        await self.executions.finish(owner, payload, token, response)
+        return response
+
+    async def saved_execution(self, actor, request_key):
+        owner, _ = await self._identity_context(actor)
+        return await self.executions.get(owner, request_key)
+
+    async def _execute_claimed(self, owner, brand, payload, started):
         request = CopilotRequest(actor_id=owner, request_id=payload.request_key, message=payload.message,
             current_request=current_entries(payload), brand_profile=brand,
             owned_site_url=payload.owned_site_url, available_tools=frozenset({ToolCapability.SITE_FETCH}))
