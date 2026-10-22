@@ -77,16 +77,31 @@ actual cancellation limitation, without changing that request's FSM. Shutdown
 cancels and drains owned updates and delivery before closing the Bot session.
 
 Completed graph strategies expose opt-in case explanations through
-`CaseMentorService` and `/copilot/runs/{id}/mentor`. The deterministic explanation
-reads accepted strategy/context/evidence/lineage/experiments, with no provider
-call or modification of source artifacts. Existing MarketingRun/MarketingArtifact
-storage groups saved explanations, questions and explicit user-reported feedback
-under a deterministic `case_mentor.v1` companion run; it has no execution jobs or
-worker lane. Source-row locking serializes creation. Existing graph and fixed-MVP
-run lists remain scoped to their own workflow types. Followups reuse the saved
-case; new counterfactual strategy synthesis and cross-case learning remain outside
-this interface. The fixed creative-workflow Mentor remains unchanged.
+`CaseMentorService` and `/copilot/runs/{id}/mentor`. Opening the explanation reads
+accepted strategy/context/evidence/lineage/experiments without generation. New
+questions call the existing single-attempt model capability behind the backend,
+with Expert Core and a bounded packet of accepted sections, prior turns and
+explicitly unverified reports. The fixed creative-workflow Mentor is unchanged.
 
+Existing MarketingRun/MarketingArtifact storage groups explanations, ordered turns,
+reported feedback and committed generation identities in a `case_mentor.v1`
+companion. Short source-row transactions serialize admission and completion;
+provider I/O occurs after the claim commits, without an open DB transaction.
+Completed answers replay by request key; unknown outcomes do not automatically
+rerun. Different questions serialize within one case. Source artifacts, jobs,
+BrandProfile and graph lifecycle remain unchanged. Owner-scoped history GET permits
+reopening the last 50 turns; generation uses at most 12 previous turns.
+
+`ExecutionStore` uses separate `copilot_execution.v1` receipt runs for authenticated
+Copilot HTTP execution. It fingerprints supplied fields, commits ownership before
+external work and saves the complete public response. Completed results replay
+without interpretation/provider calls; a changed completed/running payload returns
+409. Only a NEEDS_INPUT receipt permits a revised clarification payload. Receipts
+have a 30-day retention window and expired keys must not be reused. Running or
+ambiguous outcomes are never automatically stolen within that window. Graph/fixed
+run lists filter workflow types, so receipts and mentor companions remain excluded.
+Legacy chat generation and initial standalone task starts do not acquire this new
+HTTP identity; their existing continuation/finalization contracts remain separate.
 
 ### Chat flow
 

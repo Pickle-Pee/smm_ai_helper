@@ -26,13 +26,27 @@ Use a real publicly accessible competitor page instead of `example.com`. Alterna
 
 The analysis arrives in the background. Press **Создать креативный пакет** to generate the offer, headline, CTA, banner and a 15–60-second video script. Press **Объяснить решение** for the mentor explanation of that saved package. `/runs`, `/status ID`, `/result ID` retrieve progress and saved results after restart; `/redeliver ID` retries failed delivery without generation. A new `/analyze` message deliberately starts a new run; replaying the same update or continuation reuses existing work.
 
-Completed Copilot strategies in `/copilot_runs` also offer **Объяснить решение**:
-an opt-in saved case explanation using accepted decisions, context and evidence,
-with no new provider call. Followup questions stay bound to that strategy until
-`/new` or `/cancel`; after restart reopen its button. `/case_feedback worked | observations | metrics`
-records explicit user-reported outcomes for subsequent same-case questions.
-This does not synthesize a new strategy or automatically update the business profile.
-See [Telegram hardening report](docs/development/telegram-hardening-report.md) and
+Completed Copilot strategies in `/copilot_runs` also offer **Объяснить решение**.
+Opening the accepted case explanation uses saved artifacts without generation.
+New free questions invoke the existing backend model capability with Expert Core,
+accepted strategy/evidence, bounded prior dialogue and user-reported feedback.
+`/case_history` opens saved answers; after restart reopen the strategy's explanation
+and continue the same case. `/new` or `/cancel` leaves this mode.
+
+`/case_feedback worked | observations | metrics` saves explicit reported outcomes.
+For arithmetic use labelled values for one cohort: `Расход: 15 000 ₽; Заявки: 30;
+Продажи: 3; Период: 1–7 октября`. Missing currency/period or ambiguous values require
+clarification. These reports do not prove causality or profitability and never
+update the accepted strategy or business profile automatically.
+
+Copilot synchronous results are saved for 30 days under the authenticated request
+key; a completed matching retry returns that response. An unknown provider outcome
+fails closed instead of automatically generating again. The legacy `/chat` reply
+and initial `/tasks/start` remain separate contracts without this receipt guarantee.
+Use `/copilot_result KEY` from the uncertainty message to reopen a saved Copilot
+response after restart without new generation.
+See [remediation report](docs/reviews/pr129-remediation-report.md),
+[final acceptance](docs/reviews/pr129-final-acceptance.md) and
 [operations runbook](docs/operations/telegram-production-runbook.md).
 
 ## Run without Docker
@@ -52,7 +66,7 @@ Redis accelerates wakeups. The worker also scans PostgreSQL, so it can recover a
 
 ## Development
 
-Use task -> implementation -> tests -> code review on a dedicated `codex/<task>` branch from `sale-ready`. `master` is release history. Existing OpenSpec contracts remain reference material; separate proposal/design/approval cycles are optional.
+Use task -> implementation -> tests -> code review on a dedicated `codex/<task>` branch from current `master`. Verify the integration branch before starting. Existing OpenSpec contracts remain reference material; separate proposal/design/approval cycles are optional.
 
 Read `AGENTS.md`, `ARCHITECTURE.md`, and `docs/product/mvp-functional-scope.md`. See `docs/development/openspec-codex.md` for the branch and verification workflow.
 

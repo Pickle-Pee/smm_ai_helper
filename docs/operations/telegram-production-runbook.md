@@ -25,16 +25,22 @@ does not authorize deployment. Keep one polling bot per Telegram token.
 - `/new` clears local clarification. `/cancel` does not cancel an accepted backend
   workflow. During an active serialized request, both commands immediately explain
   that execution is still running; send `/new` after its response.
-- Local URL confirmation, legacy action and repeat-task buttons expire on restart.
+- Local URL confirmation and repeat-task buttons expire on restart. Suggested-action
+  keyboards additionally expire after 15 minutes; capacity eviction or a replacement
+  keyboard invalidates them. Reopen a fresh suggestion after expiry.
   Reopen history to request an intentional new repeat. Do not repeatedly start a
   synchronous task after an unknown HTTP outcome; check saved history first.
 - Completed graph strategies offer **Объяснить решение**. This saves/opens eight
-  sections from accepted strategy/evidence/lineage without provider calls. Followup
-  text stays bound to that case until `/new` or `/cancel`. After restart reopen the
-  strategy and its explanation button.
+  sections from accepted strategy/evidence/lineage without provider calls. New
+  followup questions invoke the backend model with Expert Core and bounded saved
+  dialogue. Text stays bound to that case until `/new` or `/cancel`. After restart
+  reopen the strategy and explanation; `/case_history` reads up to 50 saved turns.
 - `/case_feedback worked | observations | metrics` records explicit user-reported
   results. Other statuses: applied, hypothesis_tested, did_not_work, corrected.
-  Feedback is reused in subsequent same-case questions; it does not overwrite
+  For arithmetic supply one labelled cohort, for example: `Расход: 15000 ₽;
+  Заявки: 30; Продажи: 3; Период: 1–7 октября`. Missing currency/period, ambiguous
+  values and zero denominators require clarification. Feedback is explicitly
+  user-reported and reused in subsequent same-case questions; it does not overwrite
   BrandProfile, change the original strategy or prove causality.
 
 ## Diagnosing failures
@@ -47,7 +53,7 @@ does not authorize deployment. Keep one polling bot per Telegram token.
 | analysis queued | worker lane enabled, drain/pause status, due jobs/leases; Redis wakeup loss alone must not lose PostgreSQL jobs |
 | delivery pending/failed | claim lease, claim token, retry count/backoff, Telegram access; `/redeliver ID` for fixed workflow, no generation |
 | image unavailable | ownership, persistent shared image volume, allowed backend `/images/*.png`, 10 MiB download cap; reopen saved result |
-| mentor unavailable | source run completed with accepted VIRTUAL_CMO; backend/DB available; source remains independently readable |
+| mentor unavailable | source must have accepted VIRTUAL_CMO; check backend/DB and provider. Opening a saved explanation/history needs no provider. A new question may have unknown outcome; never clear its claim to force regeneration |
 | malformed result | safe user error, run ID/status and deployment SHA for investigation; do not fabricate successful output |
 
 Telegram may accept a message before the database ACK is lost. Lease recovery may
@@ -78,3 +84,28 @@ recorded code/images/config, retain schema and persistent volumes, restart backe
 workers / bot. Companion mentor artifacts use existing storage; old code ignores
 their workflow type. Do not downgrade migrations or delete runs/artifacts. Capture
 SHA, migration head, failing command, status and sanitized IDs when escalating.
+
+## Synchronous result recovery and retention
+
+The uncertainty response for a Copilot request supplies `/copilot_result KEY`.
+Use it or repeat the identical payload/key to read a committed response within 30
+days. The authenticated read API is GET `/copilot/executions/{request_key}`.
+Graph history only lists graph runs; a synchronous module result is stored in its
+execution receipt. Receipts expire opportunistically after 30 days. Never reuse an
+expired key. Unknown running/ambiguous outcomes fail closed; do not reset claims
+or tell users that an external call definitely failed. A new key is new work.
+
+This guarantee does not cache the reply generated after a CONVERSATION delegation
+or the initial `/tasks/start`. For legacy chat/task starts check their own saved
+history where available; an intentional resend can generate and charge again.
+
+## Independent acceptance gates
+
+Before release inspect `../reviews/pr129-final-acceptance.md` for all 309 original
+requirement rows and the exact published candidate CI. Separate engineering
+reliability, product-semantic contracts and live acceptance. With separate operator
+authorization run the five linked VK/Telegram/audience/budget/measurement questions,
+reopen the case after restart, then provide experiment metrics and inspect source
+labels, unsupported numeric claims and conditional alternatives. Exercise actual
+Telegram sends, media, ACK loss and shutdown in an isolated test deployment.
+Fake-model JSON and green CI cannot replace these live quality gates.
