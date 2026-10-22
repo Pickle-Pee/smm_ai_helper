@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import secrets
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -23,6 +24,28 @@ from bot.copilot_flow import CopilotStates, receive
 router = Router()
 ACTION_STORE: Dict[str, Dict[str, str]] = {}
 ACTION_LABEL_MAX_CHARS = 30
+ACTION_MAX_USERS = 1000
+ACTION_MAX_PER_USER = 10
+ACTION_MAX_TEXT_CHARS = 4000
+ACTION_TTL_SECONDS = 15 * 60
+# Separate metadata keeps the existing actor -> token -> text interface intact.
+ACTION_EXPIRES: Dict[str, float] = {}
+
+
+def _prune_actions():
+    """Expire at creation/consumption; oldest keyboards are evicted at capacity.
+
+    Expiry never slides on access. A new keyboard invalidates that actor's old
+    tokens. Restart, expiry and eviction all fail closed; no durable recovery.
+    """
+    now = time.monotonic()
+    for actor in list(ACTION_EXPIRES):
+        if actor not in ACTION_STORE:
+            ACTION_EXPIRES.pop(actor, None)
+    for actor in list(ACTION_STORE):
+        if ACTION_EXPIRES.get(actor, 0) <= now:
+            ACTION_STORE.pop(actor, None)
+            ACTION_EXPIRES.pop(actor, None)
 
 
 def _short_action_label(text: str, limit: int = ACTION_LABEL_MAX_CHARS) -> str:
@@ -49,8 +72,11 @@ def _make_action_key(user_id: int, text: str) -> str:
 
 def _actions_keyboard(user_id: int, actions: Any):
     kb = InlineKeyboardBuilder()
-    store = ACTION_STORE.setdefault(str(user_id), {})
-    store.clear()
+    _prune_actions()
+    actor = str(user_id)
+    ACTION_STORE.pop(actor, None)
+    ACTION_EXPIRES.pop(actor, None)
+    store = {}
 
     if not actions or not isinstance(actions, list):
         return None
@@ -62,9 +88,21 @@ def _actions_keyboard(user_id: int, actions: Any):
         text = value.strip() if isinstance(value, str) else ""
         if not text:
             continue
+        if len(text) > ACTION_MAX_TEXT_CHARS:
+            continue
         key = _make_action_key(user_id, text)
         store[key] = text
         kb.button(text=_short_action_label(text), callback_data=f"action:{key}")
+        if len(store) == ACTION_MAX_PER_USER:
+            break
+
+    if store:
+        while len(ACTION_STORE) >= ACTION_MAX_USERS:
+            oldest = next(iter(ACTION_STORE))
+            ACTION_STORE.pop(oldest)
+            ACTION_EXPIRES.pop(oldest, None)
+        ACTION_STORE[actor] = store
+        ACTION_EXPIRES[actor] = time.monotonic() + ACTION_TTL_SECONDS
 
     kb.adjust(1)
     return kb.as_markup() if store else None
@@ -352,9 +390,13 @@ async def on_action(callback: types.CallbackQuery):
         await callback.answer("Откройте личный чат с ботом.")
         return
     key = callback.data.split(":", 1)[1]
+    _prune_actions()
     store = ACTION_STORE.get(str(callback.from_user.id), {})
     # Consume before the first await: concurrent deliveries cannot execute twice.
     text = store.pop(key, None)
+    if not store:
+        ACTION_STORE.pop(str(callback.from_user.id), None)
+        ACTION_EXPIRES.pop(str(callback.from_user.id), None)
 
     if not text:
         await callback.answer("Действие устарело", show_alert=True)

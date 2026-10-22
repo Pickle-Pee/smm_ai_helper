@@ -31,8 +31,12 @@ def actor_headers(telegram_id: int) -> dict[str, str]:
 
 
 async def request(method, path, actor_id, *, payload=None):
+    # Case dialogue may wait behind a prior turn (40s) and then generate (30s).
+    # Keep the HTTP wait bounded while allowing the backend's own limits to win.
+    timeout = 75 if method.upper() == "POST" and re.fullmatch(
+        r"/copilot/runs/[0-9a-f]{64}/mentor/questions", path) else 10
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, settings.API_BASE_URL.rstrip("/") + path,
                                             headers=actor_headers(actor_id), json=payload)
     except httpx.HTTPError as exc:
@@ -54,6 +58,9 @@ async def request(method, path, actor_id, *, payload=None):
         data = response.json()
         if not isinstance(data, (dict, list)):
             raise ValueError()
+        if path == "/workflows" or (path.startswith("/workflows/") and path != "/workflows/profile"):
+            from bot.workflow_contracts import validate_runs, validate_workflow
+            return validate_runs(data) if path == "/workflows" and method.upper() == "GET" else validate_workflow(data)
         return data
     except ValueError as exc:
         raise BackendError("Сервер вернул некорректный ответ. Проверьте статус проекта позже.") from exc
