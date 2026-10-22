@@ -1,11 +1,9 @@
 """One explicitly selected budget; no campaign loop or retries."""
 import asyncio
 from dataclasses import replace
-import hashlib
 import json
 import logging
 from pathlib import Path
-import sys
 import time
 
 from sqlalchemy import select
@@ -14,8 +12,9 @@ from jsonschema import Draft202012Validator
 from app.config import settings
 from app.db import AsyncSessionLocal, engine
 from app.llm import openai_text
-from app.models import Job, JobExecution, MarketingArtifact, MarketingRun, User
+from app.models import Job, JobExecution, MarketingRun, User
 from app.module_execution import ModuleExecutionRequest
+from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors.positioning import PositioningExecutor
 from app.module_execution.registry import ModuleExecutorRegistry
 from app.orchestration_runtime.contracts import CompiledExecutionNode, CompiledExecutionPlan, PLAN_SCHEMA, module_job_id
@@ -96,7 +95,7 @@ async def frozen_execute(runtime_request):
         (root/'evidence'/f'normalized-{cap}.json').write_text(json.dumps(result_to_json(result),ensure_ascii=False,indent=2))
         quality=evaluate_result(job_id,result,())
         summary['quality']=quality
-        summary['QUALITY_ACCEPTED']=result.normalized_result.result_id in quality['accepted_result_ids']
+        summary['QUALITY_ACCEPTED']=fully_accepted(result,quality['accepted_result_ids'],quality['accepted_claim_ids'])
         return result
     except Exception as exc:
         summary['executor_error_type']=type(exc).__name__
@@ -146,5 +145,6 @@ async def main():
     print(json.dumps(summary,indent=2))
     await engine.dispose()
 
-logging.basicConfig(level=logging.INFO)
-asyncio.run(main())
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())

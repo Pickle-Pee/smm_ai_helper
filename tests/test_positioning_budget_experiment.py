@@ -1,17 +1,14 @@
 """Closed staging policy, captured transport and durable no-replay coverage."""
 import asyncio
-import hashlib
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from app.config import Settings, settings
 from app.llm import controlled_live as live
-from app.model_generation_policy import ModuleOutputBudget
 from app.module_registry import ModuleId
 from app.orchestration_runtime.model_adapter import production_model_call
 from tests.postgresql_support import mvp_database
@@ -38,7 +35,8 @@ def frozen_payload(cap=128000):
 @pytest.mark.parametrize('cap', [16000,32000,64000,128000])
 def test_settings_closed_staging_and_timeout_chain(cap):
     values = dict(DATABASE_URL='postgresql+asyncpg://offline', TELEGRAM_BOT_TOKEN='offline',
-        OPENAI_API_KEY='offline', POSITIONING_OUTPUT_BUDGET_EXPERIMENT=cap,
+        OPENAI_API_KEY='offline', OPENAI_BASE_URL='https://api.openai.com/v1',
+        POSITIONING_OUTPUT_BUDGET_EXPERIMENT=cap,
         CONTROLLED_LIVE_ENABLED=True, DEPLOYMENT_ENVIRONMENT='staging',
         DEFAULT_TEXT_MODEL_HARD='gpt-5-mini', HTTP_RETRIES=0, HTTP_TIMEOUT=600,
         GRAPH_TIMEOUT_SECONDS=780, GRAPH_LEASE_SECONDS=900)
