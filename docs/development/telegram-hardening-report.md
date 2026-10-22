@@ -68,7 +68,7 @@ of this task branch; each implementation commit includes its regression tests.
 | BOT-11 | IMPLEMENTED | remove early truncation, shared UTF-16 splitting | saved tail sent, Copilot Cyrillic/emoji/markup tests |
 | BOT-12 | IMPLEMENTED | actor/route checks, no external credential forwarding | HTTP ownership suites + foreign mentor/action callbacks |
 | BOT-13 | IMPLEMENTED | explicit next steps, complete results, safe errors | deterministic user text assertions; manual live UX not run |
-| BOT-14 | VERIFIED_OFFLINE | full offline tests, real PostgreSQL/Redis | 4174 passed, zero failed/skipped; local container checks unavailable |
+| BOT-14 | VERIFIED | full offline tests, real PostgreSQL/Redis and remote container CI | 4174 local tests passed; Python and container-smoke CI passed |
 | BOT-15 | IMPLEMENTED | baseline/report/runbook and Draft PR | final delivery metadata below |
 | BOT-16 | IMPLEMENTED_WITH_LIMITATIONS | opt-in saved case explanations/questions/reported feedback | semantic grounding, 10 HTTP requests/one artifact, restart+Telegram E2E |
 
@@ -207,10 +207,19 @@ Implementation commits: `d1c9f5a` (main behavior), `2fcc781` (validation/CI),
 `27c3202` (deterministic transaction probe). No prior unrelated working-tree files
 are included. The frozen full release suite targets `27c3202`.
 
+## Remote CI evidence
+
+[CI run 228](https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/39693941922)
+completed successfully for published code/documentation head `a44e6fb5ee2db62859273e258866a328f9121809`.
+The `python` job passed compileall, migrations, schema check and the full suite.
+`container-smoke` passed built-image PostgreSQL/Redis tests, app container recreation,
+worker lane/Redis recovery/graceful shutdown and active graph SIGTERM/restart.
+The subsequent report-only commit records this evidence without changing runtime.
+
 ## Final acceptance gates
 
-Offline gates below refer to executed local checks. Container/CI and live gates
-remain explicit; this report does not authorize production deployment.
+Gates below include executed local checks and successful remote CI. Live provider
+quality remains an explicit operator gate; this report does not authorize deployment.
 
 | Gate | Status | Evidence / limit |
 | --- | --- | --- |
@@ -221,14 +230,15 @@ remain explicit; this report does not authorize production deployment.
 | 05 Security | PASS | source ownership/clicking actor, task/action checks, media origin tests |
 | 06 Errors | PASS | malformed/provider/backend/Telegram faults; no false success |
 | 07 Compatibility | PASS | full standalone/fixed MVP/Copilot/graph/database/Redis suites pass |
-| 08 Tests | BLOCKED | local offline checks pass; local container daemon absent, remote CI tracked on Draft PR |
+| 08 Tests | PASS | local checks plus successful Python/container-smoke CI on a44e6fb; migrations, recreation, shutdown and SIGTERM recovery passed |
 | 09 Documentation | PASS | baseline, this report, operational runbook |
 | 10 Reviewability | PASS | independent review fixes applied, logical commits complete; Draft PR #129 published and attached |
 | 11 BOT-16 | PASS | saved accepted strategy explanation and Telegram/HTTP/DB tests |
 
-Verdict: **READY_WITH_LIMITATIONS**. Required local offline checks pass. Container
-recreation/SIGTERM and live provider/Telegram quality need their separate gates;
-the PR stays Draft. Never interpret offline success as approval to deploy.
+Verdict: **READY_WITH_LIMITATIONS**. Required local checks and remote container
+recreation/SIGTERM recovery pass. Live provider/Telegram quality still requires
+operator acceptance; counterfactual synthesis and cross-case learning remain
+explicit limitations. The PR stays Draft. Test success does not authorize deployment.
 Known guarantees: idempotent graph acceptance and mentor
 artifact creation; recoverable at-least-once Telegram delivery; no exactly-once
 provider execution or visible-message delivery guarantee.
