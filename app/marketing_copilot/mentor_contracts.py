@@ -46,3 +46,24 @@ class SavedFeedback(StrictDTO):
     notes: Text
     metrics: Text
     verification: Literal["user_reported"] = "user_reported"
+    analysis: dict = Field(default_factory=dict)
+
+
+class MentorGeneration(StrictDTO):
+    """Bounded answer contract; references identify accepted case sections."""
+    focus: Literal["alternative", "verification", "resources", "evidence", "overview"]
+    paragraphs: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]] = Field(min_length=1, max_length=12)
+    source_sections: list[Literal["goal", "inputs", "principle", "rationale", "alternatives", "limitations", "verification", "takeaway"]] = Field(min_length=1, max_length=8)
+    unknowns: list[Text] = Field(max_length=8)
+
+
+class MentorTurn(StrictDTO):
+    request_key: str
+    question: Text
+    answer: MentorAnswer
+
+
+class MentorHistory(StrictDTO):
+    schema_version: Literal["case_mentor_history.v1"] = "case_mentor_history.v1"
+    run_id: str
+    turns: list[MentorTurn] = Field(max_length=50)

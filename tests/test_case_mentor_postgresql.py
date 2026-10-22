@@ -20,6 +20,7 @@ from tests.test_copilot_api import application, headers
 from tests.test_copilot_api_postgresql import configured, payload, remove_actor
 from tests.test_graph_postgresql import state
 from tests.test_strategy_builder import StrategyModel
+from tests.test_case_mentor import DialogueModel
 from tests.test_telegram_copilot import context, message, text_sent
 
 
@@ -28,7 +29,7 @@ def test_case_mentor_concurrency_restart_security_feedback_and_followup(mvp_data
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
         model = StrategyModel(use_parents=True)
-        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=model)
+        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=model, mentor_model=DialogueModel())
         try:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
                 response = await client.post("/copilot/execute", headers=headers(actor), json=payload())
@@ -66,7 +67,7 @@ def test_case_mentor_concurrency_restart_security_feedback_and_followup(mvp_data
                 # New production composition represents restart; provider capability
                 # is present but must never be called when reading saved explanation.
                 unavailable_provider = AsyncMock(side_effect=RuntimeError("offline provider unavailable"))
-                restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=unavailable_provider)
+                restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=unavailable_provider, mentor_model=DialogueModel())
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(restarted)), base_url="http://test") as fresh:
                     replay = await fresh.get(url, headers=headers(actor))
                     assert replay.status_code == 200 and replay.json() == saved
@@ -124,7 +125,7 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
         model = StrategyModel(use_parents=True)
-        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=model)
+        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=model, mentor_model=DialogueModel())
         backend_app = [application(api)]
         original_client = httpx.AsyncClient
         try:
@@ -181,7 +182,7 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
             # Fresh API composition plus empty bot FSM model a restart. The old
             # compact callback still resolves the same owner-scoped saved case.
             unavailable_provider = AsyncMock(side_effect=RuntimeError("offline provider unavailable"))
-            restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=unavailable_provider)
+            restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=unavailable_provider, mentor_model=DialogueModel())
             backend_app[0] = application(restarted)
             restarted_fsm = context(actor)
             reopened = message(actor=actor)

@@ -40,7 +40,7 @@ async def show_case(message, actor, run_id, state):
     await state.clear()
     await state.update_data(mentor_run_id=run_id)
     await state.set_state(MentorStates.question)
-    await send_text(message, "Режим наставника: задайте вопрос об этой стратегии. Разбор использует сохранённые решения.\n"
+    await send_text(message, "Режим наставника: продолжите диалог об этой стратегии. История сохраняется в этом кейсе; /case_history — открыть предыдущие ответы.\n"
                     "Для обратной связи: /case_feedback сработало | наблюдения | метрики (необязательно). "
                     "Статусы: применена, проверена, сработало, не_сработало, исправлено.\n/new — выйти и начать новый запрос.")
 
@@ -82,8 +82,47 @@ async def feedback(message: types.Message, state: FSMContext):
                 or any(saved.get(key) != payload[key] for key in ("outcome", "notes", "metrics"))):
             raise ValueError()
         await send_text(message, "Обратная связь сохранена как ваше сообщение о результате; это не независимая проверка эффективности. Профиль бизнеса не изменён.")
+        analysis = saved.get("analysis", {})
+        if isinstance(analysis, dict):
+            labels = {"cost_per_lead": "Стоимость заявки", "cost_per_sale": "Стоимость привлечения продажи",
+                      "lead_to_sale_conversion": "Конверсия заявки в продажу"}
+            calculations = analysis.get("calculations", {})
+            clarifications = analysis.get("clarifications", [])
+            if isinstance(calculations, dict) and isinstance(clarifications, list):
+                lines = [labels[key] + ": " + value for key, value in calculations.items() if key in labels and isinstance(value, str)]
+                lines.extend(value for value in clarifications if isinstance(value, str))
+                if lines:
+                    await send_text(message, "Пользовательские данные (не независимо проверено):\n" + "\n".join(lines))
     except (backend.BackendError, AttributeError, TypeError, ValueError):
         await send_text(message, "Не удалось подтвердить сохранение обратной связи. Она могла сохраниться; проверьте следующий ответ наставника перед повтором.")
+
+
+@router.message(Command("case_history"))
+async def history(message: types.Message, state: FSMContext):
+    if message.chat.type != "private":
+        return
+    run_id = (await state.get_data()).get("mentor_run_id")
+    if not run_id:
+        await send_text(message, "Откройте сохранённый кейс через /copilot_runs и нажмите «Объяснить решение».")
+        return
+    try:
+        data = await backend.request("GET", f"/copilot/runs/{run_id}/mentor/questions", message.from_user.id)
+        if data.get("schema_version") != "case_mentor_history.v1" or data.get("run_id") != run_id:
+            raise ValueError()
+        turns = data["turns"]
+        if not isinstance(turns, list):
+            raise ValueError()
+        texts = []
+        for turn in turns:
+            question, values = turn["question"], turn["answer"]["paragraphs"]
+            if not isinstance(question, str) or not isinstance(values, list) or not all(isinstance(p, str) for p in values):
+                raise ValueError()
+            texts.append("Вы: " + question + "\nНаставник: " + "\n".join(values))
+        for text in texts:
+            await send_text(message, text)
+        await send_text(message, "Продолжите разбор новым вопросом." if texts else "В этом кейсе пока нет сохранённых ответов. Задайте вопрос.")
+    except (backend.BackendError, KeyError, TypeError, ValueError, AttributeError):
+        await send_text(message, "Не удалось открыть историю. Повторите /case_history позже.")
 
 
 @router.message(StateFilter(MentorStates.question), F.text, ~F.text.startswith("/"))
@@ -105,4 +144,6 @@ async def question(message: types.Message, state: FSMContext):
             raise ValueError()
         await send_text(message, "\n\n".join(paragraphs))
     except (backend.BackendError, KeyError, TypeError, ValueError):
-        await send_text(message, "Не удалось получить ответ. Сохранённая стратегия и разбор доступны через /copilot_runs.")
+        await send_text(message, "Не удалось подтвердить ответ. Он мог сохраниться: проверьте /case_history. "
+                        "При неизвестном исходе этот запрос автоматически не запускается повторно. "
+                        "Новый вопрос может потребовать нового вызова модели. Стратегия доступна через /copilot_runs.")
