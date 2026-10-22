@@ -33,7 +33,7 @@ def frozen_payload(cap=128000):
 
 
 @pytest.mark.parametrize('cap', [16000,32000,64000,128000])
-def test_settings_closed_staging_and_timeout_chain(cap):
+def test_settings_closed_staging_and_timeout_chain(cap, monkeypatch):
     values = dict(DATABASE_URL='postgresql+asyncpg://offline', TELEGRAM_BOT_TOKEN='offline',
         OPENAI_API_KEY='offline', OPENAI_BASE_URL='https://api.openai.com/v1',
         POSITIONING_OUTPUT_BUDGET_EXPERIMENT=cap,
@@ -41,6 +41,9 @@ def test_settings_closed_staging_and_timeout_chain(cap):
         DEFAULT_TEXT_MODEL_HARD='gpt-5-mini', HTTP_RETRIES=0, HTTP_TIMEOUT=600,
         GRAPH_TIMEOUT_SECONDS=780, GRAPH_LEASE_SECONDS=900)
     assert Settings(_env_file=None, **values).POSITIONING_OUTPUT_BUDGET_EXPERIMENT == cap
+    monkeypatch.setenv('POSITIONING_OUTPUT_BUDGET_EXPERIMENT', str(cap))
+    env_values={key:value for key,value in values.items() if key!='POSITIONING_OUTPUT_BUDGET_EXPERIMENT'}
+    assert Settings(_env_file=None, **env_values).POSITIONING_OUTPUT_BUDGET_EXPERIMENT==cap
     for invalid in ({'CONTROLLED_LIVE_ENABLED':False}, {'DEPLOYMENT_ENVIRONMENT':'production'},
                     {'HTTP_RETRIES':1}, {'DEFAULT_TEXT_MODEL_HARD':'gpt-5'},
                     {'POSITIONING_OUTPUT_BUDGET_EXPERIMENT':4000},

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     CONTROLLED_LIVE_ENABLED: bool = False
     # Server configuration only; never part of a public execution request.
     POSITIONING_OUTPUT_BUDGET_EXPERIMENT: Literal[16000, 32000, 64000, 128000] | None = None
+
+    @field_validator("POSITIONING_OUTPUT_BUDGET_EXPERIMENT", mode="before")
+    @classmethod
+    def parse_experiment_budget(cls, value):
+        if type(value) is str and value in {"16000", "32000", "64000", "128000"}:
+            return int(value)
+        return value
 
     @model_validator(mode="after")
     def graph_execution_window(self):
