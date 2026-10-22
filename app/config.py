@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
@@ -39,11 +41,20 @@ class Settings(BaseSettings):
 
     DEPLOYMENT_ENVIRONMENT: str = "production"
     CONTROLLED_LIVE_ENABLED: bool = False
+    # Server configuration only; never part of a public execution request.
+    POSITIONING_OUTPUT_BUDGET_EXPERIMENT: Literal[16000, 32000, 64000, 128000] | None = None
 
     @model_validator(mode="after")
     def graph_execution_window(self):
         if self.CONTROLLED_LIVE_ENABLED and self.DEPLOYMENT_ENVIRONMENT != "staging":
             raise ValueError("Controlled live execution requires an isolated staging environment")
+        if self.POSITIONING_OUTPUT_BUDGET_EXPERIMENT is not None:
+            if (not self.CONTROLLED_LIVE_ENABLED or self.DEPLOYMENT_ENVIRONMENT != "staging"
+                    or self.DEFAULT_TEXT_MODEL_HARD != "gpt-5-mini" or self.HTTP_RETRIES != 0
+                    or self.OPENAI_BASE_URL != "https://api.openai.com/v1"
+                    or self.POSITIONING_SCHEMA_PROJECTION_ENABLED
+                    or self.POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED):
+                raise ValueError("Output budget experiment requires isolated original-contract staging")
         if not 0 < self.HTTP_TIMEOUT < self.GRAPH_TIMEOUT_SECONDS < self.GRAPH_LEASE_SECONDS:
             raise ValueError("Require 0 < HTTP_TIMEOUT < GRAPH_TIMEOUT_SECONDS < GRAPH_LEASE_SECONDS")
         return self

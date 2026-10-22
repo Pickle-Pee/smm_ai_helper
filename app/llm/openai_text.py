@@ -391,6 +391,9 @@ async def chat(
                 or response_format.get("type") != "json_schema" or response_format.get("strict") is False):
             raise ValueError("Module output budget requires a strict single attempt")
         payload["max_output_tokens"] = module_output_tokens(output_budget)
+        experiment = settings.POSITIONING_OUTPUT_BUDGET_EXPERIMENT
+        if experiment is not None and output_budget is ModuleOutputBudget.POSITIONING_FULL:
+            payload["max_output_tokens"] = experiment
 
     if response_format is not None:
         fmt = dict(response_format)
