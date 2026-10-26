@@ -33,6 +33,8 @@ New deterministic tests cover metadata projection/receipt dedup, mixed-source pa
 
 Title search is a prefix preview of eight results, not full-text search. Legacy global messages cannot be retroactively separated into projects. Legacy and insufficient receipts do not support resume. Initial ordinary-chat/legacy display windows are capped at 50 messages with omission flags; context assembly is bounded. Historical graph records without saved display metadata use neutral titles; no model is called to invent them. Dates are UTC. Old clients omitting ordinary-chat request identity retain their historical API behavior; the updated bot supplies durable identity. New chat receipt cleanup needs identity tombstones before deletion.
 
+The first remote container run passed the real PostgreSQL/Redis pytest group and persistence/worker-lane checks, then exposed an offline transport allowlist that rejected the newly required SetMyCommands startup call. The CI fake now permits only the exact private-chat command menu, with regression tests preserving rejection of other methods.
+
 Local Docker daemon was unavailable at environment discovery. Native disposable PostgreSQL/Redis checks and remote CI container-smoke are tracked separately. Production readiness requires final green CI plus normal deployment approval; this task performs no merge or rollout.
 
 ## Staging verification procedure
