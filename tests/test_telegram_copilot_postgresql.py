@@ -109,7 +109,8 @@ def test_telegram_sync_real_api_saves_receipt_without_graph_run(mvp_database, mo
             msg, fsm = message(request_text, actor=actor), context(actor)
             await flow.receive(msg, fsm)
             if expected == "legacy":
-                legacy.assert_awaited_once_with(msg, request_text, actor_id=actor)
+                legacy.assert_awaited_once_with(msg, request_text, actor_id=actor,
+                    request_key=f"tg:{actor}:{actor}:{msg.message_id}")
                 assert not msg.answer.called
             else:
                 assert expected in text_sent(msg)

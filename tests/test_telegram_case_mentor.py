@@ -3,10 +3,15 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from bot import backend
 from bot.copilot_flow import run_callback, reset
 from bot.handlers import mentor
 from tests.test_telegram_copilot import message, context, text_sent, RID
+from tests.test_telegram_navigation_fixtures import no_selected_project
+
+pytestmark = pytest.mark.usefixtures("no_selected_project")
 
 
 def explanation():
@@ -15,7 +20,7 @@ def explanation():
         for i, key in enumerate(mentor.SECTION_KEYS)]}
 
 
-def test_restart_callback_uses_clicking_actor_and_binds_questions(monkeypatch):
+def test_restart_callback_uses_clicking_actor_and_only_displays_saved_case(monkeypatch):
     request = AsyncMock(side_effect=[explanation(), {"schema_version": "case_mentor_answer.v1", "run_id": RID,
         "question": "Что проверить первым?", "paragraphs": ["Проверить сохранённую гипотезу"]}])
     monkeypatch.setattr(backend, "request", request)
@@ -25,8 +30,14 @@ def test_restart_callback_uses_clicking_actor_and_binds_questions(monkeypatch):
             data=run_callback(RID).replace("cs:", "cm:"), answer=AsyncMock())
         await mentor.explain(callback, state)
         assert request.call_args_list[0].args == ("POST", f"/copilot/runs/{RID}/mentor", 321)
-        assert await state.get_state() == mentor.MentorStates.question.state
+        assert await state.get_state() is None
+        assert "mentor_run_id" not in await state.get_data()
         assert text_sent(msg).count("Сохранённое основание") == 8
+        assert "Открыть карточку проекта" in str(msg.answer.call_args.kwargs)
+        # Pre-upgrade explicitly selected FSM cases remain readable; this no
+        # longer happens as a side effect of an old explanation keyboard.
+        await state.update_data(mentor_run_id=RID)
+        await state.set_state(mentor.MentorStates.question)
         followup = message("Что проверить первым?", mid=2, actor=321)
         await mentor.question(followup, state)
         assert request.call_args.args == ("POST", f"/copilot/runs/{RID}/mentor/questions", 321)

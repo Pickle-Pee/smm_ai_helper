@@ -122,10 +122,25 @@ def get_next_question(agent_key: str, answered: dict):
 # Выбор агента и сбор брифа
 # ===========================
 
+
+async def independent_request_allowed(callback):
+    from bot.project_navigation import binding
+    try:
+        current = await binding(callback.from_user.id, callback.message.chat.id)
+    except (BackendError, ValueError, KeyError, TypeError):
+        await callback.answer("Не удалось проверить текущий проект. Откройте меню.", show_alert=True)
+        return False
+    if current["active"] is not None:
+        await callback.answer("Для отдельной задачи нажмите «Новый запрос» в главном меню.", show_alert=True)
+        return False
+    return True
+
 @router.callback_query(F.data.in_(AGENT_CONFIG.keys()))
 async def choose_agent(callback: CallbackQuery, state: FSMContext):
     from .history import private_callback
     if not await private_callback(callback):
+        return
+    if not await independent_request_allowed(callback):
         return
     agent_key = callback.data
     cfg = AGENT_CONFIG[agent_key]
@@ -154,6 +169,8 @@ async def choose_agent(callback: CallbackQuery, state: FSMContext):
 async def choose_image(callback: CallbackQuery, state: FSMContext):
     from .history import private_callback
     if not await private_callback(callback):
+        return
+    if not await independent_request_allowed(callback):
         return
     await state.update_data(image_payload={})
     await state.set_state(ImageStates.waiting_platform)

@@ -11,6 +11,9 @@ from aiogram import Bot, types
 from bot import copilot_contracts as dto, copilot_flow as flow
 from bot.handlers import agent_flow, chat, history
 from tests.test_telegram_copilot import context, message, patch_http, started
+from tests.test_telegram_navigation_fixtures import no_selected_project
+
+pytestmark = pytest.mark.usefixtures("no_selected_project")
 
 
 def callback(data, actor=123, **kwargs):
@@ -210,7 +213,7 @@ def test_nontext_image_input_and_commands_leave_fsm_usable(monkeypatch):
     from bot.main import create_dispatcher
     monkeypatch.setattr(Bot, "__call__", AsyncMock(return_value=True))
     http_calls = []
-    patch_http(monkeypatch, lambda request: http_calls.append(request.url.path) or httpx.Response(200, json=[]))
+    patch_http(monkeypatch, lambda request: http_calls.append(request.url.path) or httpx.Response(200, json={"items": [], "next_offset": None}))
     async def check():
         dp, bot = create_dispatcher(), Bot("123456:offline-token")
         user = types.User(id=123, is_bot=False, first_name="User")
@@ -225,7 +228,7 @@ def test_nontext_image_input_and_commands_leave_fsm_usable(monkeypatch):
             await dp.feed_update(bot, update(1))
             assert await fsm.get_state() == agent_flow.ImageStates.waiting_platform.state
             await dp.feed_update(bot, update(2, "/history"))
-            assert http_calls == ["/tasks/by_user/123"]
+            assert http_calls == ["/projects/history"]
             await dp.feed_update(bot, update(3, "telegram"))
             await dp.feed_update(bot, update(3, "telegram"))
             assert await fsm.get_state() == agent_flow.ImageStates.waiting_use_case.state

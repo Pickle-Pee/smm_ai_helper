@@ -118,6 +118,13 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
     """Fake only Telegram sends/provider; bot HTTP, authorization and stores are real."""
     from bot.copilot_flow import run_callback
     from bot.handlers import mentor
+    from bot import project_navigation as nav
+    from app.routers.projects import router as project_router
+
+    def project_application(api):
+        app = application(api)
+        app.include_router(project_router)
+        return app
 
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     monkeypatch.setattr(settings, "API_BASE_URL", "http://backend")
@@ -126,7 +133,7 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
         actor = int(uuid.uuid4().hex[:12], 16)
         model = StrategyModel(use_parents=True)
         api = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=model, mentor_model=DialogueModel())
-        backend_app = [application(api)]
+        backend_app = [project_application(api)]
         original_client = httpx.AsyncClient
         try:
             async with original_client(transport=httpx.ASGITransport(app=backend_app[0]), base_url="http://backend") as client:
@@ -160,21 +167,29 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
             callback = SimpleNamespace(message=bot_message, from_user=SimpleNamespace(id=actor),
                 data=run_callback(run_id).replace("cs:", "cm:"), answer=AsyncMock())
             await mentor.explain(callback, fsm)
-            assert await fsm.get_state() == mentor.MentorStates.question.state
-            assert (await fsm.get_data())["mentor_run_id"] == run_id
+            assert await fsm.get_state() is None and not await fsm.get_data()
             rendered = text_sent(bot_message)
             for expected in ("Цель решения", "Grow bookings", "Основания выбора", "Validate the supplied scheduling hypothesis", "Практическая проверка"):
                 assert expected in rendered
 
+            # Viewing a historical explanation is read-only. Only an explicit
+            # versioned activation establishes the durable selected case.
+            activate = SimpleNamespace(message=bot_message, from_user=SimpleNamespace(id=actor),
+                data=nav.callback("a", "g:" + run_id, 0), answer=AsyncMock())
+            await nav.navigation_callback(activate, fsm)
+            assert "Вы вернулись к проекту" in text_sent(bot_message)
+            assert await fsm.get_state() is None and not await fsm.get_data()
+            assert len(model.calls) == calls_before
+
             comparison = message("Почему не использовать контекстную рекламу?", mid=2, actor=actor)
-            await mentor.question(comparison, fsm)
+            await nav.active_message(comparison, fsm)
             assert "не сравнивались" in text_sent(comparison)
             assert "Grow bookings" in text_sent(comparison)
             report = message("/case_feedback did_not_work | Применили стратегию, роста нет | Неделя: 4 заявки вместо 5", mid=3, actor=actor)
             await mentor.feedback(report, fsm)
             assert "не независимая проверка" in text_sent(report)
             followup = message("Что проверить в первую очередь?", mid=4, actor=actor)
-            await mentor.question(followup, fsm)
+            await nav.active_message(followup, fsm)
             assert "Метрика: Qualified inquiry rate" in text_sent(followup)
             assert "Неделя: 4 заявки вместо 5" in text_sent(followup)
             assert "не независимо проверено" in text_sent(followup)
@@ -183,7 +198,7 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
             # compact callback still resolves the same owner-scoped saved case.
             unavailable_provider = AsyncMock(side_effect=RuntimeError("offline provider unavailable"))
             restarted = configured(mvp_database, IntentKind.MARKETING_STRATEGY, module_model=unavailable_provider, mentor_model=DialogueModel())
-            backend_app[0] = application(restarted)
+            backend_app[0] = project_application(restarted)
             restarted_fsm = context(actor)
             reopened = message(actor=actor)
             reopened.from_user = SimpleNamespace(id=999999)
@@ -191,14 +206,34 @@ def test_telegram_case_mentor_real_http_restart_followup_and_report(mvp_database
                 data=callback.data, answer=AsyncMock())
             await mentor.explain(fresh_callback, restarted_fsm)
             assert text_sent(reopened) == rendered
-            assert (await restarted_fsm.get_data())["mentor_run_id"] == run_id
-            after_restart = message("Что проверить?", mid=5, actor=actor)
-            await mentor.question(after_restart, restarted_fsm)
-            assert "Неделя: 4 заявки вместо 5" in text_sent(after_restart)
+            assert not await restarted_fsm.get_data()
+            # The actual new dispatcher has empty MemoryStorage and receives
+            # ordinary text only; selection comes from the retained backend DB.
+            from datetime import datetime, timezone
+            from aiogram import Bot, types
+            from bot.main import create_dispatcher
+            sent = AsyncMock(return_value=True)
+            monkeypatch.setattr(Bot, "__call__", sent)
+            dispatcher, bot = create_dispatcher(), Bot("123456:offline-mentor-restart")
+            try:
+                after_restart = types.Message(message_id=5, date=datetime.now(timezone.utc),
+                    chat=types.Chat(id=actor, type="private"),
+                    from_user=types.User(id=actor, is_bot=False, first_name="User"), text="Что проверить?")
+                await dispatcher.feed_update(bot, types.Update(update_id=5, message=after_restart))
+                assert any("Неделя: 4 заявки вместо 5" in str(call.args) for call in sent.call_args_list)
+            finally:
+                await dispatcher["operation_guard"].close()
+                await bot.session.close()
+                await dispatcher.storage.close()
+                await dispatcher.fsm.events_isolation.close()
+                for registered in dispatcher.sub_routers:
+                    registered._parent_router = None
             assert len(model.calls) == calls_before
             unavailable_provider.assert_not_awaited()
             assert requests and all(owner == str(actor) for _, _, owner in requests)
-            assert {path.rsplit("/", 1)[-1] for _, path, _ in requests} == {"mentor", "questions", "feedback"}
+            assert sum(method == "POST" and path == "/projects/context" for method, path, _ in requests) == 1
+            assert sum(method == "POST" and path == "/projects/context/messages" for method, path, _ in requests) == 3
+            assert sum(path.endswith("/feedback") for _, path, _ in requests) == 1
 
             foreign_message = message(actor=actor + 1)
             foreign_callback = SimpleNamespace(message=foreign_message, from_user=SimpleNamespace(id=actor + 1),

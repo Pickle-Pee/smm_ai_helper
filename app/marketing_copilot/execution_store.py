@@ -16,7 +16,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.models import MarketingRun
+from app.models import MarketingRun, ProjectDiscussionTurn, ProjectSession, User
 from .api_contracts import ExecuteResponse
 from .api_errors import CopilotAPIError, ProviderUnavailable
 
@@ -45,6 +45,13 @@ class ExecutionStore:
         deadline = asyncio.get_running_loop().time() + self.wait_seconds
         while True:
             async with self.sessions() as session, session.begin():
+                # One owner lock serializes admissions across Copilot, general
+                # chat and selected-project lanes, before any external call.
+                await session.scalar(select(User.id).where(User.id == owner).with_for_update())
+                used = await session.scalar(select(ProjectDiscussionTurn.turn_id).join(ProjectSession).where(
+                    ProjectSession.owner_id == owner, ProjectDiscussionTurn.request_key == payload.request_key).limit(1))
+                if used is not None:
+                    raise CopilotAPIError(409, "request_conflict")
                 await session.execute(delete(MarketingRun).where(
                     MarketingRun.workflow_type == WORKFLOW_TYPE,
                     MarketingRun.created_at < datetime.utcnow() - RETENTION))
@@ -86,7 +93,11 @@ class ExecutionStore:
                 wire = response.model_dump(mode="json")
                 RESPONSE.validate_python(wire)
                 row.status = "needs_input" if response.kind == "NEEDS_INPUT" else "completed"
-                row.state_json = {"response": wire}
+                # Keep the exact fingerprint-only input contract unchanged. Display metadata
+                # is immutable receipt state and never becomes model instructions.
+                message = getattr(payload, "message", "")
+                title = " ".join(message.split())[:140] if isinstance(message, str) else ""
+                row.state_json = {"response": wire, "history_title": title or "Сохранённый запрос"}
 
     async def get(self, owner, key):
         async with self.sessions() as session:

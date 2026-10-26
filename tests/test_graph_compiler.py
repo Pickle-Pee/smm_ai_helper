@@ -187,9 +187,20 @@ def test_failed_compilation_has_zero_persistence_calls():
 
 def test_no_production_ingress_imports_graph_runtime():
     from pathlib import Path
+    from tests.project_architecture_support import boundary_imports
+    import ast
     root = Path(__file__).resolve().parents[1]
     for directory in (root / "app", root / "bot"):
         for path in directory.rglob("*.py"):
+            if path == root / "app/services/project_history_service.py":
+                source = path.read_text(encoding="utf-8")
+                assert boundary_imports(source, "orchestration_runtime") == {
+                    "app.orchestration_runtime.contracts.WORKFLOW_TYPE",
+                    "app.orchestration_runtime.errors.RuntimeContractError"}
+                calls = {node.func.attr for node in ast.walk(ast.parse(source))
+                         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)}
+                assert not calls.intersection({"start", "start_compiled_run", "advance", "enqueue", "wake", "publish"})
+                continue  # Read-only accepted-source adapter, with no execution imports/calls.
             if "orchestration_runtime" not in path.parts and path not in {
                 root / "app/marketing_copilot/factory.py", root / "app/marketing_copilot/service.py",
                 root / "app/worker.py",  # Worker consumes persisted graphs; never public ingress.

@@ -13,6 +13,9 @@ from bot.handlers import chat, workflow
 from bot.workflow_contracts import validate_workflow
 from tests.test_telegram_copilot import message, patch_http, text_sent
 from tests.test_telegram_hardening_flows import callback
+from tests.test_telegram_navigation_fixtures import no_selected_project
+
+pytestmark = pytest.mark.usefixtures("no_selected_project")
 
 RID = "ab" * 16
 

@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 
 class CopilotRoute(APIRoute):
+    error_model = ErrorResponse
+
     def get_route_handler(self):
         handler = super().get_route_handler()
         async def safe_handler(request):
@@ -25,15 +27,15 @@ class CopilotRoute(APIRoute):
                 return await handler(request)
             except RequestValidationError:
                 # FastAPI's default validation response echoes input values.
-                return JSONResponse(status_code=422, content=ErrorResponse(code="invalid_request").model_dump(mode="json"))
+                return JSONResponse(status_code=422, content=self.error_model(code="invalid_request").model_dump(mode="json"))
             except CopilotAPIError as exc:
-                return JSONResponse(status_code=exc.status, content=ErrorResponse(
+                return JSONResponse(status_code=exc.status, content=self.error_model(
                     code=exc.code, owned_site=exc.owned_site).model_dump(mode="json"))
             except SQLAlchemyError as exc:
                 # A database failure is never a successful start. SQL errors can
                 # contain bound user context: keep them out of ASGI tracebacks.
                 log.error("Copilot database unavailable error_type=%s", type(exc).__name__)
-                return JSONResponse(status_code=503, content=ErrorResponse(
+                return JSONResponse(status_code=503, content=self.error_model(
                     code="temporarily_unavailable").model_dump(mode="json"))
             except HTTPException:
                 raise
@@ -41,7 +43,7 @@ class CopilotRoute(APIRoute):
                 # Keep the programming-error 500 boundary without allowing an
                 # ASGI traceback to print bound input or chained provider data.
                 log.error("Copilot request failed error_type=%s", type(exc).__name__)
-                return JSONResponse(status_code=500, content=ErrorResponse(
+                return JSONResponse(status_code=500, content=self.error_model(
                     code="temporarily_unavailable").model_dump(mode="json"))
         return safe_handler
 
