@@ -1,6 +1,6 @@
 # Telegram menu and project context acceptance
 
-Status: implementation and independent review complete; final remote CI pending. This is not a production rollout approval.
+Status: implementation and independent review complete; validation gates and live CI evidence are recorded below. This is not a production rollout approval.
 
 ## Implemented scenarios
 
@@ -21,10 +21,11 @@ Independent review identified and corrected legacy archive rendering and complet
 - Full pytest command (`-q --tb=short -o faulthandler_timeout=120 --durations=15`, dedicated `--basetemp`): 4351 passed, two obsolete contract expectations failed (old Alembic head and missing adapter request_key). Both expectations were updated to verify the new contracts.
 - Post-fix focused run over all new suites plus affected PostgreSQL/architecture/security suites: **620 passed**. This includes epoch-zero legacy preservation, sanitized provider errors/unknown replay, actual Dispatcher A/B restart with feedback, and both previously failed scenarios.
 - Earlier cross-lane/callback/Copilot/Mentor regression run: **480 passed**.
+- Final task-ID boundary/history/navigation regression run: **68 passed**.
 - `python -m compileall -q app bot`, `alembic upgrade head`, `alembic check` (no new operations) and `git diff --check`: passed.
 - The initial full attempt encountered Windows default-temp ACL errors; a dedicated disposable basetemp resolved them. A later interruption stopped local test services; they were restarted before the completed full run. These attempts are not recorded as successful full checks.
 
-The required remote Python and container-smoke checks must validate the published revision. Their final status will be linked from the PR.
+The required remote Python and container-smoke checks validate each published revision. Their authoritative current status and exact SHA are available in [Draft PR #131 checks](https://github.com/Pickle-Pee/smm_ai_helper/pull/131/checks). A final boundary probe also reproduced oversized PostgreSQL INTEGER task IDs returning an SQL binding failure; the parser/Telegram codec now reject them before SQL with 404, with regression coverage.
 
 New deterministic tests cover metadata projection/receipt dedup, mixed-source pagination, context capabilities, owner access, A/B captured assembled context, persisted restart, CAS racing switches, stale buttons, unknown provider outcome, replay, menu/router priority, profile/search/archive rendering and scoped new chat memory. Real Telegram polling and live OpenAI are excluded; providers capture real assembled packets.
 
@@ -33,3 +34,7 @@ New deterministic tests cover metadata projection/receipt dedup, mixed-source pa
 Title search is a prefix preview of eight results, not full-text search. Legacy global messages cannot be retroactively separated into projects. Legacy and insufficient receipts do not support resume. Initial ordinary-chat/legacy display windows are capped at 50 messages with omission flags; context assembly is bounded. Historical graph records without saved display metadata use neutral titles; no model is called to invent them. Dates are UTC. Old clients omitting ordinary-chat request identity retain their historical API behavior; the updated bot supplies durable identity. New chat receipt cleanup needs identity tombstones before deletion.
 
 Local Docker daemon was unavailable at environment discovery. Native disposable PostgreSQL/Redis checks and remote CI container-smoke are tracked separately. Production readiness requires final green CI plus normal deployment approval; this task performs no merge or rollout.
+
+## Staging verification procedure
+
+After the normal staging deployment approval, apply migrations before backend/bot. In a private chat open /start; use history/cards/result viewing and confirm no provider/job creation. Select contradictory saved cases A and B, ask a case-specific question and verify captured provider context contains only the chosen case. Restart backend and dispatcher with the same PostgreSQL, then send plain text without a source ID. Verify retained selection, discussion and feedback. Try the old A activation button after selecting B: it must fail; /new must preserve both histories and start a fresh ordinary-chat epoch. Cross-owner source reads/activation must return404. These steps supplement automated acceptance; no production rollout was performed.

@@ -156,3 +156,13 @@ def test_source_specific_status_filter_remains_exact():
         compiled = session.calls[0].compile(dialect=postgresql.dialect())
         assert "awaiting_mentor" in compiled.params.values()
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("public_id", ["t:2147483648", "t:9223372036854775807"])
+def test_out_of_range_database_task_identity_is_404_before_sql_binding(public_id):
+    def forbidden(): raise AssertionError("Out-of-range task identity reached SQL")
+    async def check():
+        with pytest.raises(CopilotAPIError) as error:
+            await ProjectHistoryService(forbidden).get(123, public_id)
+        assert error.value.status == 404
+    asyncio.run(check())

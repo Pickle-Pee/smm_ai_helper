@@ -381,3 +381,9 @@ def test_conversation_callback_keeps_original_user_update_identity(monkeypatch):
         assert send.call_args.kwargs["request_key"] == original_key
         assert send.call_args.kwargs["request_key"] != "tg:123:123:900"
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("public_id", ["t:2147483648", "c:9223372036854775808"])
+def test_oversized_database_identities_cannot_be_encoded_as_callbacks(public_id):
+    with pytest.raises(ValueError):
+        nav.pack(public_id)

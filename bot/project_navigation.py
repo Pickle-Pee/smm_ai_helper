@@ -79,6 +79,8 @@ def pack(public_id):
     if kind == "w" and re.fullmatch(r"[0-9a-f]{32}", value):
         return kind + base64.urlsafe_b64encode(bytes.fromhex(value)).decode().rstrip("=")
     if kind in {"t", "c"} and re.fullmatch(r"[1-9][0-9]{0,18}" if kind == "t" else r"0|[1-9][0-9]{0,18}", value):
+        if int(value) > (2**31 - 1 if kind == "t" else 2**63 - 1):
+            raise ValueError("Invalid project")
         return kind + value
     if public_id == "l:chat":
         return "lchat"

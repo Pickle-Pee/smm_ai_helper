@@ -33,7 +33,9 @@ def parse_public_id(value):
     if not isinstance(value, str) or not PUBLIC_ID.fullmatch(value):
         raise CopilotAPIError(404, "not_found")
     prefix, identity = value.split(":", 1)
-    if prefix in {"t", "c"} and int(identity) > 2**63 - 1:
+    # Task.id is PostgreSQL INTEGER, unlike epoch versions (BIGINT). Reject
+    # oversized identities before asyncpg binding so missing objects stay 404.
+    if prefix in {"t", "c"} and int(identity) > (2**31 - 1 if prefix == "t" else 2**63 - 1):
         raise CopilotAPIError(404, "not_found")
     return {"g": "graph", "w": "workflow", "t": "task", "r": "receipt", "l": "legacy", "c": "conversation"}[prefix], identity
 
