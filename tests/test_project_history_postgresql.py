@@ -147,3 +147,36 @@ def test_workflow_restoration_requires_accepted_typed_artifacts(mvp_database):
                 await db.execute(delete(MarketingRun).where(MarketingRun.run_id==rid))
                 await db.execute(delete(User).where(User.id==owner))
     asyncio.run(exercise())
+
+
+def test_activity_metadata_preserves_utc_under_non_utc_database_session(mvp_database):
+    from contextlib import asynccontextmanager
+    from datetime import datetime
+    from sqlalchemy import text
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        async with mvp_database() as db, db.begin():
+            user = User(telegram_id=actor)
+            db.add(user)
+            await db.flush()
+            owner = user.id
+            task = Task(user_id=owner, agent_type="strategy", task_description="Saved UTC source",
+                status="done", result={"result": "saved"}, created_at=datetime(2026, 10, 26, 12, 30))
+            db.add(task)
+            await db.flush()
+            public_id = f"t:{task.id}"
+        @asynccontextmanager
+        async def non_utc_sessions():
+            async with mvp_database() as db:
+                await db.execute(text("SET LOCAL TIME ZONE 'Europe/Moscow'"))
+                yield db
+        try:
+            items = (await ProjectHistoryService(non_utc_sessions).recent(actor))["items"]
+            item = next(item for item in items if item["public_id"] == public_id)
+            assert item["created_at"] == "2026-10-26T12:30:00+00:00"
+            assert item["last_activity_at"] == item["created_at"]
+        finally:
+            async with mvp_database() as db, db.begin():
+                await db.execute(delete(Task).where(Task.user_id == owner))
+                await db.execute(delete(User).where(User.id == owner))
+    asyncio.run(check())

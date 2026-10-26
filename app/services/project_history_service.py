@@ -165,7 +165,11 @@ class ProjectHistoryService:
         names = ("public_id", "source_type", "source_id", "title", "short_description", "status", "created_at", "last_activity_at", "resumable")
         base = select(*(column.label(name) for column, name in zip(projected.c, names))).subquery("source_history")
         owner = select(User.id).where(User.telegram_id == actor).scalar_subquery()
-        return select(*(func.greatest(base.c.last_activity_at, ProjectSession.last_activity_at).label("last_activity_at")
+        # Existing sources store naive UTC; session activity is timestamptz.
+        # Normalize explicitly instead of letting the DB session timezone shift
+        # source activity during PostgreSQL's implicit mixed-type conversion.
+        source_activity = func.timezone("UTC", base.c.last_activity_at)
+        return select(*(func.greatest(source_activity, ProjectSession.last_activity_at).label("last_activity_at")
                         if name == "last_activity_at" else base.c[name] for name in names)).outerjoin(
             ProjectSession, and_(ProjectSession.owner_id == owner, ProjectSession.public_id == base.c.public_id)
         ).subquery("history")

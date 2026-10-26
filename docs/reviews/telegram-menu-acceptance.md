@@ -22,6 +22,7 @@ Independent review identified and corrected legacy archive rendering and complet
 - Post-fix focused run over all new suites plus affected PostgreSQL/architecture/security suites: **620 passed**. This includes epoch-zero legacy preservation, sanitized provider errors/unknown replay, actual Dispatcher A/B restart with feedback, and both previously failed scenarios.
 - Earlier cross-lane/callback/Copilot/Mentor regression run: **480 passed**.
 - Final task-ID boundary/history/navigation regression run: **68 passed**.
+- Non-UTC database timezone, history and project-restoration regression run: **45 passed**. Existing naive UTC source timestamps are explicitly normalized before comparison with timezone-aware session activity.
 - `python -m compileall -q app bot`, `alembic upgrade head`, `alembic check` (no new operations) and `git diff --check`: passed.
 - The initial full attempt encountered Windows default-temp ACL errors; a dedicated disposable basetemp resolved them. A later interruption stopped local test services; they were restarted before the completed full run. These attempts are not recorded as successful full checks.
 
