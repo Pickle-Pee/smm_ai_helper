@@ -33,8 +33,9 @@ def actor_headers(telegram_id: int) -> dict[str, str]:
 async def request(method, path, actor_id, *, payload=None):
     # Case dialogue may wait behind a prior turn (40s) and then generate (30s).
     # Keep the HTTP wait bounded while allowing the backend's own limits to win.
-    timeout = 75 if method.upper() == "POST" and re.fullmatch(
-        r"/copilot/runs/[0-9a-f]{64}/mentor/questions", path) else 10
+    timeout = 75 if method.upper() == "POST" and (re.fullmatch(
+        r"/copilot/runs/[0-9a-f]{64}/mentor/questions", path)
+        or path == "/projects/context/messages") else 10
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, settings.API_BASE_URL.rstrip("/") + path,

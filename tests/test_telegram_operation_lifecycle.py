@@ -8,6 +8,9 @@ from aiogram import Bot, types
 
 from bot import copilot_flow as flow
 from tests.test_telegram_copilot import started
+from tests.test_telegram_navigation_fixtures import no_selected_project
+
+pytestmark = pytest.mark.usefixtures("no_selected_project")
 
 
 @pytest.mark.parametrize("command", ["/new", "/cancel"])
@@ -15,6 +18,8 @@ def test_control_command_during_slow_request_and_other_user(monkeypatch, command
     from bot.main import create_dispatcher
     sent = AsyncMock(return_value=True)
     monkeypatch.setattr(Bot, "__call__", sent)
+    from bot import backend
+    monkeypatch.setattr(backend, "request", AsyncMock(return_value={"version": 1, "active": None}))
     async def check():
         entered, release = asyncio.Event(), asyncio.Event()
         calls = []

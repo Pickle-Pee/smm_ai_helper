@@ -480,8 +480,13 @@ def test_foundation_uses_no_runtime_execution_or_implicit_provider(monkeypatch):
     root = Path(__file__).resolve().parents[1]
     consumers = [p for directory in (root / "app", root / "bot") for p in directory.rglob("*.py")
                  if "marketing_copilot" not in p.parts and "marketing_copilot" in p.read_text(encoding="utf-8")]
-    assert set(consumers) == {root / "app/product_context/projection.py", root / "app/routers/copilot.py"}
-    # Only the explicit projection and separate Copilot router consume this boundary.
+    from tests.project_architecture_support import PROJECT_COPILOT_IMPORTS, assert_project_copilot_imports
+    assert set(consumers) == {root / "app/product_context/projection.py", root / "app/routers/copilot.py",
+                             *(root / name for name in PROJECT_COPILOT_IMPORTS)}
+    for name in PROJECT_COPILOT_IMPORTS:
+        assert_project_copilot_imports(root, root / name)
+    # Typed errors/DTOs and explicit saved-source adapters are the only added
+    # consumers. The planning-only foundation still cannot execute or acquire data.
 
 
 CANONICAL_PROJECTION_FIELDS = (
@@ -621,7 +626,12 @@ def test_provider_wire_projection_does_not_change_public_request_dto():
     from app.marketing_copilot.api_contracts import ExecuteRequest, BusinessContext
     assert set(ExecuteRequest.model_fields) == {
         "request_key", "message", "context", "owned_site_url", "competitor_urls",
-        "market_source_urls", "market_sources", "confirmation"}
+        "market_source_urls", "market_sources", "confirmation", "context_version"}
+    # Navigation admission metadata is additive and independent of provider
+    # projection. Old clients keep the same serialized request/fingerprint.
+    legacy = {"request_key": "legacy-key", "message": "A question"}
+    assert ExecuteRequest.model_validate(legacy).model_dump(mode="json", exclude_unset=True) == legacy
+    assert "context_version" not in ExecuteRequest.model_json_schema()["required"]
     assert set(BusinessContext.model_fields) == (set(CANONICAL_PROJECTION_FIELDS)
                                                - {"target_or_target_hypothesis"}) | {"target"}
     assert "projection" not in ExecuteRequest.model_json_schema()["properties"]

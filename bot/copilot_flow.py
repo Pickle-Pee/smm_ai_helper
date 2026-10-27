@@ -170,6 +170,7 @@ ERRORS = {
     "server": "Ошибка сервиса. Попробуйте позже.",
     "execution_invalid": "Не удалось получить корректный результат выполнения. Начните новый запрос или сообщите администратору.",
     "invalid_response": "Не удалось прочитать ответ сервиса. Попробуйте позже.",
+    "stale_context": "Контекст изменился. Откройте текущее меню и начните новый запрос.",
     "request_conflict": "Этот запрос уже был запущен с другим контекстом. Начните новый запрос.",
 }
 
@@ -260,7 +261,8 @@ async def execute(message, actor, state, pending, *, processing_text=None):
     await finish(state)
     if isinstance(response, dto.ConversationResponse):
         from bot.handlers.chat import _send_to_backend
-        await _send_to_backend(message, payload.message, actor_id=actor)
+        await _send_to_backend(message, payload.message, actor_id=actor, request_key=payload.request_key,
+            **({"context_version": payload.context_version} if payload.context_version is not None else {}))
     else:
         sections = render.calculation(response.calculation) if isinstance(response, dto.DirectResponse) else render.module(response.result)
         for section in sections:
@@ -277,10 +279,17 @@ async def receive(message, state: FSMContext):
         return
     pending = (await state.get_data()).get("copilot_pending")
     if pending is None:
+        assembled = (await state.get_data()).get("navigation_assembled")
+        text = message.text
+        if isinstance(assembled, dict) and assembled.get("message_id") == message.message_id:
+            text = assembled["text"]
+        await state.update_data(navigation_assembled=None)
         pending = dict(payload={"request_key": request_key(actor, message.chat.id, message.message_id),
-            "message": message.text, "context": {}, "competitor_urls": [], "market_source_urls": [], "market_sources": []},
+            "message": text, "context": {}, "competitor_urls": [], "market_source_urls": [], "market_sources": []},
             original_message=message.text, nonce=secrets.token_hex(16), revision=0,
             fields=[], requirements=None, classified_urls=[], urls=[])
+        if isinstance(assembled, dict) and assembled.get("message_id") == message.message_id:
+            pending["payload"]["context_version"] = assembled["context_version"]
     elif pending["phase"] not in {"fields", "rewrite"}:
         await send_text(message, "Продолжите с помощью кнопок выше или начните новый запрос: /new")
         return

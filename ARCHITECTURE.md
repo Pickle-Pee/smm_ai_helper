@@ -32,6 +32,10 @@ FastAPI backend
         +--> image storage
 ```
 
+### Durable navigation and project discussion
+
+`ProjectHistoryService` projects owner-scoped metadata over existing sources without copying result bodies. `ProjectContextService` owns PostgreSQL source sessions, versioned actor/private-chat selection and isolated discussion claims. Menu and navigation precede FSM handlers; plain text resolves durable selection before legacy paths. Completed strategies continue through Case Mentor; saved tasks/workflows and scoped ordinary conversations use bounded project packets. `/new` creates a fresh general-chat memory epoch and preserves historical data. Stable ordinary-chat receipts prevent duplicate Telegram update generation across restart. See [navigation and context design](docs/design/telegram-navigation-and-context.md) and [acceptance evidence](docs/reviews/telegram-menu-acceptance.md).
+
 ### Telegram interface
 
 `bot/` is an interface layer. It maps Telegram updates to backend requests and renders replies, images, follow-up questions, and action buttons.

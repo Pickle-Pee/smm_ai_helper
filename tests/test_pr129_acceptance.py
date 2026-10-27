@@ -22,9 +22,10 @@ from bot.handlers import mentor
 from tests.postgresql_support import mvp_database
 from tests.test_telegram_copilot import started
 from tests.test_marketing_mvp_postgresql import setup_mvp, request as fixed_request, actor_id
+from tests.test_telegram_navigation_fixtures import no_selected_project
 
 
-def test_independent_real_dispatcher_mixed_action_and_text(monkeypatch):
+def test_independent_real_dispatcher_mixed_action_and_text(monkeypatch, no_selected_project):
     from bot.main import create_dispatcher
     monkeypatch.setattr(Bot, '__call__', AsyncMock(return_value=True))
     api = SimpleNamespace(execute=AsyncMock(return_value=started()))

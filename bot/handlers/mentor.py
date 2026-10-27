@@ -37,12 +37,24 @@ async def show_case(message, actor, run_id, state):
         return
     for text in rendered:
         await send_text(message, text)
-    await state.clear()
-    await state.update_data(mentor_run_id=run_id)
-    await state.set_state(MentorStates.question)
-    await send_text(message, "Режим наставника: продолжите диалог об этой стратегии. История сохраняется в этом кейсе; /case_history — открыть предыдущие ответы.\n"
-                    "Для обратной связи: /case_feedback сработало | наблюдения | метрики (необязательно). "
-                    "Статусы: применена, проверена, сработало, не_сработало, исправлено.\n/new — выйти и начать новый запрос.")
+    # Old explanation keyboards remain read-only. Only a fresh versioned
+    # project activation can change the durable selection.
+    from bot.project_navigation import callback, inline
+    await send_text(message, "Сохранённый разбор открыт. Чтобы продолжить диалог, откройте карточку и нажмите «Продолжить работу».\n"
+                    "/case_feedback сработало | наблюдения | метрики — сохранить обратную связь в активной стратегии.",
+                    reply_markup=inline([("Открыть карточку проекта", callback("c", "g:" + run_id))]))
+
+
+async def selected_run(message, state):
+    from bot.project_navigation import binding
+    current = await binding(message.from_user.id, message.chat.id)
+    active = current.get("active")
+    if active is not None:
+        return active["source_id"] if active.get("source_type") == "graph" else None
+    # Read access to pre-upgrade FSM case history is retained. New explanation
+    # callbacks never set this local field, and it never overrides a project.
+    return ((await state.get_data()).get("mentor_run_id")
+            if await state.get_state() == MentorStates.question.state else None)
 
 
 @router.callback_query(F.data.startswith("cm:"))
@@ -64,13 +76,17 @@ async def feedback(message: types.Message, state: FSMContext):
     if message.chat.type != "private":
         await send_text(message, "Откройте личный чат с ботом.")
         return
-    run_id = (await state.get_data()).get("mentor_run_id")
+    try:
+        run_id = await selected_run(message, state)
+    except (backend.BackendError, ValueError, KeyError, TypeError):
+        await send_text(message, "Не удалось проверить активный проект. Обновите текущий контекст.")
+        return
     pieces = message.text.split(maxsplit=1)
     fields = [s.strip() for s in pieces[1].split("|")] if len(pieces) == 2 else []
     if fields:
         fields[0] = FEEDBACK_OUTCOMES.get(fields[0].casefold(), fields[0])
-    if await state.get_state() != MentorStates.question.state or not run_id or len(fields) not in {2, 3} or fields[0] not in {"applied", "hypothesis_tested", "worked", "did_not_work", "corrected"} or not fields[1]:
-        await send_text(message, "Откройте разбор стратегии и укажите: /case_feedback сработало | наблюдения | метрики (необязательно).")
+    if not run_id or len(fields) not in {2, 3} or fields[0] not in {"applied", "hypothesis_tested", "worked", "did_not_work", "corrected"} or not fields[1]:
+        await send_text(message, "В истории выберите стратегию и нажмите «Продолжить работу», затем: /case_feedback сработало | наблюдения | метрики (необязательно).")
         return
     try:
         payload = {
@@ -101,9 +117,13 @@ async def feedback(message: types.Message, state: FSMContext):
 async def history(message: types.Message, state: FSMContext):
     if message.chat.type != "private":
         return
-    run_id = (await state.get_data()).get("mentor_run_id")
+    try:
+        run_id = await selected_run(message, state)
+    except (backend.BackendError, ValueError, KeyError, TypeError):
+        await send_text(message, "Не удалось проверить активный проект. Обновите текущий контекст.")
+        return
     if not run_id:
-        await send_text(message, "Откройте сохранённый кейс через /copilot_runs и нажмите «Объяснить решение».")
+        await send_text(message, "В истории выберите стратегию и нажмите «Продолжить работу».")
         return
     try:
         data = await backend.request("GET", f"/copilot/runs/{run_id}/mentor/questions", message.from_user.id)

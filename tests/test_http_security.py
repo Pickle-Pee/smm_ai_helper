@@ -12,6 +12,7 @@ from app.db import get_session
 from app.routers import tasks_router, brand_profile_router, chat_router, images_router, agents_router
 from app.services.task_history_service import TaskHistoryService
 from bot.backend import actor_headers
+from tests.test_telegram_navigation_fixtures import no_selected_project
 
 
 @pytest.fixture
@@ -104,7 +105,7 @@ def test_image_owner_is_checked_after_restart(secured_app, monkeypatch, tmp_path
     assert result.status_code == 200 and result.content == b"saved image"
 
 
-def test_callback_uses_clicking_actor_for_payload_and_new_actions(monkeypatch):
+def test_callback_uses_clicking_actor_for_payload_and_new_actions(monkeypatch, no_selected_project):
     import bot.handlers.chat as chat
     captures = []
     class Client:
@@ -115,18 +116,20 @@ def test_callback_uses_clicking_actor_for_payload_and_new_actions(monkeypatch):
             captures.append(kwargs)
             return SimpleNamespace(status_code=200, json=lambda: {"reply": "done", "actions": [{"text": "continue"}]})
     status = SimpleNamespace(edit_text=AsyncMock(), delete=AsyncMock())
-    message = SimpleNamespace(from_user=SimpleNamespace(id=999), chat=SimpleNamespace(type="private"), answer=AsyncMock(return_value=status))
+    message = SimpleNamespace(message_id=77, from_user=SimpleNamespace(id=999), chat=SimpleNamespace(type="private", id=100), answer=AsyncMock(return_value=status))
     monkeypatch.setattr(chat.httpx, "AsyncClient", Client)
     monkeypatch.setattr(chat, "_chat_action_indicator", AsyncMock())
     monkeypatch.setattr(chat, "_long_request_indicator", AsyncMock())
     monkeypatch.setattr(chat, "ACTION_STORE", {})
     monkeypatch.setattr(chat, "ACTION_EXPIRES", {})
     markup = chat._actions_keyboard(100, [{"text": "Continue"}])
-    callback = SimpleNamespace(data=markup.inline_keyboard[0][0].callback_data,
+    callback = SimpleNamespace(id="callback-owner-100", data=markup.inline_keyboard[0][0].callback_data,
         from_user=SimpleNamespace(id=100), message=message, answer=AsyncMock())
     asyncio.run(chat.on_action(callback))
     assert captures[0]["json"]["user_id"] == "tg:100"
     assert captures[0]["headers"]["X-Telegram-User-ID"] == "100"
+    assert captures[0]["json"]["request_key"].startswith("tg:100:100:action:")
+    assert captures[0]["json"]["context_version"] == 0
     assert "999" not in chat.ACTION_STORE
     assert "continue" in chat.ACTION_STORE["100"].values()
 

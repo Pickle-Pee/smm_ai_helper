@@ -42,7 +42,8 @@ class ChatService:
         self.brand_profile_service = brand_profile_service or BrandProfileService()
         self.request_id_factory = request_id_factory or (lambda: uuid.uuid4().hex)
 
-    async def handle(self, user_id: str, text: str) -> Dict[str, Any]:
+    async def handle(self, user_id: str, text: str, *, memory_user_id: str | None = None) -> Dict[str, Any]:
+        memory_user_id = memory_user_id or user_id
         request_id = self.request_id_factory()
 
         self.logger.info(
@@ -50,14 +51,14 @@ class ChatService:
             extra={"request_id": request_id, "user_id": user_id, "agent_type": "assistant"},
         )
 
-        conversation = await self.chat_memory.get_or_create_conversation(user_id)
-        await self.chat_memory.append_message(user_id=user_id, role="user", text=text)
+        conversation = await self.chat_memory.get_or_create_conversation(memory_user_id)
+        await self.chat_memory.append_message(user_id=memory_user_id, role="user", text=text)
 
         ok, blocked_payload = await scope_guard(text, use_llm_fallback=True)
         if not ok and blocked_payload:
             blocked_payload = self.chat_response_service.normalize(blocked_payload)
             await self.chat_memory.append_message(
-                user_id=user_id,
+                user_id=memory_user_id,
                 role="assistant",
                 text=blocked_payload.get("reply", ""),
             )
@@ -74,7 +75,7 @@ class ChatService:
             }
 
         last_messages = await self.chat_memory.load_recent_messages(
-            user_id=user_id,
+            user_id=memory_user_id,
             limit=20,
         )
 
@@ -110,7 +111,7 @@ class ChatService:
             assistant["reply"] = assistant.get("reply") or ""
 
         await self.chat_memory.append_message(
-            user_id=user_id,
+            user_id=memory_user_id,
             role="assistant",
             text=assistant.get("reply", ""),
         )
@@ -130,7 +131,7 @@ class ChatService:
             assistant["follow_up_question"] = image_result.follow_up_question
             assistant["actions"] = image_result.actions
             await self.chat_memory.append_message(
-                user_id=user_id,
+                user_id=memory_user_id,
                 role="assistant",
                 text=assistant["reply"],
             )
