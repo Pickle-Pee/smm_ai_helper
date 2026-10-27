@@ -36,6 +36,7 @@ async def chat_message(
                 payload.request_key, payload, scope, operation)
         # Backward-compatible clients may omit identity; the Telegram adapter
         # always supplies one for new updates and inline actions.
+        await ChatExecutionService().admit_unkeyed(int(payload.user_id[3:]), scope)
         return await operation()
     except CopilotAPIError as exc:
         raise HTTPException(exc.status, exc.code) from None

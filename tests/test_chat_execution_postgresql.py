@@ -37,6 +37,9 @@ def test_chat_restarts_replay_and_changed_payload_scope_conflict(mvp_database):
                 assert record.status == "running"
             return response()
         try:
+            from app.services.project_context_service import ProjectContextService
+            from app.services.project_history_service import ProjectHistoryService
+            await ProjectContextService(mvp_database, ProjectHistoryService(mvp_database)).switch(actor, actor, 0)
             first = await ChatExecutionService(mvp_database).execute(actor, key, payload, scope, operation)
             replay = await ChatExecutionService(mvp_database).execute(actor, key, payload, scope, operation)
             assert replay == first == response()

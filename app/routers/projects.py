@@ -28,6 +28,14 @@ class SwitchContext(StrictDTO):
     chat_id: int = Field(gt=0, lt=2**63)
     expected_version: int = Field(ge=0, le=2**63-2)
     public_id: str | None = Field(default=None, min_length=3, max_length=80)
+    source_public_id: str | None = Field(default=None, min_length=3, max_length=80)
+
+
+class SourceDraftMessage(StrictDTO):
+    chat_id: int = Field(gt=0, lt=2**63)
+    expected_version: int = Field(ge=0, le=2**63-2)
+    request_key: str = Field(min_length=1, max_length=128)
+    text: str = Field(min_length=1, max_length=8000)
 
 
 class ProjectMessage(StrictDTO):
@@ -72,9 +80,14 @@ async def context(chat_id: Annotated[int, Query(gt=0, lt=2**63)], actor: int = D
 
 @router.post("/context")
 async def switch(payload: SwitchContext, actor: int = Depends(require_actor), api=Depends(service)):
-    return await api.switch(actor, payload.chat_id, payload.expected_version, payload.public_id)
+    return await api.switch(actor, payload.chat_id, payload.expected_version, payload.public_id, payload.source_public_id)
 
 
 @router.post("/context/messages")
 async def message(payload: ProjectMessage, actor: int = Depends(require_actor), api=Depends(service)):
     return await api.message(actor, payload.chat_id, payload.expected_version, payload.request_key, payload.text)
+
+
+@router.post("/context/draft")
+async def source_draft(payload: SourceDraftMessage, actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.assemble_draft(actor, payload.chat_id, payload.expected_version, payload.request_key, payload.text)

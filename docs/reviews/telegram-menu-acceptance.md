@@ -41,3 +41,27 @@ Local Docker daemon was unavailable at environment discovery. Native disposable 
 ## Staging verification procedure
 
 After the normal staging deployment approval, apply migrations before backend/bot. In a private chat open /start; use history/cards/result viewing and confirm no provider/job creation. Select contradictory saved cases A and B, ask a case-specific question and verify captured provider context contains only the chosen case. Restart backend and dispatcher with the same PostgreSQL, then send plain text without a source ID. Verify retained selection, discussion and feedback. Try the old A activation button after selecting B: it must fail; /new must preserve both histories and start a fresh ordinary-chat epoch. Cross-owner source reads/activation must return404. These steps supplement automated acceptance; no production rollout was performed.
+
+## Independent review remediation - audited db3a2a8 (2026-10-27)
+
+### P1: ordinary-chat context admission
+
+Cause: `resolve_scope()` released its transaction before `_claim()`, which checked update identity but not active binding/version. Controlled PostgreSQL HTTP tests pause at this boundary, commit activation, activation followed by deactivation, or `/new`, then release the old message. On the audited code all three returned 200 and reached the fake pipeline. The fix checks inactive binding and exact epoch under User -> ActiveProjectBinding locks inside durable admission. Switch and first-epoch initialization use the same lock order. Old unkeyed clients also perform short locked admission. No transaction spans provider work.
+
+Regression: `tests/test_chat_context_admission_postgresql.py` asserts stale 409, zero provider calls/receipts, exact-key redelivery rejection, a single ordinary/Copilot admission winner, and switching while admitted provider work is paused. Existing chat/ProjectDiscussion/Copilot suites verify completed replay, unknown/expired outcomes, CONVERSATION delegation, owner isolation and competing switches. Copilot cannot create a new execution from an ordinary-chat identity.
+
+### P2: source draft survives restart
+
+Cause: `navigation_seed` lived only in MemoryStorage FSM and disappeared on restart. The backend now persists an owner/version-scoped bounded source draft atomically with the switch. Assembly includes source identity, capture time and unverified provenance. The first exact Telegram update reserves the draft; recreation rebuilds the same request. Later updates/new epochs cannot silently inherit it.
+
+Regression: `tests/test_source_draft_postgresql.py` chooses a source through an actual Dispatcher and authenticated ASGI backend, closes Dispatcher/storage, recreates backend and Dispatcher, sends text and captures the interpreter's real assembled input. It asserts source A/provenance, no B, exact key/version and provider-free replay. Further checks cover foreign ownership, deleted sources, modified text/key, A/B switching, `/new`, and a controlled switch after assembly before Copilot admission, including public HTTP 409. Omitting the optional version cannot bypass a reserved draft. CONVERSATION fallback preserves its epoch, and ordinary admission rejects the draft key in a forged current epoch before generation.
+
+### P2: long dialogue continuity - explicit limitation
+
+Cause: project assembly loads a fixed 12 completed-turn window with no durable summary of earlier discussion. `tests/test_project_dialogue_continuity_postgresql.py` completes 40 sequential messages, switches A/B/A and recreates the runtime. Assembly includes original saved facts and exactly the latest 12 question/answer pairs. An early user decision remains in paginated history but is absent from model input. It verifies isolation, unchanged saved source, hypothesis labels and zero generation on navigation/history.
+
+Compaction is deferred to a focused follow-up PR: schema/coverage publication, source references, provenance and a distinct cost-control contract across project discussion and Case Mentor would broaden this remediation. The bounded design and follow-up gates are specified in `docs/design/telegram-navigation-and-context.md`. Current PR adds no compaction/model expense and explicitly protects the limitation with a regression test.
+
+### Remediation verification
+
+Post-fix real PostgreSQL verification: the four focused chat-admission/chat-execution/source-draft/continuity suites passed (19 tests); the final source-draft/Copilot API/Telegram Copilot batch passed (201 tests). Compileall, Alembic upgrade and schema parity passed. Full Python and container lifecycle results for the published revision are tracked in [PR #131 checks](https://github.com/Pickle-Pee/smm_ai_helper/pull/131/checks). All providers and Telegram transports are fake; OpenAI points at a loopback discard endpoint. Migration `20261026_0013` is unchanged; drafts use existing durable storage. Work starts exactly at the audited PR #131 HEAD and excludes PR #130. No merge or deployment is performed.

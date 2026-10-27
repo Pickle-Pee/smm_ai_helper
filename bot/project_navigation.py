@@ -400,7 +400,8 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
                     if meta["public_id"] != public_id: raise ValueError("Wrong source")
                 confirmed = await backend.request("POST", "/projects/context", event.from_user.id, payload={
                     "chat_id": event.message.chat.id, "expected_version": version,
-                    "public_id": public_id if action == "a" else None})
+                    "public_id": public_id if action == "a" else None,
+                    **({"source_public_id": public_id} if action == "n" else {})})
                 if (not isinstance(confirmed, dict) or "active" not in confirmed
                         or type(confirmed.get("version")) is not int or confirmed["version"] != version + 1):
                     raise ValueError("Invalid binding")
@@ -416,7 +417,6 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
                         "Сохранённое описание: " + item["context_description"][:1500]
                             if isinstance(item.get("context_description"), str) and item["context_description"] else "",
                     ] if value)
-                    await state.update_data(navigation_seed=seed)
                     await send_text(event.message, f"Новый запрос на основе «{meta['title']}».\nИсходный проект сохранён. В следующую задачу будут добавлены эти сведения как справочные данные, требующие проверки:\n\n{seed}\n\nОпишите новую задачу и исправьте неактуальные сведения.", reply_markup=main_keyboard())
                 else:
                     active = metadata(confirmed["active"])
@@ -484,7 +484,21 @@ async def active_message(message: types.Message, state: FSMContext):
     if not await private(message): return
     try:
         current = await binding(message.from_user.id, message.chat.id)
-        if current.get("active") is None: raise SkipHandler()
+        if current.get("active") is None:
+            await state.update_data(navigation_assembled=None)
+            key = f"tg:{message.from_user.id}:{message.chat.id}:{message.message_id}"
+            draft = current.get("draft")
+            if isinstance(draft, dict) and draft.get("request_key") in {None, key}:
+                assembled = await backend.request("POST", "/projects/context/draft", message.from_user.id, payload={
+                    "chat_id": message.chat.id, "expected_version": current["version"],
+                    "request_key": key, "text": message.text})
+                if (not isinstance(assembled, dict) or not isinstance(assembled.get("message"), str)
+                        or assembled.get("source_public_id") != draft.get("public_id")
+                        or assembled.get("context_version") != current["version"]):
+                    raise ValueError("Invalid source draft")
+                await state.update_data(navigation_assembled={"message_id": message.message_id,
+                    "text": assembled["message"], "context_version": current["version"]})
+            raise SkipHandler()
         data = await backend.request("POST", "/projects/context/messages", message.from_user.id, payload={
             "chat_id": message.chat.id, "expected_version": current["version"],
             "request_key": f"tg:{message.from_user.id}:{message.chat.id}:{message.message_id}", "text": message.text})

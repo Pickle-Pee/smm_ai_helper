@@ -37,7 +37,7 @@ class ChatMemoryService:
             # first /new; historical tg:<actor> remains an archive.
             await self.db_session.execute(insert(User).values(telegram_id=actor)
                 .on_conflict_do_nothing(index_elements=[User.telegram_id]))
-            owner = await self.db_session.scalar(select(User.id).where(User.telegram_id == actor))
+            owner = await self.db_session.scalar(select(User.id).where(User.telegram_id == actor).with_for_update())
             await self.db_session.execute(insert(ActiveProjectBinding).values(
                 actor_id=actor, chat_id=actor, owner_id=owner, version=0)
                 .on_conflict_do_nothing(index_elements=[ActiveProjectBinding.actor_id, ActiveProjectBinding.chat_id]))

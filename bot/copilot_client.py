@@ -56,7 +56,7 @@ class CopilotClient:
             if status == 409:
                 try:
                     error = dto.ErrorResponse.model_validate_json(response.content)
-                    if error.code in {"confirmation_changed", "confirmation_unavailable", "request_conflict"}:
+                    if error.code in {"confirmation_changed", "confirmation_unavailable", "request_conflict", "stale_context"}:
                         category, owned = error.code, error.owned_site
                 except (ValidationError, ValueError):
                     pass

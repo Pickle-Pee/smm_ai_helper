@@ -289,12 +289,16 @@ async def _long_request_indicator(status_msg: types.Message) -> None:
         return
 
 
-async def _send_to_backend(message: types.Message, text: str, *, actor_id: int, request_key: str | None = None) -> None:
+async def _send_to_backend(message: types.Message, text: str, *, actor_id: int, request_key: str | None = None,
+                           context_version: int | None = None) -> None:
     from bot.project_navigation import binding
     try:
         current = await binding(actor_id, message.chat.id)
     except (BackendError, ValueError, KeyError, TypeError):
         await send_text(message, "Не удалось проверить текущий контекст. Запрос не отправлен; откройте меню.")
+        return
+    if context_version is not None and current["version"] != context_version:
+        await send_text(message, "Контекст изменился. Начните новый запрос из текущего меню.")
         return
     if current.get("active") is not None:
         await send_text(message, "Выбран сохранённый проект. Напишите запрос в его диалоге или нажмите «Новый запрос».")

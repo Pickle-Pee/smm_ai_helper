@@ -16,7 +16,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.models import MarketingRun, ProjectDiscussionTurn, ProjectSession, User
+from app.models import ActiveProjectBinding, MarketingRun, ProjectDiscussionTurn, ProjectSession, User
 from .api_contracts import ExecuteResponse
 from .api_errors import CopilotAPIError, ProviderUnavailable
 
@@ -40,6 +40,28 @@ class ExecutionStore:
     def identity(owner, key):
         return hashlib.sha256(f"{WORKFLOW_TYPE}:{owner}:{key}".encode()).hexdigest()
 
+    async def _validate_admission(self, session, owner, payload, actor):
+        # A completed Copilot receipt can delegate CONVERSATION to ordinary
+        # chat. The reverse direction must never create a new Copilot execution.
+        from app.services.chat_execution_service import ChatExecutionService
+        used_chat = await session.get(MarketingRun, ChatExecutionService.identity(actor, payload.request_key))
+        if used_chat is not None:
+            raise CopilotAPIError(409, "request_conflict")
+        version = payload.context_version
+        draft = await session.scalar(select(MarketingRun).where(
+            MarketingRun.user_id == owner, MarketingRun.workflow_type == "project_source_draft.v1",
+            MarketingRun.state_json["request_key"].astext == payload.request_key))
+        if draft is not None:
+            reserved_version = draft.input_json.get("context_version")
+            if version != reserved_version:
+                raise CopilotAPIError(409, "stale_context")
+        if version is not None:
+            binding = await session.scalar(select(ActiveProjectBinding).where(
+                ActiveProjectBinding.actor_id == actor, ActiveProjectBinding.chat_id == actor).with_for_update())
+            if (binding is None or binding.owner_id != owner or binding.session_id is not None
+                    or binding.version != version):
+                raise CopilotAPIError(409, "stale_context")
+
     async def claim(self, owner, payload):
         rid, mark, token = self.identity(owner, payload.request_key), fingerprint(payload), uuid.uuid4().hex
         deadline = asyncio.get_running_loop().time() + self.wait_seconds
@@ -47,7 +69,7 @@ class ExecutionStore:
             async with self.sessions() as session, session.begin():
                 # One owner lock serializes admissions across Copilot, general
                 # chat and selected-project lanes, before any external call.
-                await session.scalar(select(User.id).where(User.id == owner).with_for_update())
+                actor = await session.scalar(select(User.telegram_id).where(User.id == owner).with_for_update())
                 used = await session.scalar(select(ProjectDiscussionTurn.turn_id).join(ProjectSession).where(
                     ProjectSession.owner_id == owner, ProjectDiscussionTurn.request_key == payload.request_key).limit(1))
                 if used is not None:
@@ -55,6 +77,9 @@ class ExecutionStore:
                 await session.execute(delete(MarketingRun).where(
                     MarketingRun.workflow_type == WORKFLOW_TYPE,
                     MarketingRun.created_at < datetime.utcnow() - RETENTION))
+                existing = await session.get(MarketingRun, rid)
+                if existing is None or (existing.status == "needs_input" and existing.input_json != {"fingerprint": mark}):
+                    await self._validate_admission(session, owner, payload, actor)
                 won = await session.scalar(insert(MarketingRun).values(run_id=rid, user_id=owner,
                     workflow_type=WORKFLOW_TYPE, status="running", input_json={"fingerprint": mark},
                     state_json={"token": token}).on_conflict_do_nothing(index_elements=[MarketingRun.run_id])

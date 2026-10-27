@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import AsyncSessionLocal
-from app.models import MarketingRun, ProjectDiscussionTurn, ProjectSession, User
+from app.models import ActiveProjectBinding, MarketingRun, ProjectDiscussionTurn, ProjectSession, User
 from app.schemas import ChatMessageResponse
 from app.marketing_copilot.api_contracts import StrictDTO
 from app.marketing_copilot.execution_store import ExecutionStore
@@ -52,12 +52,40 @@ class ChatExecutionService:
     def identity(actor, request_key):
         return hashlib.sha256(f"{WORKFLOW_TYPE}:{actor}:{request_key}".encode()).hexdigest()
 
-    async def _claim(self, actor, request_key, mark):
+    @staticmethod
+    async def _validate_context(db, actor, owner, scope):
+        # The caller holds User first, exactly like switch/project/Copilot
+        # admission. An absent binding is fenced by that same owner lock.
+        binding = await db.scalar(select(ActiveProjectBinding).where(
+            ActiveProjectBinding.actor_id == actor,
+            ActiveProjectBinding.chat_id == actor).with_for_update())
+        if binding is not None and binding.owner_id != owner:
+            raise CopilotAPIError(404, "not_found")
+        current = f"tg:{actor}:new:{binding.version}" if binding else f"tg:{actor}"
+        if (binding is not None and binding.session_id is not None) or current != scope:
+            raise CopilotAPIError(409, "stale_context")
+
+    async def admit_unkeyed(self, actor, scope):
+        # Compatibility for old HTTP clients: admission still validates context
+        # under locks, but without a supplied identity it cannot offer replay.
+        async with self.sessions() as db, db.begin():
+            await db.execute(insert(User).values(telegram_id=actor).on_conflict_do_nothing(
+                index_elements=[User.telegram_id]))
+            owner = await db.scalar(select(User.id).where(User.telegram_id == actor).with_for_update())
+            await self._validate_context(db, actor, owner, scope)
+
+    async def _claim(self, actor, request_key, mark, scope):
         rid, token = self.identity(actor, request_key), uuid.uuid4().hex
         async with self.sessions() as db, db.begin():
             await db.execute(insert(User).values(telegram_id=actor).on_conflict_do_nothing(
                 index_elements=[User.telegram_id]))
             owner = await db.scalar(select(User.id).where(User.telegram_id == actor).with_for_update())
+            await self._validate_context(db, actor, owner, scope)
+            draft = await db.scalar(select(MarketingRun).where(
+                MarketingRun.user_id == owner, MarketingRun.workflow_type == "project_source_draft.v1",
+                MarketingRun.state_json["request_key"].astext == request_key))
+            if draft is not None and scope != f"tg:{actor}:new:{draft.input_json.get('context_version')}":
+                raise CopilotAPIError(409, "stale_context")
             used = await db.scalar(select(ProjectDiscussionTurn.turn_id).join(ProjectSession).where(
                 ProjectSession.owner_id == owner, ProjectDiscussionTurn.request_key == request_key).limit(1))
             if used is not None:
@@ -107,7 +135,7 @@ class ChatExecutionService:
                 or not re.fullmatch(rf"tg:{actor}(?::new:(?:0|[1-9][0-9]{{0,18}}))?", scope)):
             raise CopilotAPIError(422, "invalid_request")
         mark = fingerprint(payload, scope)
-        owner, token, replay = await self._claim(actor, request_key, mark)
+        owner, token, replay = await self._claim(actor, request_key, mark, scope)
         if replay is not None:
             return replay
         try:
