@@ -58,8 +58,13 @@ class ExecutionStore:
         if version is not None:
             binding = await session.scalar(select(ActiveProjectBinding).where(
                 ActiveProjectBinding.actor_id == actor, ActiveProjectBinding.chat_id == actor).with_for_update())
-            if (binding is None or binding.owner_id != owner or binding.session_id is not None
-                    or binding.version != version):
+            # No binding is the initial inactive epoch zero. The caller holds
+            # User, so switch cannot create a binding before this admission commits.
+            if binding is None:
+                stale = version != 0
+            else:
+                stale = binding.owner_id != owner or binding.session_id is not None or binding.version != version
+            if stale:
                 raise CopilotAPIError(409, "stale_context")
 
     async def claim(self, owner, payload):

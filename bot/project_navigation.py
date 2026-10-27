@@ -485,7 +485,10 @@ async def active_message(message: types.Message, state: FSMContext):
     try:
         current = await binding(message.from_user.id, message.chat.id)
         if current.get("active") is None:
-            await state.update_data(navigation_assembled=None)
+            # Carry the checked epoch for every new request, including plain text.
+            # Clarifications keep the epoch captured in their existing payload.
+            await state.update_data(navigation_assembled={"message_id": message.message_id,
+                "text": message.text, "context_version": current["version"]})
             key = f"tg:{message.from_user.id}:{message.chat.id}:{message.message_id}"
             draft = current.get("draft")
             if isinstance(draft, dict) and draft.get("request_key") in {None, key}:

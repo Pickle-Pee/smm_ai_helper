@@ -49,6 +49,7 @@ All routes require the existing trusted bot bearer credential and authenticated 
 | POST `/projects/context` | `{chat_id, expected_version, public_id|null, source_public_id?}`; authenticated private chat must equal actor |
 | POST `/projects/context/draft` | `{chat_id, expected_version, request_key, text}`; reserve the first exact update and assemble authorized source reference data |
 | POST `/projects/context/messages` | `{chat_id, expected_version, request_key, text}`; stable original Telegram identity; bounded text |
+| POST `/copilot/execute` | Optional `context_version`; current Telegram captures it for every new request, including plain text; old clients may omit it |
 | POST `/chat/message` | Existing DTO plus optional `request_key` and `context_version`; old callers remain compatible, current bot always supplies both |
 
 Foreign/missing source reads return 404, stale selection returns 409, invalid bounded inputs return 422, unknown execution outcome is unavailable. Error responses and logging exclude raw input/provider errors. Navigation does not call Copilot execute, workers or wakeups.
@@ -84,3 +85,10 @@ A checked 40-turn scenario shows that source restoration survives a fresh runtim
 Compaction is deferred to a focused follow-up PR because both project discussion and Case Mentor have different authoritative lineage stores. The follow-up must introduce a versioned, bounded per-owner/per-project summary with a covered-through cursor and source turn/artifact references for every retained decision. Preserve explicit user_reported, user_decision and generated_hypothesis categories; never promote reports/hypotheses to verified facts or rewrite saved strategy. Publish through a short CAS transaction after generation and retain the latest 12 raw turns alongside the summary. Failed/unknown compaction must leave the recent-window fallback usable.
 
 Compaction must have its own opt-in configuration, model/output-token limits, uncovered-turn threshold, per-project cadence, call budget and daily spend cap. It may run only on a substantive question, never on history/navigation. Its budget and telemetry must remain separate from answering the user. Required follow-up tests cover cursor coverage, provenance/source references, A/B and owner isolation, restart, concurrent publication, unknown outcomes, zero calls on reads, and independent budget exhaustion. No compaction provider calls or additional model expense are introduced in PR #131.
+
+
+## Plain Copilot context admission
+
+For every new private Telegram text, `project_navigation.active_message` reads the durable binding and passes its version with the exact message to `copilot_flow.receive`, including messages without a source draft. The pending payload owns that captured version through URL classification, NEEDS_INPUT answers and retries; later navigation reads do not replace it. `CopilotClient.execute` serializes the optional field without changing the original actor/chat/message request key. CONVERSATION delegation retains the same epoch.
+
+`ExecutionStore.claim` takes User then ActiveProjectBinding locks and checks an inactive binding and exact version in the same PostgreSQL transaction as the durable receipt insertion or revised NEEDS_INPUT claim. An absent binding represents inactive version zero and is fenced by the User lock shared with switches. A completed exact receipt still replays before new-admission validation, and running/ambiguous outcomes are never reclaimed. No lock spans provider work. Clients omitting context_version retain existing admission behavior; reserved source-draft keys keep their separate mandatory version check. No migration or model call is required for validation.
