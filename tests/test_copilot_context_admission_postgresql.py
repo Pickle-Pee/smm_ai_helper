@@ -14,6 +14,7 @@ from app.marketing_copilot.contracts import IntentKind
 from app.marketing_copilot.execution_store import ExecutionStore
 from app.marketing_copilot.production import build_production_copilot_api
 from app.models import BrandProfile, MarketingRun
+from app.routers import projects
 from app.routers.projects import router
 from app.services.project_context_service import ProjectContextService
 from app.services.project_history_service import ProjectHistoryService
@@ -40,13 +41,15 @@ def test_plain_update_checked_epoch_reaches_durable_admission(
     async def exercise():
         from bot.main import create_dispatcher
         actor, owner, sources = await seed(mvp_database)
-        context = ProjectContextService(mvp_database, ProjectHistoryService(mvp_database))
+        discussion = AsyncMock(return_value='{"reply": "must not generate"}')
+        context = ProjectContextService(mvp_database, ProjectHistoryService(mvp_database), model_call=discussion)
         interpreter, provider = intent_model(IntentKind.CONVERSATION), FakeModel()
         api = build_production_copilot_api(sessions=mvp_database, queue=queue(),
             intent_model=interpreter, module_model=provider, analyzer=analyzer())
         app = application(api)
         app.include_router(router)
         original_http = httpx.AsyncClient
+        app.dependency_overrides[projects.service] = lambda: context
         responses, captured = [], []
         async def record(response):
             if response.request.url.path == "/copilot/execute":
@@ -103,8 +106,23 @@ def test_plain_update_checked_epoch_reaches_durable_admission(
                 assert retry.status_code == 409 and retry.json()["code"] == "stale_context"
                 assert interpreter.await_count == 0
                 chat._send_to_backend.assert_not_awaited()
+                # Replay the actual Telegram update after losing all FSM state.
+                # It now routes through the newly selected project or epoch.
+                await close_dispatcher(dp, bot)
+                dp = bot = None
+                dp, bot = create_dispatcher(), Bot("123456:offline-token")
+                await dp.feed_update(bot, update(901, "A plain question", actor=actor))
+                assert interpreter.await_count == 0
+                discussion.assert_not_awaited()
                 async with mvp_database() as db:
-                    assert not (await db.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                    rows = (await db.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                    assert len(rows) == 1 and rows[0].workflow_type == "copilot_admission_rejected.v1"
+                history = await context.history.recent(actor)
+                assert all(item["public_id"] != "r:" + ExecutionStore.identity(owner, original.request_key)
+                    for item in history["items"])
+                with pytest.raises(CopilotAPIError) as unreadable:
+                    await api.saved_execution(actor, original.request_key)
+                assert unreadable.value.status == 404
             assert original.context_version == initial_version
             assert provider.calls == []
         finally:

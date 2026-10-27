@@ -21,6 +21,7 @@ from .api_contracts import ExecuteResponse
 from .api_errors import CopilotAPIError, ProviderUnavailable
 
 WORKFLOW_TYPE = "copilot_execution.v1"
+REJECTED_TYPE = "copilot_admission_rejected.v1"
 RETENTION = timedelta(days=30)
 RESPONSE = TypeAdapter(ExecuteResponse)
 
@@ -71,6 +72,7 @@ class ExecutionStore:
         rid, mark, token = self.identity(owner, payload.request_key), fingerprint(payload), uuid.uuid4().hex
         deadline = asyncio.get_running_loop().time() + self.wait_seconds
         while True:
+            admission_error = None
             async with self.sessions() as session, session.begin():
                 # One owner lock serializes admissions across Copilot, general
                 # chat and selected-project lanes, before any external call.
@@ -80,30 +82,51 @@ class ExecutionStore:
                 if used is not None:
                     raise CopilotAPIError(409, "request_conflict")
                 await session.execute(delete(MarketingRun).where(
-                    MarketingRun.workflow_type == WORKFLOW_TYPE,
+                    MarketingRun.workflow_type.in_((WORKFLOW_TYPE, REJECTED_TYPE)),
                     MarketingRun.created_at < datetime.utcnow() - RETENTION))
                 existing = await session.get(MarketingRun, rid)
-                if existing is None or (existing.status == "needs_input" and existing.input_json != {"fingerprint": mark}):
-                    await self._validate_admission(session, owner, payload, actor)
-                won = await session.scalar(insert(MarketingRun).values(run_id=rid, user_id=owner,
-                    workflow_type=WORKFLOW_TYPE, status="running", input_json={"fingerprint": mark},
-                    state_json={"token": token}).on_conflict_do_nothing(index_elements=[MarketingRun.run_id])
-                    .returning(MarketingRun.run_id))
-                if won:
-                    return token, None
-                row = await session.scalar(select(MarketingRun).where(MarketingRun.run_id == rid)
-                                           .with_for_update())
-                if row.user_id != owner or row.workflow_type != WORKFLOW_TYPE:
-                    raise CopilotAPIError(409, "request_conflict")
-                if row.input_json != {"fingerprint": mark}:
-                    if row.status != "needs_input":
+                if existing is not None and existing.workflow_type == REJECTED_TYPE:
+                    if existing.input_json != {"fingerprint": mark}:
+                        # Preserve source-draft version errors even if an old
+                        # client omits the reserved epoch on redelivery.
+                        await self._validate_admission(session, owner, payload, actor)
                         raise CopilotAPIError(409, "request_conflict")
-                    row.input_json, row.state_json, row.status = {"fingerprint": mark}, {"token": token}, "running"
-                    return token, None
-                if row.status in {"completed", "needs_input"}:
-                    return None, RESPONSE.validate_python(row.state_json["response"])
-                if row.status == "ambiguous":
-                    raise ProviderUnavailable()
+                    raise CopilotAPIError(409, "stale_context")
+                if existing is None or (existing.status == "needs_input" and existing.input_json != {"fingerprint": mark}):
+                    try:
+                        await self._validate_admission(session, owner, payload, actor)
+                    except CopilotAPIError as exc:
+                        if exc.code != "stale_context" or existing is not None:
+                            raise
+                        # Retain the rejected update identity before returning 409.
+                        # A fresh Telegram dispatcher may route its redelivery to
+                        # another lane; those lanes already check this same ID.
+                        session.add(MarketingRun(run_id=rid, user_id=owner,
+                            workflow_type=REJECTED_TYPE, status="rejected",
+                            input_json={"fingerprint": mark}, state_json={}))
+                        admission_error = exc
+                if admission_error is None:
+                    won = await session.scalar(insert(MarketingRun).values(run_id=rid, user_id=owner,
+                        workflow_type=WORKFLOW_TYPE, status="running", input_json={"fingerprint": mark},
+                        state_json={"token": token}).on_conflict_do_nothing(index_elements=[MarketingRun.run_id])
+                        .returning(MarketingRun.run_id))
+                    if won:
+                        return token, None
+                    row = await session.scalar(select(MarketingRun).where(MarketingRun.run_id == rid)
+                                               .with_for_update())
+                    if row.user_id != owner or row.workflow_type != WORKFLOW_TYPE:
+                        raise CopilotAPIError(409, "request_conflict")
+                    if row.input_json != {"fingerprint": mark}:
+                        if row.status != "needs_input":
+                            raise CopilotAPIError(409, "request_conflict")
+                        row.input_json, row.state_json, row.status = {"fingerprint": mark}, {"token": token}, "running"
+                        return token, None
+                    if row.status in {"completed", "needs_input"}:
+                        return None, RESPONSE.validate_python(row.state_json["response"])
+                    if row.status == "ambiguous":
+                        raise ProviderUnavailable()
+            if admission_error is not None:
+                raise admission_error
             if asyncio.get_running_loop().time() >= deadline:
                 # The original call may still complete; never steal its claim.
                 raise ProviderUnavailable()

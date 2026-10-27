@@ -180,7 +180,9 @@ def test_reserved_draft_switch_before_copilot_admission_rejects_even_omitted_ver
             operation.assert_not_awaited()
             assert model.await_count == 0
             async with mvp_database() as db:
-                assert await db.get(MarketingRun, ExecutionStore.identity(owner, key)) is None
+                rejected = await db.get(MarketingRun, ExecutionStore.identity(owner, key))
+                assert rejected.workflow_type == "copilot_admission_rejected.v1"
+                assert rejected.status == "rejected"
         finally:
             release.set()
             if task is not None and not task.done():
