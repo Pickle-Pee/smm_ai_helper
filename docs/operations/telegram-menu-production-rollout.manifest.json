@@ -1,283 +1,41 @@
 {
-  "schema_version": "telegram_menu_rollout.v1",
-  "observed_at": "2026-10-27T16:02:35.713475+00:00",
-  "status": "NO_GO",
-  "hostname": "nl-vmv2-nano",
-  "directory": "/opt/smm_ai_helper",
-  "checkout_sha": "a51a12d44da602d96a22cb99e26026898c8006a2",
-  "candidate_sha": "26ec261d0ed1d34f9c83be32780208a9b61752f2",
-  "dependency_sha": "b04685bc586845592f509eababc5388672852926",
-  "production_mutations": [],
-  "images": [
-    {
-      "name": "/smm_ai_helper-bot-1",
-      "service": "bot",
-      "image_id": "sha256:edf78df9fbe5ac3ad033f45834d08593020e23e1f6683c200948e8a26bc06b4a",
-      "repo_digests": [
-        "smm_ai_helper-bot@sha256:edf78df9fbe5ac3ad033f45834d08593020e23e1f6683c200948e8a26bc06b4a"
-      ],
-      "oci_revision": null,
-      "state": "running",
-      "health": null,
-      "started_at": "2026-10-21T12:38:23.674413152Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": []
-    },
-    {
-      "name": "/smm_ai_helper-worker-1",
-      "service": "worker",
-      "image_id": "sha256:2204a2f905ae12ecaf1ef367b466828313ad393c0ff181167e3915026cdaeef5",
-      "repo_digests": [
-        "smm_ai_helper-worker@sha256:2204a2f905ae12ecaf1ef367b466828313ad393c0ff181167e3915026cdaeef5"
-      ],
-      "oci_revision": null,
-      "state": "running",
-      "health": null,
-      "started_at": "2026-10-21T12:38:12.205092373Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": [
-        {
-          "type": "volume",
-          "name": "smm_ai_helper_smm_images",
-          "destination": "/data/images"
-        }
-      ]
-    },
-    {
-      "name": "/smm_ai_helper-backend-1",
-      "service": "backend",
-      "image_id": "sha256:389f1c45b0fc7b46f5b59b9a371057227d4abd0ab68bf078ce409c0cacfee8c7",
-      "repo_digests": [
-        "smm_ai_helper-backend@sha256:389f1c45b0fc7b46f5b59b9a371057227d4abd0ab68bf078ce409c0cacfee8c7"
-      ],
-      "oci_revision": null,
-      "state": "running",
-      "health": "healthy",
-      "started_at": "2026-10-21T12:38:11.464567609Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": [
-        {
-          "type": "volume",
-          "name": "smm_ai_helper_smm_images",
-          "destination": "/data/images"
-        }
-      ]
-    },
-    {
-      "name": "/smm_ai_helper-migrate-1",
-      "service": "migrate",
-      "image_id": "sha256:f111fe98ccf1794ce05bb1dc05c0085477462a8fd0d695d09dc8f77652592230",
-      "repo_digests": [
-        "smm_ai_helper-migrate@sha256:f111fe98ccf1794ce05bb1dc05c0085477462a8fd0d695d09dc8f77652592230"
-      ],
-      "oci_revision": null,
-      "state": "exited",
-      "health": null,
-      "started_at": "2026-10-21T12:38:06.637214729Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": []
-    },
-    {
-      "name": "/smm_ai_helper-db-1",
-      "service": "db",
-      "image_id": "sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3",
-      "repo_digests": [
-        "postgres@sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3"
-      ],
-      "oci_revision": null,
-      "state": "running",
-      "health": "healthy",
-      "started_at": "2026-10-06T12:47:49.497624639Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": [
-        {
-          "type": "volume",
-          "name": "smm_ai_helper_smm_db_data",
-          "destination": "/var/lib/postgresql/data"
-        }
-      ]
-    },
-    {
-      "name": "/smm_ai_helper-redis-1",
-      "service": "redis",
-      "image_id": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
-      "repo_digests": [
-        "redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499"
-      ],
-      "oci_revision": null,
-      "state": "running",
-      "health": "healthy",
-      "started_at": "2026-10-06T12:47:50.180575397Z",
-      "exit_code": 0,
-      "config_files": "/opt/smm_ai_helper/docker-compose.yaml",
-      "mounts": [
-        {
-          "type": "volume",
-          "name": "57ad7135207aa695af82f62a28f251ad911e24a7a395bd7a3dd439190226ad91",
-          "destination": "/data"
-        }
-      ]
-    }
-  ],
-  "compose_sha256": "6703e79d80a5ebdc0f3e75228942863c370fa5e4c30ca73d49cc1692a58453b5",
-  "compose_valid": true,
-  "compose_services": {
-    "backend": {
-      "build_present": true,
-      "depends_on": [
-        "migrate"
-      ],
-      "restart": "unless-stopped",
-      "networks": [
-        "default"
-      ]
-    },
-    "bot": {
-      "build_present": true,
-      "depends_on": [
-        "backend"
-      ],
-      "restart": "unless-stopped",
-      "networks": [
-        "default"
-      ]
-    },
-    "db": {
-      "build_present": false,
-      "depends_on": [],
-      "restart": "unless-stopped",
-      "networks": [
-        "default"
-      ]
-    },
-    "migrate": {
-      "build_present": true,
-      "depends_on": [
-        "db"
-      ],
-      "restart": "no",
-      "networks": [
-        "default"
-      ]
-    },
-    "redis": {
-      "build_present": false,
-      "depends_on": [],
-      "restart": "unless-stopped",
-      "networks": [
-        "default"
-      ]
-    },
-    "worker": {
-      "build_present": true,
-      "depends_on": [
-        "migrate"
-      ],
-      "restart": "unless-stopped",
-      "networks": [
-        "default"
-      ]
-    }
-  },
-  "runtime_attestation": {
-    "backend": {
-      "scope": "all runtime app/bot/migrations Python files; not full image provenance",
-      "files_checked": 206,
-      "mismatches": [],
-      "matches_checkout": true
-    },
-    "worker": {
-      "scope": "all runtime app/bot/migrations Python files; not full image provenance",
-      "files_checked": 206,
-      "mismatches": [],
-      "matches_checkout": true
-    },
-    "bot": {
-      "scope": "all runtime app/bot/migrations Python files; not full image provenance",
-      "files_checked": 206,
-      "mismatches": [],
-      "matches_checkout": true
-    }
-  },
-  "http": {
-    "/health": {
-      "status": 200,
-      "body": {
-        "status": "ok"
-      }
-    },
-    "/ready": {
-      "status": 200,
-      "body": {
-        "status": "ready"
-      }
-    }
-  },
-  "database_snapshot": {
-    "alembic_revision": [
-      {
-        "version_num": "20261014_0012"
-      }
-    ],
-    "worker_admission": [
-      {
-        "paused": false,
-        "epoch": 0
-      }
-    ],
-    "attempt_markers": [
-      {
-        "count": 0
-      }
-    ],
-    "jobs": [
-      {
-        "kind": "orchestration.module",
-        "status": "succeeded",
-        "count": 21
-      },
-      {
-        "kind": "orchestration.module",
-        "status": "failed",
-        "count": 23
-      }
-    ],
-    "execution_claims": [
-      {
-        "tokens": 0,
-        "active_leases": 0,
-        "future_available": 0
-      }
-    ],
-    "task_claims": [
-      {
-        "tokens": 0
-      }
-    ],
-    "deliveries": [],
-    "dedicated_drain_url_available": false,
-    "bot_api_base_internal": true
-  },
-  "redis": {
-    "ping": "PONG",
-    "keyspace_info": "# Keyspace"
-  },
-  "backup_discovery": {
-    "scope": "/opt and /var/backups, maxdepth 4, *.dump/*.sql.gz/*.backup",
-    "matching_files": [],
-    "restore_tested": false,
-    "backup_created": false
+  "schema_version": "telegram_menu_rollout_public.v2",
+  "status": "PREPARING",
+  "deployment_state": "NOT_DEPLOYED",
+  "source": {
+    "dependency_pr": 129,
+    "dependency_sha": "b04685bc586845592f509eababc5388672852926",
+    "menu_pr": 131,
+    "menu_sha": "26ec261d0ed1d34f9c83be32780208a9b61752f2",
+    "driver_fix_pr": 133,
+    "driver_fix_sha": "de5cd9f14ce9625b0e0379584c8e3d3e5afade65",
+    "candidate_pr": 134,
+    "candidate_sha": "420df1ae1b90762a494a3fa95df4ee4fa31ef609",
+    "excluded_prs": [130]
   },
   "gates": {
-    "ingress_barrier_verified": false,
-    "live_worker_drain_passed": false,
-    "staging_acceptance_performed_this_rollout": false,
-    "rollback_tested": false,
-    "production_telegram_menu_verified": false
-  }
+    "backup_created": {"state": "PASSED", "evidence": "EXECUTED"},
+    "backup_checksum_verified": {"state": "PASSED", "evidence": "EXECUTED"},
+    "restore_rehearsal": {"state": "PASSED", "evidence": "EXECUTED"},
+    "production_application_data_unchanged_by_rollout": {"state": "PASSED", "evidence": "EXECUTED"},
+    "observed_service_health": {"state": "PASSED", "evidence": "OBSERVED"},
+    "driver_fix_ci": {"state": "PENDING", "evidence": "NOT_VERIFIED"},
+    "candidate_ci": {"state": "PENDING", "evidence": "NOT_VERIFIED"},
+    "immutable_release": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "staging_acceptance": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "migration_rehearsal": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "rollback_artifacts_archived": {"state": "PASSED", "evidence": "EXECUTED"},
+    "application_rollback_rehearsal": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "ingress_barrier": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "live_worker_drain": {"state": "UNVERIFIED", "evidence": "NOT_VERIFIED"},
+    "production_menu_acceptance": {"state": "NOT_RUN", "evidence": "NOT_VERIFIED"},
+    "paid_provider_acceptance": {"state": "NOT_RUN", "evidence": "NOT_VERIFIED"}
+  },
+  "ci_runs": [],
+  "blocker_categories": [],
+  "remaining_gate_categories": ["dependency_compatibility", "ci", "release_provenance", "staging", "migration", "application_rollback", "ingress", "worker_drain", "production_acceptance"],
+  "further_actions": ["Resolve dependency compatibility and complete exact-commit CI", "Attest immutable artifacts", "Complete isolated staging and rollback rehearsal", "Verify ingress closure and live drain", "Cut over only after all mandatory gates pass"],
+  "production_cutover_performed": false,
+  "detailed_evidence": "protected_operator_storage",
+  "historical_operational_details_remain_in_git_history": true
 }
