@@ -9,6 +9,7 @@ from app.config import settings
 from app.workflows.presentation import render_artifact, delivery_parts
 from bot import backend
 from bot.rendering import send_text
+from bot.workflow_contracts import validate_workflow, validate_runs
 
 router = Router()
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -26,6 +27,7 @@ async def private(message):
 
 
 async def display_status(message, data):
+    data = validate_workflow(data)
     run_id = data["run_id"]
     if data["status"] == "needs_input":
         labels = {"product": "продукт", "audience": "аудиторию", "goal": "цель"}
@@ -111,7 +113,7 @@ async def continue_workflow(callback: types.CallbackQuery):
 async def runs(message: types.Message):
     if not await private(message): return
     try:
-        data = await backend.request("GET", "/workflows", message.from_user.id)
+        data = validate_runs(await backend.request("GET", "/workflows", message.from_user.id))
         await send_text(message, "\n".join(f"{r['status']}: /status {r['run_id']}" for r in data) or "Проектов пока нет. Начните с /analyze.")
     except backend.BackendError as exc:
         await message.answer(str(exc))
@@ -130,6 +132,7 @@ async def saved_run(message: types.Message):
             data = await backend.request("POST", f"/workflows/{run_id}/delivery/retry", message.from_user.id)
         else:
             data = await backend.request("GET", f"/workflows/{run_id}", message.from_user.id)
+        data = validate_workflow(data)
         if command != "/result" or not data["artifacts"]:
             await display_status(message, data)
             return
@@ -140,8 +143,7 @@ async def saved_run(message: types.Message):
                 await send_text(message, render_artifact(artifact), reply_markup=types.InlineKeyboardMarkup.model_validate(markup) if markup else None)
                 for image in artifact["images"]:
                     async with httpx.AsyncClient(timeout=20) as client:
-                        response = await client.get(settings.API_BASE_URL.rstrip("/") + image["url"], headers=backend.actor_headers(message.from_user.id))
-                        response.raise_for_status()
-                    await message.answer_photo(types.BufferedInputFile(response.content, filename="creative.png"))
+                        content = await backend.fetch_image(client, image["url"], message.from_user.id)
+                    await message.answer_photo(types.BufferedInputFile(content, filename="creative.png"))
     except (backend.BackendError, httpx.HTTPError):
         await message.answer("Не удалось получить сохранённый результат. Повторите команду позже.")

@@ -32,6 +32,10 @@ FastAPI backend
         +--> image storage
 ```
 
+### Durable navigation and project discussion
+
+`ProjectHistoryService` projects owner-scoped metadata over existing sources without copying result bodies. `ProjectContextService` owns PostgreSQL source sessions, versioned actor/private-chat selection and isolated discussion claims. Menu and navigation precede FSM handlers; plain text resolves durable selection before legacy paths. Completed strategies continue through Case Mentor; saved tasks/workflows and scoped ordinary conversations use bounded project packets. `/new` creates a fresh general-chat memory epoch and preserves historical data. Stable ordinary-chat receipts prevent duplicate Telegram update generation across restart. See [navigation and context design](docs/design/telegram-navigation-and-context.md) and [acceptance evidence](docs/reviews/telegram-menu-acceptance.md).
+
 ### Telegram interface
 
 `bot/` is an interface layer. It maps Telegram updates to backend requests and renders replies, images, follow-up questions, and action buttons.
@@ -71,6 +75,37 @@ acceptance. This is **at-least-recoverable**, not exactly-once Telegram delivery
 [Telegram Copilot UX](docs/development/telegram-copilot-ux.md) for exact identity,
 confirmation, retry, rendering and recovery semantics.
 
+An outer `OperationGuard` owns active Telegram update tasks before FSM isolation.
+During an in-flight request `/new` and `/cancel` respond immediately with the
+actual cancellation limitation, without changing that request's FSM. Shutdown
+cancels and drains owned updates and delivery before closing the Bot session.
+
+Completed graph strategies expose opt-in case explanations through
+`CaseMentorService` and `/copilot/runs/{id}/mentor`. Opening the explanation reads
+accepted strategy/context/evidence/lineage/experiments without generation. New
+questions call the existing single-attempt model capability behind the backend,
+with Expert Core and a bounded packet of accepted sections, prior turns and
+explicitly unverified reports. The fixed creative-workflow Mentor is unchanged.
+
+Existing MarketingRun/MarketingArtifact storage groups explanations, ordered turns,
+reported feedback and committed generation identities in a `case_mentor.v1`
+companion. Short source-row transactions serialize admission and completion;
+provider I/O occurs after the claim commits, without an open DB transaction.
+Completed answers replay by request key; unknown outcomes do not automatically
+rerun. Different questions serialize within one case. Source artifacts, jobs,
+BrandProfile and graph lifecycle remain unchanged. Owner-scoped history GET permits
+reopening the last 50 turns; generation uses at most 12 previous turns.
+
+`ExecutionStore` uses separate `copilot_execution.v1` receipt runs for authenticated
+Copilot HTTP execution. It fingerprints supplied fields, commits ownership before
+external work and saves the complete public response. Completed results replay
+without interpretation/provider calls; a changed completed/running payload returns
+409. Only a NEEDS_INPUT receipt permits a revised clarification payload. Receipts
+have a 30-day retention window and expired keys must not be reused. Running or
+ambiguous outcomes are never automatically stolen within that window. Graph/fixed
+run lists filter workflow types, so receipts and mentor companions remain excluded.
+Legacy chat generation and initial standalone task starts do not acquire this new
+HTTP identity; their existing continuation/finalization contracts remain separate.
 
 ### Chat flow
 

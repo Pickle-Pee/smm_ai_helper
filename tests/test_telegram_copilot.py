@@ -22,6 +22,9 @@ from app.config import settings
 from bot import copilot_contracts as dto, copilot_flow as flow, copilot_rendering as render
 from bot.copilot_client import CopilotClient, CopilotError
 from bot.handlers.copilot import check_status
+from tests.test_telegram_navigation_fixtures import no_selected_project
+
+pytestmark = pytest.mark.usefixtures("no_selected_project")
 
 RID = "ab" * 32
 
@@ -172,7 +175,7 @@ def test_post_and_conversation_are_single_results(monkeypatch):
         assert not legacy.called and "copilot_run" not in await state.get_data()
         other = message("Привет", mid=2)
         await flow.receive(other, state)
-        legacy.assert_awaited_once_with(other, "Привет", actor_id=123)
+        legacy.assert_awaited_once_with(other, "Привет", actor_id=123, request_key="tg:123:123:2")
         other.answer.assert_not_called()
     asyncio.run(check())
 
@@ -480,6 +483,8 @@ def test_conversation_delegates_through_existing_chat_http(monkeypatch):
             return httpx.Response(200, json={"kind": "CONVERSATION", "delegate": "legacy_chat"})
         assert request.url.path == "/chat/message"
         assert json.loads(request.content)["user_id"] == "tg:123"
+        assert json.loads(request.content)["request_key"] == "tg:123:123:1"
+        assert json.loads(request.content)["context_version"] == 0
         assert request.headers["x-telegram-user-id"] == "123"
         return httpx.Response(200, json={**backend_payload, "images": []})
     patch_http(monkeypatch, respond)
@@ -509,7 +514,11 @@ def test_real_dispatcher_routing_isolation_explicit_features_and_restart(monkeyp
     monkeypatch.setattr(flow, "client", api)
     sent = AsyncMock(return_value=True)
     monkeypatch.setattr(Bot, "__call__", sent)
-    fixed = AsyncMock(return_value={"run_id": "a" * 32, "status": "queued", "delivery": []})
+    async def fixed_response(method, path, *args, **kwargs):
+        if path == "/projects/context": return {"version": 1, "active": None}
+        if path.startswith("/projects/history?"): return {"items": [], "next_offset": None}
+        return {"run_id": "a" * 32, "status": "queued", "delivery": []}
+    fixed = AsyncMock(side_effect=fixed_response)
     monkeypatch.setattr(workflow.backend, "request", fixed)
     # Legacy feature HTTP is faked, but the real registered handlers dispatch it.
     http_calls = []
@@ -546,7 +555,7 @@ def test_real_dispatcher_routing_isolation_explicit_features_and_restart(monkeyp
             await dp.feed_update(bot, update(7, "/new"))
             assert await fsm.get_state() is None
             await dp.feed_update(bot, update(8, "/history"))
-            assert http_calls[-1].url.path == "/tasks/by_user/123"
+            assert fixed.call_args.args[1].startswith("/projects/history?")
             assert api.execute.await_count == 1
         finally:
             await bot.session.close()
@@ -893,7 +902,7 @@ def test_pending_edit_failure_does_not_execute_or_reactivate_old_token(monkeypat
         api.execute.assert_not_awaited()
         active = (await state.get_data())["copilot_pending"]
         assert active["phase"] == "retry" and active["token"] != old.data.split(":")[1]
-        assert "Не удалось связаться с сервером" in text_sent(msg)
+        assert "Запрос ещё не отправлен" in text_sent(msg)
         buttons = [b.text for row in msg.answer.call_args.kwargs["reply_markup"].inline_keyboard for b in row]
         assert buttons == ["Повторить", "Начать новый запрос", "Отмена"]
         old.id = "fresh-click"

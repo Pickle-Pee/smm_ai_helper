@@ -157,8 +157,12 @@ Network errors, backend authentication/configuration errors, invalid client stat
 (422), conflicts (409), temporary unavailability (503), invalid execution results
 (500 `execution_invalid`), malformed responses and
 unexpected server failures have separate safe handling. «Повторить» reuses the
-unchanged payload/key after network/503/server failure; synchronous responses are
-not durably cached by the backend, so such retries can repeat synchronous work.
+unchanged payload/key after network/503/server failure. Completed synchronous
+Copilot responses replay a saved receipt for 30 days; provider ambiguity fails
+closed. A new key is a new operation and can incur new provider work.
+The uncertainty message supplies `/copilot_result KEY`: this authenticated read
+restores the saved response after FSM restart without generation. A CONVERSATION
+receipt contains only delegation and this recovery command never calls legacy chat.
 `execution_invalid` is recognized only in a validated 500 error envelope with
 explicit `schema_version`, `kind`, `owned_site` and `code` fields. It stops
 the pending request and offers a new request or cancellation without «Повторить».
@@ -168,6 +172,29 @@ the user must start a new request. `/cancel` clears pre-run pending data. An alr
 started analysis cannot be cancelled through Telegram v1; no graph status is changed.
 
 ## Restart and delivery limits (Task L)
+
+### Hardening and saved case mentorship
+
+The outer operation guard responds to `/new` or `/cancel` during a pending HTTP
+execution immediately, explaining that active execution cannot be canceled here.
+It does not reset an in-flight FSM or allow a second same-user request to overwrite
+it. Once execution responds, `/new` clears local pending input as before. Update
+tasks and delivery are drained before the Telegram session closes.
+
+A completed saved strategy offers «Объяснить решение». The `cm:` callback embeds
+the same compact reversible run ID as `cs:`; the backend independently authorizes
+the clicking actor. POST `/copilot/runs/{id}/mentor` creates or replays a persisted
+eight-section explanation based only on accepted strategy/lineage/context. There
+is no provider generation when opening the explanation. New followup questions
+use the backend model with Expert Core, accepted case context, the latest 12 saved
+turns and five user reports. Eight case sections are capped at 4000 characters
+each; prior answers at 2000 characters each. Truncation is identified in the packet.
+The source strategy is unchanged. `/case_history` reads up to 50 saved turns.
+`/new` or `/cancel` leaves that mode; after restart reopen the strategy button
+and continue its persisted dialogue. `/case_feedback` stores reported observations
+separately from forecasts, with deterministic arithmetic only for valid labelled
+inputs and a common period. Missing facts trigger clarification; reports never
+prove causal effects or automatically update BrandProfile.
 
 No automatic status polling or new delivery loop is introduced. User-triggered GETs
 are the only Copilot status checks; the existing fixed-workflow delivery poller is
@@ -184,7 +211,8 @@ backend artifacts again. Paging callbacks contain only a bounded offset; both li
 and status use the clicking actor, without FSM lookup or bot-side result storage.
 The delivery guarantee is **at-least-recoverable**, not exactly-once. Recent
 Telegram-event deduplication and synchronous reply delivery are not exactly-once
-guarantees. Retrying synchronous work can repeat external model execution.
+guarantees. Completed synchronous Copilot responses replay within the receipt
+window; legacy chat/task starts and new logical keys may still repeat external work.
 
 Keeping the short pre-run interaction in MemoryStorage avoids a new persistence
 model for transient unconfirmed observations. After restart, start the request
@@ -217,3 +245,22 @@ Manual checks on a configured private-chat bot:
 7. Restart only the bot; an earlier run status button and `/copilot_runs` must work,
    including completed presentation. Unfinished clarification must be restarted.
 8. Verify legacy `/analyze`, standalone task buttons, `/history` and image UI remain available.
+
+## Ephemeral legacy action expiry
+
+Suggested-action keyboards live for 15 minutes from creation, without sliding
+expiry. They retain at most 1000 actors and 10 actions per actor, each at most
+4000 characters. Creating a new keyboard invalidates that actor's older tokens;
+capacity evicts the oldest keyboard. Expiry is enforced on creation and consumption.
+Consumption removes a token before awaiting HTTP. Restart, eviction and expiry
+require a fresh suggestion; identical later text never reactivates old callbacks.
+This storage is process-local and the deployment remains one poller per bot token.
+
+## Acceptance boundaries
+
+Engineering reliability is verified with deterministic providers, real disposable
+PostgreSQL/Redis and fake Telegram. Product-semantic tests verify the context
+packet and response contract against distinct model fixtures; they cannot establish
+live model quality. Real Telegram transport, model relevance, numerical honesty and
+resistance to source injection require separately authorized operator acceptance.
+The current evidence is in `../reviews/pr129-final-acceptance.md`.

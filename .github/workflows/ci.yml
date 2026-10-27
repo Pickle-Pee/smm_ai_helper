@@ -118,6 +118,13 @@ jobs:
               tests/test_worker_drain_postgresql.py tests/test_worker_drain_lifecycle_postgresql.py tests/test_worker_control.py \
               tests/test_copilot_api.py tests/test_copilot_api_postgresql.py tests/test_owned_snapshot_postgresql.py \
               tests/test_telegram_copilot.py tests/test_telegram_copilot_postgresql.py \
+              tests/test_case_mentor.py tests/test_case_mentor_postgresql.py tests/test_telegram_case_mentor.py \
+              tests/test_case_mentor_dialogue_postgresql.py tests/test_copilot_sync_replay_postgresql.py \
+              tests/test_project_history.py tests/test_project_history_postgresql.py tests/test_project_context_api.py \
+              tests/test_project_context_postgresql.py tests/test_new_chat_isolation_postgresql.py \
+              tests/test_chat_execution_postgresql.py tests/test_chat_context_admission_postgresql.py tests/test_copilot_context_admission_postgresql.py tests/test_source_draft_postgresql.py tests/test_project_dialogue_continuity_postgresql.py tests/test_telegram_request_identity_postgresql.py tests/test_telegram_offline_startup.py tests/test_telegram_navigation.py tests/test_telegram_project_context_postgresql.py \
+              tests/test_telegram_remediation.py tests/test_telegram_sync_recovery.py tests/test_pr129_acceptance.py \
+              tests/test_telegram_hardening_flows.py tests/test_telegram_media_delivery_hardening.py tests/test_telegram_operation_lifecycle.py \
               tests/test_release_hardening_postgresql.py tests/test_release_telegram.py tests/test_release_operations.py
 
       - name: Verify persistence after app container recreation
