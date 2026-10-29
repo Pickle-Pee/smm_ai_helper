@@ -137,6 +137,28 @@ Assert actual captured POST count, persisted receipts and terminal/retry decisio
 Assert secrets, user text, full schemas and raw provider failures are absent from
 ordinary logs. Retain existing graph completion/recovery tests.
 
+Real PostgreSQL coverage lives in `tests/test_responses_governance_postgresql.py`.
+Set `MVP_TEST_DATABASE_URL` to a dedicated disposable database whose name contains
+`smm_mvp_test`, then run `python -m pytest -q tests/test_responses_governance_postgresql.py`.
+The shared fixture applies Alembic migrations. Test-only triggers fail writes,
+defer failures to COMMIT, or terminate the owning database connection. Provider
+HTTP and source acquisition are mocked; worker/service transactions and ownership
+checks are real. Tests remove their triggers/functions and run data.
+They verify rollback, competing replacement claims, stale-owner fencing, lease
+retention until expiry on an uncommitted transition, and lease release on a
+committed terminal/deferred transition. Unknown outcomes never repeat a POST;
+known HTTP 503 recovery remains bounded by three sends.
+
+Receipt persistence errors must not replace an existing provider HTTP/envelope,
+transport or cancellation exception. The original exception keeps a content-free
+note and ordinary logs record only IDs and error types. If no provider failure
+exists, a receipt persistence error still aborts success. If persisting the retry
+decision or failure transition also fails, the original provider error escapes
+the worker with a safe note; no uncommitted retry or lease release is assumed.
+The attempt marker cleanup is independent of the durable Job lease. Recovery
+uses the committed reservation/receipt after expiry, including the conservative
+case where a receipt rolled back and only a reserved outcome remains.
+
 Provider logs and billing records are needed to reconcile real charges. Requested
 output cap, reported zero counters and successful offline tests cannot establish
 that an external request was not charged. Historical logs can be incomplete; the

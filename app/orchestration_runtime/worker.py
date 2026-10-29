@@ -87,15 +87,27 @@ class ModuleGraphWorker:
             log.error("Graph attempt failed run_id=%s job_id=%s error_type=%s", item.run_id, item.job_id, type(exc).__name__)
             retryable = transient(exc)
             reason = "legacy_retry" if retryable else "legacy_stop"
-            if hasattr(self.service, "retry_decision"):
-                retryable, reason = await self.service.retry_decision(item, exc, retryable)
+            try:
+                if hasattr(self.service, "retry_decision"):
+                    retryable, reason = await self.service.retry_decision(item, exc, retryable)
+            except SQLAlchemyError as diagnostic_error:
+                log.error("Graph retry decision persistence failed run_id=%s job_id=%s error_type=%s",
+                          item.run_id, item.job_id, type(diagnostic_error).__name__)
+                exc.add_note("Workflow retry decision persistence failed; lease remains recoverable.")
+                raise exc from None
             attempt_id = hashlib.sha256(item.claim_token.encode()).hexdigest()
             log.info("Graph retry decision run_id=%s job_id=%s node_id=%s graph_attempt_id=%s module_execution_id=%s retry_owner=workflow retry_decision=%s usage_state=not_applicable",
                      item.run_id, item.job_id, item.node_id, attempt_id, item.job_id, reason,
                      extra={"job_id": item.job_id, "run_id": item.run_id, "node_id": item.node_id,
                             "graph_attempt_id": attempt_id, "module_execution_id": item.job_id,
                             "retry_owner": "workflow", "retry_decision": reason, "usage_state": "not_applicable"})
-            await self.service.fail(item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
+            try:
+                await self.service.fail(item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
+            except SQLAlchemyError as persistence_error:
+                log.error("Graph failure persistence failed run_id=%s job_id=%s error_type=%s",
+                          item.run_id, item.job_id, type(persistence_error).__name__)
+                exc.add_note("Workflow failure persistence failed; lease remains recoverable.")
+                raise exc from None
         finally:
             try:
                 await self.service.release_attempt(item)

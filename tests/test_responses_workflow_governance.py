@@ -159,7 +159,7 @@ def test_cancellation_and_lease_expiration_leave_no_automatic_replay(monkeypatch
         raise asyncio.CancelledError()
     install_transport(monkeypatch, respond)
     async def exercise():
-        with pytest.raises(RetryGovernanceError if expiration else asyncio.CancelledError):
+        with pytest.raises(asyncio.CancelledError):
             await invoke(store.service(), store)
         assert store.run.input_json["responses_retry"]["calls"][0]["outcome"] == ("reserved" if expiration else "unknown")
         store.lease.lease_until = NOW + timedelta(seconds=330)

@@ -218,6 +218,7 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
     response = None
     data = None
     reason = None
+    primary_error = None
     outcome = "transport_error"
     try:
         response = await client.post(url, headers=headers, json=payload)
@@ -239,12 +240,23 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
                 # Malformed provider data must not escape the bounded diagnostics contract.
                 reason = ModelResponseFailureReason.INVALID_ENVELOPE
                 outcome = "rejected"
+        if hooks:
+            # Establish the provider failure before saving diagnostics so a
+            # receipt outage cannot replace the original HTTP/envelope error.
+            response.raise_for_status()
+            if reason is not None:
+                raise ModelResponseError(reason)
         return response
-    except (httpx.TimeoutException, TimeoutError):
+    except (httpx.TimeoutException, TimeoutError) as exc:
+        primary_error = exc
         outcome = "timeout"
         raise
-    except asyncio.CancelledError:
+    except asyncio.CancelledError as exc:
+        primary_error = exc
         outcome = cancellation_outcome()
+        raise
+    except BaseException as exc:
+        primary_error = exc
         raise
     finally:
         fields.update(
@@ -291,7 +303,17 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
         else:
             _log_provider_event(fields, level=logging.INFO if outcome == "success" else logging.WARNING)
         if hooks:
-            await hooks[1](fields)
+            try:
+                await hooks[1](fields)
+            except Exception as diagnostic_error:
+                log.error("Provider receipt persistence failed provider_call_id=%s error_type=%s",
+                          fields["provider_call_id"], type(diagnostic_error).__name__)
+                if primary_error is None:
+                    # Never accept a successful result without a durable receipt.
+                    raise
+                primary_error.add_note("Provider receipt persistence failed; reservation remains unresolved.")
+                # Keep the primary exception in flight. The durable reservation
+                # remains conservative and the workflow owner decides recovery.
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:
