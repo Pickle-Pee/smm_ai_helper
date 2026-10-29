@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     GRAPH_WORKER_CONCURRENCY: int = Field(default=1, ge=1, le=8)
     GRAPH_TIMEOUT_SECONDS: int = Field(default=300, ge=5, le=900)
     GRAPH_LEASE_SECONDS: int = Field(default=330, ge=6, le=960)
+    RESPONSES_WORKFLOW_GOVERNANCE_ENABLED: bool = False
+    RESPONSES_WORKFLOW_MAX_OUTPUT_TOKENS: int = Field(default=192000, ge=1, le=1000000)
     WORKFLOW_TIMEOUT_SECONDS: int = Field(default=240, ge=5, le=900)
     TASK_FINALIZATION_TIMEOUT_SECONDS: int = Field(default=240, ge=5, le=900)
 

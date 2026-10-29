@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 import httpx
 
-from app.llm.telemetry import correlation_fields, cancellation_outcome, safe_label, safe_provider_id
+from app.llm.telemetry import correlation_fields, cancellation_outcome, safe_label, safe_provider_id, provider_hooks
 from app.config import settings, TOKEN_BUDGETS, MAX_OUTPUT_TOKENS_CAP
 from app.model_generation_policy import ModuleOutputBudget, module_output_tokens
 
@@ -208,11 +208,17 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
             schema, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest() if schema is not None else None,
     }
+    hooks = provider_hooks()
+    fields["retry_owner"] = "workflow" if hooks else "graph" if single_attempt else "transport"
+    fields["retry_decision"] = "owner_pending" if single_attempt or hooks else "transport_policy"
+    if hooks:
+        await hooks[0](fields)
     _log_provider_event({**fields, "event": "started"})
     started = time.monotonic()
     response = None
     data = None
     reason = None
+    primary_error = None
     outcome = "transport_error"
     try:
         response = await client.post(url, headers=headers, json=payload)
@@ -234,12 +240,23 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
                 # Malformed provider data must not escape the bounded diagnostics contract.
                 reason = ModelResponseFailureReason.INVALID_ENVELOPE
                 outcome = "rejected"
+        if hooks:
+            # Establish the provider failure before saving diagnostics so a
+            # receipt outage cannot replace the original HTTP/envelope error.
+            response.raise_for_status()
+            if reason is not None:
+                raise ModelResponseError(reason)
         return response
-    except (httpx.TimeoutException, TimeoutError):
+    except (httpx.TimeoutException, TimeoutError) as exc:
+        primary_error = exc
         outcome = "timeout"
         raise
-    except asyncio.CancelledError:
+    except asyncio.CancelledError as exc:
+        primary_error = exc
         outcome = cancellation_outcome()
+        raise
+    except BaseException as exc:
+        primary_error = exc
         raise
     finally:
         fields.update(
@@ -262,15 +279,41 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
         request_id = response.headers.get("x-request-id") if response is not None else None
         if safe_provider_id(request_id, "request") is not None:
             fields["x_request_id"] = request_id
+            fields["request_id"] = request_id
         details = data.get("incomplete_details") if isinstance(data, dict) else None
         incomplete = details.get("reason") if isinstance(details, dict) else None
         fields["incomplete_reason"] = (incomplete if type(incomplete) is str and incomplete in
             ("max_output_tokens", "content_filter") else "other" if incomplete is not None else None)
+        fields["status"] = fields["response_status"]
+        fields["failure_reason"] = reason.value if reason is not None else None
+        # Add normalized states without changing v1 counters consumed by operators.
+        for counter in ("input_tokens", "output_tokens", "reasoning_tokens"):
+            state = fields[counter + "_state"]
+            fields[counter + "_usage_state"] = (
+                "unknown" if response is None else "reported_zero" if state == "reported" and fields[counter] == 0
+                else "reported" if state == "reported" else "missing" if state == "missing" else "unknown")
+        states = [fields[c + "_usage_state"] for c in ("input_tokens", "output_tokens", "reasoning_tokens")]
+        fields["token_usage_state"] = (
+            "unknown" if response is None else "reported_zero" if all(s == "reported_zero" for s in states)
+            else "reported" if all(s in {"reported", "reported_zero"} for s in states)
+            else "missing" if all(s == "missing" for s in states) else "unknown")
         if reason is not None:
             _log_response_rejection(reason, payload["model"], payload["max_output_tokens"], data,
                                     request_id=request_id, payload=payload, telemetry=fields)
         else:
             _log_provider_event(fields, level=logging.INFO if outcome == "success" else logging.WARNING)
+        if hooks:
+            try:
+                await hooks[1](fields)
+            except Exception as diagnostic_error:
+                log.error("Provider receipt persistence failed provider_call_id=%s error_type=%s",
+                          fields["provider_call_id"], type(diagnostic_error).__name__)
+                if primary_error is None:
+                    # Never accept a successful result without a durable receipt.
+                    raise
+                primary_error.add_note("Provider receipt persistence failed; reservation remains unresolved.")
+                # Keep the primary exception in flight. The durable reservation
+                # remains conservative and the workflow owner decides recovery.
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:
@@ -360,6 +403,8 @@ async def chat(
         payload["text"] = {"format": fmt}
         payload["reasoning"] = {"effort": "low"}
 
+    # A governed workflow accounts for every POST, including nested capabilities.
+    single_attempt = single_attempt or provider_hooks() is not None
     timeout = httpx.Timeout(settings.HTTP_TIMEOUT)
     posts = 1 if single_attempt else min(MAX_LEGACY_POSTS, max(1, settings.HTTP_RETRIES + 1))
 
