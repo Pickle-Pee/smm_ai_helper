@@ -74,7 +74,7 @@ def test_explicit_competitor_role_overrides_multiple_literal_urls(mvp_database, 
             site.analyze.assert_awaited_once_with(urls[0])
             async with mvp_database() as session:
                 owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
-                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner, MarketingRun.workflow_type != "copilot_execution.v1"))).all()
         finally:
             await remove_actor(mvp_database, actor)
     asyncio.run(check())
@@ -116,7 +116,7 @@ def test_comparative_positioning_uses_explicit_competitor_with_multiple_literal_
 @pytest.mark.parametrize("kind,expected", [(IntentKind.LEAD_FUNNEL_CALCULATION, "DIRECT_RESULT"),
     (IntentKind.POST_GENERATION, "MODULE_RESULT"), (IntentKind.POSITIONING, "MODULE_RESULT"),
     (IntentKind.COMPETITOR_ANALYSIS, "MODULE_RESULT"), (IntentKind.CONVERSATION, "CONVERSATION")])
-def test_sync_http_paths_never_create_run(mvp_database, monkeypatch, kind, expected):
+def test_sync_http_paths_persist_receipt_without_graph_run(mvp_database, monkeypatch, kind, expected):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
@@ -144,7 +144,7 @@ def test_sync_http_paths_never_create_run(mvp_database, monkeypatch, kind, expec
             async with mvp_database() as session:
                 owner = await session.scalar(select(User.id).where(User.telegram_id == actor))
                 assert owner is not None and owner != actor
-                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner))).all()
+                assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id == owner, MarketingRun.workflow_type != "copilot_execution.v1"))).all()
             api.queue.wake.assert_not_awaited()
         finally:
             await remove_actor(mvp_database, actor)
@@ -384,7 +384,7 @@ def test_owned_confirmation_binding_and_statement_security(mvp_database, monkeyp
                 api.queue.wake.assert_not_awaited()
                 async with mvp_database() as session:
                     owners = select(User.id).where(User.telegram_id.in_([actor, actor + 1]))
-                    assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id.in_(owners)))).all()
+                    assert not (await session.scalars(select(MarketingRun).where(MarketingRun.user_id.in_(owners), MarketingRun.workflow_type != "copilot_execution.v1"))).all()
         finally:
             await remove_actor(mvp_database, actor)
             await remove_actor(mvp_database, actor + 1)

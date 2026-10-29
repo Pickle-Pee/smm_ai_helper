@@ -79,6 +79,7 @@ class Confirmation(StrictDTO):
 
 
 class ExecuteRequest(StrictDTO):
+    context_version: int | None = Field(default=None, ge=0, le=2**63-2)
     request_key: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")]
     message: Annotated[str, StringConstraints(min_length=1, max_length=12000)]
     context: BusinessContext = Field(default_factory=BusinessContext)
@@ -294,5 +295,5 @@ class RunResponse(StrictDTO):
 
 class ErrorResponse(ResponseBase):
     kind: Literal["ERROR"] = "ERROR"
-    code: Literal["request_conflict", "confirmation_changed", "confirmation_unavailable", "invalid_confirmation", "temporarily_unavailable",
+    code: Literal["stale_context", "request_conflict", "confirmation_changed", "confirmation_unavailable", "invalid_confirmation", "temporarily_unavailable",
                   "not_found", "invalid_request", "execution_invalid"]

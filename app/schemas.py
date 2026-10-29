@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
@@ -100,6 +100,8 @@ class ImageGenerateResponse(BaseModel):
 
 
 class ChatMessageRequest(BaseModel):
+    request_key: str | None = Field(default=None, min_length=1, max_length=128)
+    context_version: int | None = Field(default=None, ge=0, le=2**63-2, strict=True)
     user_id: str
     text: str
     attachments: List[Dict[str, Any]] = []

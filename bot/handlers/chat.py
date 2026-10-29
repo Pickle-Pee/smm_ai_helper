@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from io import BytesIO
+import secrets
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from aiogram import F, Router, types
-from aiogram.enums import ChatAction, ParseMode
+from aiogram.enums import ChatAction
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
-from bot.backend import actor_headers
+from bot.backend import actor_headers, fetch_image, BackendError
 from bot.rendering import send_text
 from bot.copilot_flow import CopilotStates, receive
 
@@ -22,6 +24,28 @@ from bot.copilot_flow import CopilotStates, receive
 router = Router()
 ACTION_STORE: Dict[str, Dict[str, str]] = {}
 ACTION_LABEL_MAX_CHARS = 30
+ACTION_MAX_USERS = 1000
+ACTION_MAX_PER_USER = 10
+ACTION_MAX_TEXT_CHARS = 4000
+ACTION_TTL_SECONDS = 15 * 60
+# Separate metadata keeps the existing actor -> token -> text interface intact.
+ACTION_EXPIRES: Dict[str, float] = {}
+
+
+def _prune_actions():
+    """Expire at creation/consumption; oldest keyboards are evicted at capacity.
+
+    Expiry never slides on access. A new keyboard invalidates that actor's old
+    tokens. Restart, expiry and eviction all fail closed; no durable recovery.
+    """
+    now = time.monotonic()
+    for actor in list(ACTION_EXPIRES):
+        if actor not in ACTION_STORE:
+            ACTION_EXPIRES.pop(actor, None)
+    for actor in list(ACTION_STORE):
+        if ACTION_EXPIRES.get(actor, 0) <= now:
+            ACTION_STORE.pop(actor, None)
+            ACTION_EXPIRES.pop(actor, None)
 
 
 def _short_action_label(text: str, limit: int = ACTION_LABEL_MAX_CHARS) -> str:
@@ -42,14 +66,17 @@ def _short_action_label(text: str, limit: int = ACTION_LABEL_MAX_CHARS) -> str:
 
 
 def _make_action_key(user_id: int, text: str) -> str:
-    digest = hashlib.sha256(f"{user_id}:{text}".encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(f"{user_id}:{secrets.token_hex(16)}:{text}".encode("utf-8")).hexdigest()[:32]
     return digest
 
 
 def _actions_keyboard(user_id: int, actions: Any):
     kb = InlineKeyboardBuilder()
-    store = ACTION_STORE.setdefault(str(user_id), {})
-    store.clear()
+    _prune_actions()
+    actor = str(user_id)
+    ACTION_STORE.pop(actor, None)
+    ACTION_EXPIRES.pop(actor, None)
+    store = {}
 
     if not actions or not isinstance(actions, list):
         return None
@@ -57,12 +84,25 @@ def _actions_keyboard(user_id: int, actions: Any):
     for action in actions:
         if not isinstance(action, dict):
             continue
-        text = (action.get("text") or "").strip()
+        value = action.get("text")
+        text = value.strip() if isinstance(value, str) else ""
         if not text:
+            continue
+        if len(text) > ACTION_MAX_TEXT_CHARS:
             continue
         key = _make_action_key(user_id, text)
         store[key] = text
         kb.button(text=_short_action_label(text), callback_data=f"action:{key}")
+        if len(store) == ACTION_MAX_PER_USER:
+            break
+
+    if store:
+        while len(ACTION_STORE) >= ACTION_MAX_USERS:
+            oldest = next(iter(ACTION_STORE))
+            ACTION_STORE.pop(oldest)
+            ACTION_EXPIRES.pop(oldest, None)
+        ACTION_STORE[actor] = store
+        ACTION_EXPIRES[actor] = time.monotonic() + ACTION_TTL_SECONDS
 
     kb.adjust(1)
     return kb.as_markup() if store else None
@@ -153,16 +193,6 @@ def _wants_image(text: str) -> bool:
     return any(k in t for k in triggers)
 
 
-def _abs_url(url: str) -> str:
-    # url может быть относительный: /images/{id}.png
-    base = (settings.API_BASE_URL or "").rstrip("/")
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    if not url.startswith("/"):
-        url = "/" + url
-    return f"{base}{url}"
-
-
 def _extract_images_anywhere(data: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     Поддерживаем несколько вариантов структуры ответа.
@@ -209,29 +239,19 @@ def _extract_images_anywhere(data: Dict[str, Any]) -> List[Dict[str, str]]:
 
 async def _send_images_from_response(message: types.Message, data: Dict[str, Any], *, actor_id: int) -> None:
     """
-    Вытаскивает ссылки на картинки из ответа бэка и отправляет до 3 изображений.
+    Отправляет все сохранённые изображения через ограниченный backend media client.
     """
     images = _extract_images_anywhere(data)
     if not images:
         return
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        for img in images[:3]:
-            url = img.get("url")
-            if not url:
-                continue
-            full_url = _abs_url(url)
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for img in images:
             try:
-                r = await client.get(full_url, headers=actor_headers(actor_id))
-                if r.status_code >= 400:
-                    continue
-                bio = BytesIO(r.content)
-                await message.answer_photo(
-                    types.BufferedInputFile(bio.getvalue(), filename="image.png")
-                )
-            except Exception:
-                # не валим весь ответ из-за одного изображения
-                continue
+                content = await fetch_image(client, img["url"], actor_id)
+                await message.answer_photo(types.BufferedInputFile(content, filename="image.png"))
+            except (BackendError, httpx.HTTPError, TelegramAPIError):
+                await message.answer("Не удалось доставить изображение. Генерация не запускается повторно; проверьте сохранённый результат позже.")
 
 
 async def _chat_action_indicator(message: types.Message, wants_image: bool) -> None:
@@ -269,7 +289,20 @@ async def _long_request_indicator(status_msg: types.Message) -> None:
         return
 
 
-async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) -> None:
+async def _send_to_backend(message: types.Message, text: str, *, actor_id: int, request_key: str | None = None,
+                           context_version: int | None = None) -> None:
+    from bot.project_navigation import binding
+    try:
+        current = await binding(actor_id, message.chat.id)
+    except (BackendError, ValueError, KeyError, TypeError):
+        await send_text(message, "Не удалось проверить текущий контекст. Запрос не отправлен; откройте меню.")
+        return
+    if context_version is not None and current["version"] != context_version:
+        await send_text(message, "Контекст изменился. Начните новый запрос из текущего меню.")
+        return
+    if current.get("active") is not None:
+        await send_text(message, "Выбран сохранённый проект. Напишите запрос в его диалоге или нажмите «Новый запрос».")
+        return
     wants_image = _wants_image(text)
     prepared_text = _augment_text_for_image_request(text) if wants_image else text
 
@@ -277,6 +310,8 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
         "user_id": f"tg:{actor_id}",
         "text": prepared_text,
         "attachments": [],
+        "context_version": current["version"],
+        "request_key": request_key or f"tg:{actor_id}:{message.chat.id}:{message.message_id}",
     }
 
     # 0) мгновенная индикация “в процессе”
@@ -302,6 +337,8 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
             return
 
         data: Dict[str, Any] = resp.json()
+        if not isinstance(data, dict) or not isinstance(data.get("reply", ""), str):
+            raise ValueError("Invalid chat response")
 
         reply = (data.get("reply") or "").strip()
         follow_up = data.get("follow_up_question")
@@ -339,9 +376,22 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int) 
         except Exception:
             pass
 
+    except (httpx.HTTPError, ValueError, TypeError):
+        text = "Не удалось получить ответ сервера. Запрос мог быть обработан; повторная отправка может создать новый результат."
+        try:
+            await status_msg.edit_text(text)
+        except TelegramAPIError:
+            await message.answer(text)
+    except asyncio.CancelledError:
+        try:
+            await status_msg.edit_text("Ожидание прервано. Запрос мог быть принят сервером.")
+        except TelegramAPIError:
+            pass
+        raise
     finally:
         action_task.cancel()
         long_task.cancel()
+        await asyncio.gather(action_task, long_task, return_exceptions=True)
 
 
 @router.message(StateFilter(None, CopilotStates.pending), F.text & ~F.text.startswith("/"))
@@ -351,14 +401,35 @@ async def chat_message(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("action:"))
 async def on_action(callback: types.CallbackQuery):
+    if callback.message is None or callback.message.chat.type != "private":
+        await callback.answer("Откройте личный чат с ботом.")
+        return
     key = callback.data.split(":", 1)[1]
+    _prune_actions()
     store = ACTION_STORE.get(str(callback.from_user.id), {})
-    text = store.get(key)
+    # Consume before the first await: concurrent deliveries cannot execute twice.
+    text = store.pop(key, None)
+    if not store:
+        ACTION_STORE.pop(str(callback.from_user.id), None)
+        ACTION_EXPIRES.pop(str(callback.from_user.id), None)
 
     if not text:
         await callback.answer("Действие устарело", show_alert=True)
         return
 
+    # A keyboard generated by the old global chat must never bypass a selected
+    # project's conversation boundary.
+    from bot.project_navigation import binding
+    try:
+        current = await binding(callback.from_user.id, callback.message.chat.id)
+    except (BackendError, ValueError, KeyError, TypeError):
+        await callback.answer("Не удалось проверить текущий проект. Откройте меню.", show_alert=True)
+        return
+    if current.get("active") is not None:
+        await callback.answer("Действие относится к старому чату. Напишите запрос в текущем проекте.", show_alert=True)
+        return
+
     # более UX-но: не спамим “Ок, делаю...” в чат, а показываем toast
     await callback.answer("Ок, выполняю…")
-    await _send_to_backend(callback.message, text, actor_id=callback.from_user.id)
+    await _send_to_backend(callback.message, text, actor_id=callback.from_user.id,
+        request_key=f"tg:{callback.from_user.id}:{callback.message.chat.id}:action:" + hashlib.sha256(callback.id.encode()).hexdigest()[:32])

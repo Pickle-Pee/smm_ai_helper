@@ -45,7 +45,8 @@ def test_acceptance_survives_lost_ack_and_redelivery(mvp_database, monkeypatch, 
                 assert not msg.answer.called
             else:
                 await flow.receive(msg, fsm)
-                assert "Не удалось связаться" in text_sent(msg)
+                assert "Запрос мог быть принят" in text_sent(msg)
+                assert "/copilot_runs" in text_sent(msg)
                 callback = await click(fsm, msg, "retry", "redelivered-callback", actor)
                 await fsm.update_data(copilot_seen=[])
                 await flow.callback_action(callback, fsm)  # Even without event ledger: stale/finalized callback.

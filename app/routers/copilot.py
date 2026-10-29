@@ -11,12 +11,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.security import require_actor
 from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, RunListResponse, StartedResponse, ErrorResponse
 from app.marketing_copilot.api_errors import CopilotAPIError
+from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorQuestion, MentorAnswer, CaseFeedback, SavedFeedback, MentorHistory
 from app.marketing_copilot.production import build_production_copilot_api
 
 log = logging.getLogger(__name__)
 
 
 class CopilotRoute(APIRoute):
+    error_model = ErrorResponse
+
     def get_route_handler(self):
         handler = super().get_route_handler()
         async def safe_handler(request):
@@ -24,15 +27,15 @@ class CopilotRoute(APIRoute):
                 return await handler(request)
             except RequestValidationError:
                 # FastAPI's default validation response echoes input values.
-                return JSONResponse(status_code=422, content=ErrorResponse(code="invalid_request").model_dump(mode="json"))
+                return JSONResponse(status_code=422, content=self.error_model(code="invalid_request").model_dump(mode="json"))
             except CopilotAPIError as exc:
-                return JSONResponse(status_code=exc.status, content=ErrorResponse(
+                return JSONResponse(status_code=exc.status, content=self.error_model(
                     code=exc.code, owned_site=exc.owned_site).model_dump(mode="json"))
             except SQLAlchemyError as exc:
                 # A database failure is never a successful start. SQL errors can
                 # contain bound user context: keep them out of ASGI tracebacks.
                 log.error("Copilot database unavailable error_type=%s", type(exc).__name__)
-                return JSONResponse(status_code=503, content=ErrorResponse(
+                return JSONResponse(status_code=503, content=self.error_model(
                     code="temporarily_unavailable").model_dump(mode="json"))
             except HTTPException:
                 raise
@@ -40,7 +43,7 @@ class CopilotRoute(APIRoute):
                 # Keep the programming-error 500 boundary without allowing an
                 # ASGI traceback to print bound input or chained provider data.
                 log.error("Copilot request failed error_type=%s", type(exc).__name__)
-                return JSONResponse(status_code=500, content=ErrorResponse(
+                return JSONResponse(status_code=500, content=self.error_model(
                     code="temporarily_unavailable").model_dump(mode="json"))
         return safe_handler
 
@@ -69,6 +72,12 @@ async def execute(payload: ExecuteRequest, response: Response, actor: int = Depe
     return result
 
 
+@router.get("/executions/{request_key}", response_model=ExecuteResponse)
+async def saved_execution(request_key: Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")],
+                          actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.saved_execution(actor, request_key)
+
+
 @router.get("/runs", response_model=RunListResponse)
 async def recent_runs(limit: Annotated[int, Query(ge=1, le=50)] = 10,
                       offset: Annotated[int, Query(ge=0, le=10000)] = 0,
@@ -80,3 +89,34 @@ async def recent_runs(limit: Annotated[int, Query(ge=1, le=50)] = 10,
 async def get_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
                   actor: int = Depends(require_actor), api=Depends(service)):
     return await api.reader.get(actor, run_id)
+
+
+@router.post("/runs/{run_id}/mentor", response_model=MentorExplanation)
+async def explain_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                      actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.explain(actor, run_id)
+
+
+@router.get("/runs/{run_id}/mentor", response_model=MentorExplanation)
+async def saved_explanation(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                            actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.get(actor, run_id)
+
+
+@router.post("/runs/{run_id}/mentor/questions", response_model=MentorAnswer)
+async def question_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: MentorQuestion,
+                       actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.question(actor, run_id, payload)
+
+
+@router.get("/runs/{run_id}/mentor/questions", response_model=MentorHistory)
+async def mentor_history(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
+                         limit: Annotated[int, Query(ge=1, le=50)] = 50,
+                         actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.history(actor, run_id, limit=limit)
+
+
+@router.post("/runs/{run_id}/mentor/feedback", response_model=SavedFeedback)
+async def feedback_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: CaseFeedback,
+                       actor: int = Depends(require_actor), api=Depends(service)):
+    return await api.mentor.feedback(actor, run_id, payload)

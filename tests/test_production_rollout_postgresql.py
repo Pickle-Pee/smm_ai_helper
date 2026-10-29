@@ -38,7 +38,7 @@ def test_real_readonly_probes_and_same_database_identity(readonly_database_url, 
         results.append(result.get('db', result))
     db, operator = results
     assert db['read_only'] and operator['read_only']
-    assert db['heads'] == ['20261014_0012']
+    assert db['heads'] == ['20261026_0013']
     assert db['identity_fingerprint'] == operator['identity_fingerprint']
     for field in ('unfinished_jobs','current_tokens','metadata_anomalies','graph_plan_anomalies','orphan_executions'):
         assert type(db[field]) is int and db[field]>=0

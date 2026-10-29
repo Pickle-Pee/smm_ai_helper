@@ -10,6 +10,18 @@ import re
 router = Router()
 
 
+@router.message(Command("copilot_result"))
+async def saved_result(message: types.Message):
+    if message.chat.type != "private":
+        await send_text(message, "Откройте личный чат с ботом.")
+        return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2:
+        await send_text(message, "Укажите ключ из сообщения о запросе: /copilot_result КЛЮЧ. Сохранённые ответы доступны 30 дней.")
+        return
+    await flow.saved_result(message, message.from_user.id, parts[1].strip())
+
+
 @router.message(Command("copilot_runs"))
 async def recent_runs(message: types.Message):
     if message.chat.type != "private":
