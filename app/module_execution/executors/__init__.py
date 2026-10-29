@@ -30,6 +30,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    composer=None, registry_version=EXECUTABLE_REGISTRY_VERSION,
                                    market_analyzer: SiteAnalyzer | None = None,
                                    positioning_schema_projection: bool = False,
+                                   positioning_minimal_provider_schema: bool = False,
                                    positioning_product_support_wire: bool = False,
                                    experiments_schema_projection: bool = False,
                                    virtual_cmo_numeric_quote_catalog: bool = False) -> ModuleExecutorRegistry:
@@ -38,6 +39,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
         CompetitorAnalysisExecutor(model_call=model_call, analyzer=analyzer, composer=composer),
         PositioningExecutor(model_call=model_call, composer=composer,
                             provider_schema_projection=positioning_schema_projection,
+                            minimal_provider_schema=positioning_minimal_provider_schema,
                             product_support_wire=positioning_product_support_wire),
         CreatorExecutor(model_call=model_call, composer=composer),
     ]
