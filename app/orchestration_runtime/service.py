@@ -25,6 +25,7 @@ from app.module_registry import ModuleResultStatus
 from .compiler import validate_compiled_plan
 from .contracts import ARTIFACT_SCHEMA, JOB_KIND, WORKFLOW_TYPE, GraphWorkItem, artifact_key, module_job_id, validate_identity, optional, hard_predecessors, CompiledExecutionPlanV2
 from .errors import RuntimeContractError, StartIdentityConflict
+from .retry_policy import RetryGovernanceError, new_policy, reserve, complete, decision
 from .serialization import bounded, fingerprint, plan_from_json, plan_to_json, result_from_json, result_to_json
 
 log = logging.getLogger(__name__)
@@ -55,12 +56,16 @@ def evaluate_result(job_id, result, upstream):
 
 class GraphExecutionService:
     def __init__(self, sessions=AsyncSessionLocal, *, executors, queue=None, clock=utcnow,
-                 lease_seconds=330, max_attempts=3):
+                 lease_seconds=330, max_attempts=3, responses_governance=False, responses_output_budget=192000):
         if lease_seconds <= 0 or not 1 <= max_attempts <= 10:
             raise ValueError("invalid execution policy")
         self.sessions, self.executors, self.queue, self.clock = sessions, executors, queue, clock
         self.lease_seconds, self.max_attempts = lease_seconds, max_attempts
         self.jobs = JobPersistenceService(clock)
+        if type(responses_output_budget) is not int or not 1 <= responses_output_budget <= 1000000:
+            raise ValueError("invalid Responses output budget")
+        self.responses_governance = responses_governance
+        self.responses_output_budget = responses_output_budget
 
     async def _wake(self, jobs):
         if self.queue is not None:
@@ -104,7 +109,7 @@ class GraphExecutionService:
             # ON CONFLICT waits for concurrent start, then exact identity is checked.
             created = await session.scalar(insert(MarketingRun).values(
                 run_id=run_id, user_id=owner_id, workflow_type=WORKFLOW_TYPE, status="queued",
-                input_json={}, state_json={},
+                input_json={"responses_retry": new_policy(len(plan.nodes), self.responses_output_budget)} if self.responses_governance else {}, state_json={},
             ).on_conflict_do_nothing(index_elements=[MarketingRun.run_id]).returning(MarketingRun.run_id))
             run = await session.scalar(select(MarketingRun).where(MarketingRun.run_id == run_id).with_for_update())
             if run.user_id != owner_id or run.workflow_type != WORKFLOW_TYPE:
@@ -285,6 +290,60 @@ class GraphExecutionService:
 
     async def release_attempt(self, item):
         await release_attempt(self.sessions, item.job_id, item.claim_token)
+
+    async def provider_hooks(self, item):
+        async with self.sessions() as session, session.begin():
+            active = await self._active(session, item)
+            if active is None:
+                raise RetryGovernanceError("inactive_graph_attempt")
+            if "responses_retry" not in active[0].input_json:
+                return None
+        async def before(fields):
+            await self._provider_receipt(item, fields, finished=False)
+        async def after(fields):
+            await self._provider_receipt(item, fields, finished=True)
+        return before, after
+
+    async def _provider_receipt(self, item, fields, *, finished):
+        # Existing run -> lease -> Job locks serialize budget across graph nodes.
+        # Commit reservation before network I/O, never hold locks across a POST.
+        names = ("provider_call_id", "graph_attempt_id", "graph_attempt", "module_execution_id",
+                 "node_id", "model", "schema_fingerprint", "max_output_tokens", "retry_owner", "retry_decision")
+        if finished:
+            names += ("outcome", "outcome_unknown", "status", "request_id", "response_id", "incomplete_reason", "failure_reason",
+                      "usage_state", "token_usage_state", "input_tokens", "output_tokens", "reasoning_tokens",
+                      "input_tokens_usage_state", "output_tokens_usage_state", "reasoning_tokens_usage_state", "duration_ms", "http_status")
+        receipt = {name: fields[name] for name in names if name in fields}
+        async with self.sessions() as session, session.begin():
+            active = await self._active(session, item)
+            if active is None:
+                raise RetryGovernanceError("inactive_graph_attempt")
+            run = active[0]
+            policy = run.input_json["responses_retry"]
+            updated = complete(policy, receipt) if finished else reserve(policy, receipt)
+            run.input_json = {**run.input_json, "responses_retry": updated}
+
+    async def retry_decision(self, item, exc, legacy_retryable):
+        async with self.sessions() as session, session.begin():
+            active = await self._active(session, item)
+            if active is None:
+                return False, "stop_inactive_attempt"
+            run, _job, lease = active
+            policy = run.input_json.get("responses_retry")
+            if policy is None:
+                return legacy_retryable, "legacy_retry" if legacy_retryable else "legacy_stop"
+            retryable, reason = decision(exc)
+            calls = [c for c in policy["calls"] if c["node_id"] == item.node_id]
+            if any(c["outcome"] in {"reserved", "unknown", "success"} for c in calls):
+                retryable, reason = False, "stop_unknown_or_completed_call"
+            elif (lease.attempts >= self.max_attempts or len(calls) >= policy["max_node_calls"]
+                  or len(policy["calls"]) >= policy["max_calls"]
+                  or sum(c["max_output_tokens"] for c in policy["calls"]) >= policy["max_output_tokens"]):
+                retryable, reason = False, "stop_retry_exhausted"
+            updated_calls = [{**c, "retry_decision": reason} if c["node_id"] == item.node_id
+                             and c.get("graph_attempt") == item.attempt else c for c in policy["calls"]]
+            run.input_json = {**run.input_json, "responses_retry": {**policy, "calls": updated_calls, "last_retry_decision": reason}}
+            return retryable, reason
 
     async def _active(self, session, item):
         run = await self._run(session, item.run_id)

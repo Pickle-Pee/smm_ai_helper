@@ -40,10 +40,11 @@ class GraphCallContext:
 
 _context = ContextVar("graph_provider_context", default=None)
 _timeout = ContextVar("graph_provider_timeout", default=None)
+_provider_hooks = ContextVar("graph_provider_hooks", default=None)
 
 
 @contextmanager
-def graph_call_context(item, request, timeout):
+def graph_call_context(item, request, timeout, provider_hooks=None):
     context = GraphCallContext(
         job_id=item.job_id, run_id=item.run_id, plan_revision=item.plan_revision,
         node_id=item.node_id, module_id=request.module_id.value,
@@ -53,9 +54,11 @@ def graph_call_context(item, request, timeout):
     )
     token = _context.set(context)
     timeout_token = _timeout.set(timeout)
+    hooks_token = _provider_hooks.set(provider_hooks)
     try:
         yield
     finally:
+        _provider_hooks.reset(hooks_token)
         _timeout.reset(timeout_token)
         _context.reset(token)
 
@@ -72,3 +75,7 @@ def correlation_fields():
 def cancellation_outcome():
     timeout = _timeout.get()
     return "timeout" if timeout is not None and timeout.expired() else "cancelled"
+
+
+def provider_hooks():
+    return _provider_hooks.get()

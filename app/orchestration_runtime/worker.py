@@ -1,6 +1,7 @@
 """Durable graph execution; no ingress or context acquisition."""
 import asyncio
 import logging
+import hashlib
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
@@ -65,8 +66,9 @@ class ModuleGraphWorker:
             if work is None:
                 return False
             binding, request = work
+            hooks = await self.service.provider_hooks(item) if hasattr(self.service, "provider_hooks") else None
             async with asyncio.timeout(self.timeout_seconds) as timeout:
-                with graph_call_context(item, request, timeout):
+                with graph_call_context(item, request, timeout, hooks):
                     result = await self.dispatcher.dispatch(binding, request)
             if result.normalized_result.module_status is ModuleResultStatus.BLOCKED:
                 await self.service.fail(item, code="module_blocked", blocking_reasons=result.normalized_result.blocking_reasons)
@@ -84,6 +86,15 @@ class ModuleGraphWorker:
             # Consume a failed attempt explicitly; log only safe type/identity.
             log.error("Graph attempt failed run_id=%s job_id=%s error_type=%s", item.run_id, item.job_id, type(exc).__name__)
             retryable = transient(exc)
+            reason = "legacy_retry" if retryable else "legacy_stop"
+            if hasattr(self.service, "retry_decision"):
+                retryable, reason = await self.service.retry_decision(item, exc, retryable)
+            attempt_id = hashlib.sha256(item.claim_token.encode()).hexdigest()
+            log.info("Graph retry decision run_id=%s job_id=%s node_id=%s graph_attempt_id=%s module_execution_id=%s retry_owner=workflow retry_decision=%s usage_state=not_applicable",
+                     item.run_id, item.job_id, item.node_id, attempt_id, item.job_id, reason,
+                     extra={"job_id": item.job_id, "run_id": item.run_id, "node_id": item.node_id,
+                            "graph_attempt_id": attempt_id, "module_execution_id": item.job_id,
+                            "retry_owner": "workflow", "retry_decision": reason, "usage_state": "not_applicable"})
             await self.service.fail(item, code="provider_transient" if retryable else "execution_invalid", retryable=retryable)
         finally:
             try:
