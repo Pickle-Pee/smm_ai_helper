@@ -1,4 +1,7 @@
-# POSITIONING provider schema experiment (#137)
+# POSITIONING provider schema experiment (#138)
+
+Requested as #137; GitHub assigned #138 because another PR took #137 during
+implementation. The unrelated PR is not changed by this experiment.
 
 Base: `4685ce680df524617b2050cc293c592d29d67ed8` (current master after
 PR #136, merged 2026-10-29 22:35:02 UTC; python and container-smoke SUCCESS).
