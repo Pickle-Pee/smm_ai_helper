@@ -251,16 +251,13 @@ def test_caller_mode_determines_envelope_outcome(monkeypatch, caplog, body, sing
     async def exercise():
         invocation = chat([{"role": "user", "content": SECRET}], "configured-model",
                           max_output_tokens=4000, single_attempt=single_attempt)
-        if single_attempt:
-            with pytest.raises(ModelResponseError):
-                await invocation
-        else:
-            assert await invocation == (SECRET, {"output_tokens": 0})
+        with pytest.raises(ModelResponseError):
+            await invocation
     asyncio.run(exercise())
     assert len(requests) == len(events(caplog)) == len(events(caplog, "started")) == 1
     assert requests[0] == {"model": "configured-model", "input": [{"role": "user", "content": SECRET}],
                            "max_output_tokens": 4000}
-    assert events(caplog)[0].outcome == ("rejected" if single_attempt else "success")
+    assert events(caplog)[0].outcome == "rejected"
     assert events(caplog)[0].request_mode == ("single_attempt" if single_attempt else "legacy")
     assert all(c.is_closed for c in clients)
     assert_redacted(caplog)
@@ -292,7 +289,7 @@ def test_redirect_is_http_error_without_followup_post(monkeypatch, caplog, singl
     {"status": "completed", "output": []},
 ], ids=["incomplete-with-text", "empty-output"])
 @pytest.mark.parametrize("final_text", [SECRET, ""], ids=["fallback-text", "fallback-empty"])
-def test_legacy_output_retry_outcomes_follow_existing_two_post_path(monkeypatch, caplog, first, final_text):
+def test_legacy_rejected_envelope_does_not_trigger_output_retry(monkeypatch, caplog, first, final_text):
     requests = []
     def respond(request):
         requests.append(json.loads(request.content))
@@ -302,15 +299,11 @@ def test_legacy_output_retry_outcomes_follow_existing_two_post_path(monkeypatch,
     clients = install_transport(monkeypatch, respond)
     monkeypatch.setattr(settings, "HTTP_RETRIES", 0)
     invocation = chat([{"role": "user", "content": SECRET}], "configured-model", max_output_tokens=4000)
-    if final_text:
-        assert asyncio.run(invocation) == (SECRET, {})
-    else:
-        with pytest.raises(RuntimeError):
-            asyncio.run(invocation)
-    assert len(requests) == len(events(caplog)) == len(events(caplog, "started")) == 2
-    assert [r.outcome for r in events(caplog)] == ["retry_requested", "success" if final_text else "rejected"]
-    assert all(r.request_mode == "legacy" for r in events(caplog))
-    assert requests[1] == {**requests[0], "max_output_tokens": 24000, "reasoning": {"effort": "low"}}
-    assert len({r.provider_call_id for r in events(caplog)}) == 2
+    with pytest.raises(ModelResponseError):
+        asyncio.run(invocation)
+    assert len(requests) == len(events(caplog)) == len(events(caplog, "started")) == 1
+    assert events(caplog)[0].outcome == "rejected"
+    assert events(caplog)[0].request_mode == "legacy"
+    assert requests[0]["max_output_tokens"] == 4000
     assert all(c.is_closed for c in clients)
     assert_redacted(caplog)

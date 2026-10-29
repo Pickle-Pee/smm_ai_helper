@@ -17,7 +17,9 @@ from app.model_generation_policy import ModuleOutputBudget, module_output_tokens
 
 log = logging.getLogger(__name__)
 
-RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+# HTTP 408 may describe an unknown execution outcome; leave retry to the owner.
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+MAX_LEGACY_POSTS = 3
 
 
 class ModelResponseFailureReason(str, Enum):
@@ -61,7 +63,7 @@ def _single_attempt_output(data: Any) -> str:
         else:
             failure = ModelResponseFailureReason.INCOMPLETE_OTHER
         raise ModelResponseError(failure)
-    if data.get("status") not in (None, "completed"):
+    if data.get("status") != "completed":
         raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
 
     output = data.get("output", [])
@@ -73,6 +75,8 @@ def _single_attempt_output(data: Any) -> str:
             raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
         if item.get("type") != "message":
             continue
+        if item.get("status") not in (None, "completed"):
+            raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
         blocks = item.get("content", [])
         if not isinstance(blocks, list):
             raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE)
@@ -190,8 +194,8 @@ def _log_provider_event(fields, *, level=logging.INFO):
             *fields.values(), extra=fields)
 
 
-async def _post_response(client, url, *, headers, payload, single_attempt, allow_output_retry=True):
-    """Observe exactly one existing POST; never change payloads or retry policy."""
+async def _post_response(client, url, *, headers, payload, single_attempt):
+    """Observe exactly one POST using the same envelope barrier as the caller."""
     schema = payload.get("text", {}).get("format", {}).get("schema")
     fields = {
         "telemetry_version": "llm_provider_request.v1",
@@ -221,23 +225,13 @@ async def _post_response(client, url, *, headers, payload, single_attempt, allow
             outcome = "http_error"
         else:
             try:
-                if single_attempt:
-                    _single_attempt_output(data)
-                    outcome = "success"
-                else:
-                    content = _extract_output_text(data)
-                    if allow_output_retry and _legacy_output_needs_retry(data, content):
-                        outcome = "retry_requested"
-                    elif content:
-                        outcome = "success"
-                    else:
-                        reason = ModelResponseFailureReason.INVALID_ENVELOPE
-                        outcome = "rejected"
+                _single_attempt_output(data)
+                outcome = "success"
             except ModelResponseError as exc:
                 reason = exc.reason
                 outcome = "rejected"
             except (ValueError, KeyError, TypeError, AttributeError):
-                # Observation must not replace the legacy caller's error/retry path.
+                # Malformed provider data must not escape the bounded diagnostics contract.
                 reason = ModelResponseFailureReason.INVALID_ENVELOPE
                 outcome = "rejected"
         return response
@@ -253,6 +247,9 @@ async def _post_response(client, url, *, headers, payload, single_attempt, allow
             duration_ms=min(max(round((time.monotonic() - started) * 1000), 0), 2 ** 31 - 1),
             http_status=response.status_code if response is not None else None,
             response_received=response is not None,
+            # Reported zero is a counter, never proof that a POST was free.
+            billing_outcome="unknown",
+            outcome_unknown=response is None or response.status_code == 408,
         )
         fields.update(_response_metadata(data, payload["max_output_tokens"]))
         if response is None:
@@ -277,47 +274,8 @@ async def _post_response(client, url, *, headers, payload, single_attempt, allow
 
 
 def _extract_output_text(data: Dict[str, Any]) -> str:
-    """
-    Responses API возвращает items в data["output"].
-    Нам нужен текст из message(role=assistant)->content(type=output_text).
-
-    Важно: иногда ответ может быть incomplete и содержать только reasoning.
-    В этом случае возвращаем пустую строку, чтобы chat() мог сделать ретрай.
-    """
-    top = data.get("output_text")
-    if isinstance(top, str) and top.strip():
-        return top.strip()
-
-    output = data.get("output") or []
-    texts: list[str] = []
-
-    for item in output:
-        if item.get("type") != "message":
-            continue
-        if item.get("role") != "assistant":
-            continue
-
-        for block in (item.get("content") or []):
-            btype = block.get("type")
-            if btype == "output_text":
-                t = block.get("text")
-                if t:
-                    texts.append(t)
-            elif btype == "refusal":
-                raise ModelResponseError(ModelResponseFailureReason.REFUSAL)
-
-    return "\n".join(texts).strip()
-
-
-def _is_incomplete_max_tokens(data: Dict[str, Any]) -> bool:
-    return (
-        data.get("status") == "incomplete"
-        and (data.get("incomplete_details") or {}).get("reason") == "max_output_tokens"
-    )
-
-
-def _legacy_output_needs_retry(data: Dict[str, Any], content: str) -> bool:
-    return _is_incomplete_max_tokens(data) or not content
+    """Compatibility entrypoint; all callers share the completed-envelope barrier."""
+    return _single_attempt_output(data)
 
 
 def _choose_budget(task: str | None, response_format: Dict[str, Any] | None) -> int:
@@ -353,7 +311,12 @@ async def chat(
 
     single_attempt is for durable graph execution: one bounded request, no
     schema fallback or token-budget expansion; JobExecution owns retries.
-    Other callers retain the existing transport policy.
+    Legacy calls allow at most three POSTs, bounded by HTTP_RETRIES + 1.
+    Only explicit retryable HTTP errors and the known unsupported-temperature
+    rejection can repeat. Every POST retains its initial token cap and schema.
+    Rejected envelopes and unknown transport outcomes never retry locally.
+    The returned usage dictionary belongs to the accepted response; receipts
+    for every POST (including rejected ones) are kept by existing telemetry.
     """
     url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
@@ -398,106 +361,34 @@ async def chat(
         payload["reasoning"] = {"effort": "low"}
 
     timeout = httpx.Timeout(settings.HTTP_TIMEOUT)
-    last_error: Exception | None = None
+    posts = 1 if single_attempt else min(MAX_LEGACY_POSTS, max(1, settings.HTTP_RETRIES + 1))
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(1 if single_attempt else settings.HTTP_RETRIES + 1):
+        for attempt in range(posts):
+            # The payload is never enlarged; the one loop accounts for every POST.
+            # Do not catch transport errors: a lost response has an unknown outcome.
+            resp = await _post_response(client, url, headers=headers, payload=payload,
+                                        single_attempt=single_attempt)
+            if not single_attempt and resp.status_code == 400 and "temperature" in payload:
+                try:
+                    error = resp.json().get("error")
+                except (ValueError, AttributeError):
+                    error = None
+                if (isinstance(error, dict) and error.get("param") == "temperature"
+                        and error.get("code") == "unsupported_value" and attempt + 1 < posts):
+                    # Existing, narrow compatibility policy for a known rejection.
+                    # It consumes a normal attempt and never changes text.format.
+                    payload.pop("temperature")
+                    continue
+            if (not single_attempt and resp.status_code in RETRYABLE_STATUS_CODES
+                    and attempt + 1 < posts):
+                await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
+                continue
+            resp.raise_for_status()
             try:
-                resp = await _post_response(client, url, headers=headers, payload=payload,
-                                            single_attempt=single_attempt)
-
-                if single_attempt:
-                    # Never log provider bodies or silently drop the response schema.
-                    resp.raise_for_status()
-                    data = None
-                    try:
-                        try:
-                            data = resp.json()
-                        except ValueError:
-                            raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE) from None
-                        content = _single_attempt_output(data)
-                    except ModelResponseError as exc:
-                        raise exc from None
-                    return content, data.get("usage", {}) or {}
-
-                if resp.status_code >= 400:
-                    log.error("OpenAI responses error status=%s", resp.status_code)
-
-                    try:
-                        err = (resp.json() or {}).get("error", {}) or {}
-                        param = err.get("param")
-                        code = err.get("code")
-
-                        if (
-                            resp.status_code == 400
-                            and param == "temperature"
-                            and code == "unsupported_value"
-                            and "temperature" in payload
-                        ):
-                            payload.pop("temperature", None)
-                            resp = await _post_response(client, url, headers=headers, payload=payload,
-                                                        single_attempt=False)
-
-                        elif (
-                            resp.status_code == 400
-                            and (param in {"text", "text.format"} or "text" in str(param))
-                            and code in {"unsupported_value", "invalid_request_error"}
-                            and "text" in payload
-                        ):
-                            payload.pop("text", None)
-                            resp = await _post_response(client, url, headers=headers, payload=payload,
-                                                        single_attempt=False)
-
-                        elif resp.status_code not in RETRYABLE_STATUS_CODES:
-                            resp.raise_for_status()
-
-                    except ValueError:
-                        if resp.status_code not in RETRYABLE_STATUS_CODES:
-                            resp.raise_for_status()
-
-                resp.raise_for_status()
                 data = resp.json()
-
-                content = _extract_output_text(data)
-
-                if _legacy_output_needs_retry(data, content):
-                    prev = int(payload.get("max_output_tokens") or 0)
-                    payload["max_output_tokens"] = max(2000, prev * 6 if prev else 2000)
-                    payload["reasoning"] = {"effort": "low"}
-
-                    resp2 = await _post_response(client, url, headers=headers, payload=payload,
-                                                single_attempt=False, allow_output_retry=False)
-                    resp2.raise_for_status()
-                    data2 = resp2.json()
-
-                    content2 = _extract_output_text(data2).strip()
-                    usage2 = data2.get("usage", {}) or {}
-
-                    if not content2:
-                        raise RuntimeError("Responses returned no text even after retry")
-
-                    return content2, usage2
-
-                usage = data.get("usage", {}) or {}
-                return content.strip(), usage
-
-            except httpx.HTTPStatusError as exc:
-                if single_attempt:
-                    raise
-                last_error = exc
-                status = exc.response.status_code if exc.response else None
-                if status not in RETRYABLE_STATUS_CODES:
-                    raise
-                if attempt >= settings.HTTP_RETRIES:
-                    break
-                await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
-
-            except (httpx.TimeoutException, httpx.TransportError, ValueError, KeyError, RuntimeError) as exc:
-                if single_attempt:
-                    raise
-                last_error = exc
-                if attempt >= settings.HTTP_RETRIES:
-                    break
-                await asyncio.sleep(settings.HTTP_BACKOFF * (2**attempt))
-
-    raise RuntimeError("OpenAI responses failed") from last_error
+            except ValueError:
+                raise ModelResponseError(ModelResponseFailureReason.INVALID_ENVELOPE) from None
+            content = _single_attempt_output(data)
+            usage = data.get("usage")
+            return content, usage if isinstance(usage, dict) else {}

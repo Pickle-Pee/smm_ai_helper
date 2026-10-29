@@ -334,7 +334,7 @@ def test_exception_rejects_arbitrary_provider_text():
 
 def test_legacy_refusal_exception_is_also_bounded():
     with pytest.raises(ModelResponseError) as caught:
-        _extract_output_text({"output": [{"type": "message", "role": "assistant", "content": [
+        _extract_output_text({"status": "completed", "output": [{"type": "message", "role": "assistant", "content": [
             {"type": "refusal", "refusal": "PRIVATE_PROVIDER_TEXT"},
         ]}]})
     assert caught.value.reason is ModelResponseFailureReason.REFUSAL
