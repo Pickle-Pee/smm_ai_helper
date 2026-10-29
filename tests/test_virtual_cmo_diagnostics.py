@@ -38,7 +38,7 @@ def test_uncited_exact_quote_replay_uses_original_pipeline_and_one_post(
     calls = []
     def respond(wire):
         calls.append(wire.content)
-        return httpx.Response(200, json={"output_text": json.dumps(output)})
+        return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(output)})
     install_transport(monkeypatch, respond)
     import app.orchestration_runtime.service as service
     evaluate = service.evaluate_result
@@ -157,7 +157,7 @@ def test_one_call_no_retry_server_validation_quality_and_safe_output(monkeypatch
             raise httpx.ReadTimeout("PRIVATE_SOURCE_SECRET", request=wire)
         if mode == "server":
             return httpx.Response(503, json={"error": {"message": "PRIVATE_SOURCE_SECRET"}})
-        return httpx.Response(200, json={"output_text": json.dumps(output)})
+        return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(output)})
     install_transport(monkeypatch, respond)
     import app.orchestration_runtime.service as service
     gates = service.evaluate_result
@@ -307,7 +307,7 @@ def test_second_post_is_blocked_even_if_adapter_is_called_twice(monkeypatch, rep
     calls = []
     def respond(wire):
         calls.append(wire.content)
-        return httpx.Response(200, json={"output_text": output})
+        return httpx.Response(200, json={"status": "completed", "output_text": output})
     install_transport(monkeypatch, respond)
     import app.orchestration_runtime.model_adapter as adapter
     original = adapter.production_model_call
@@ -360,7 +360,7 @@ def test_cli_selected_mode_uses_exact_approved_wire_once(tmp_path, monkeypatch, 
     calls = []
     def respond(wire):
         calls.append(json.loads(wire.content))
-        return httpx.Response(200, json={"output_text": output})
+        return httpx.Response(200, json={"status": "completed", "output_text": output})
     install_transport(monkeypatch, respond)
     previous = logging.root.manager.disable
     try:

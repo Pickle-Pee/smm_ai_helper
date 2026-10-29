@@ -90,7 +90,12 @@ async def persisted(db, rid, jid):
 @pytest.mark.parametrize("boundary", ["write", "commit", "disconnect"])
 @pytest.mark.parametrize("mode", [503, 408, "timeout", "rejected"])
 def test_receipt_failure_keeps_provider_error_and_stops_without_resend(mvp_database, monkeypatch, caplog, boundary, mode):
-    caplog.set_level(logging.INFO, logger="app.orchestration_runtime.worker")
+    # Alembic roundtrip tests call fileConfig(disable_existing_loggers=True).
+    # set_level alone cannot undo logger.disabled; isolate emission/redaction
+    # assertions from that process-global state and restore it with monkeypatch.
+    for name in ("app.orchestration_runtime.worker", "app.llm.openai_text"):
+        monkeypatch.setattr(logging.getLogger(name), "disabled", False)
+        caplog.set_level(logging.INFO, logger=name)
     async def exercise():
         service, clock, rid, owner = await setup(mvp_database, production_model_call, responses_governance=True)
         jid = module_job_id(rid, 1, "competitor_analysis")
