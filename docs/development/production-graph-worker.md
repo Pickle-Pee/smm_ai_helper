@@ -43,10 +43,13 @@ The adapter returns text only; raw provider envelopes are never persisted or
 logged by this path. Instructions request concise findings/rationales, never
 hidden chain-of-thought. Provider-specific dependencies stay outside executors.
 
-Legacy `chat` callers keep their existing retry/fallback behavior. The new opt-in
-transport policy is necessary because its legacy fallback can remove the schema
-and expand the token budget. Production graph tests exercise the actual HTTP
-transport with `httpx.MockTransport`, as well as an injected model capability.
+Legacy `chat` callers now share the completed-envelope barrier and retain the
+schema and initial capped budget on every POST. Local repeats have a single
+three-POST ceiling and stop on incomplete/refusal/invalid envelopes or unknown
+transport outcomes. See [Responses transport hardening](responses-transport-hardening.md).
+Graph single-attempt and durable retry ownership remain unchanged. Production
+graph tests exercise the actual HTTP transport with `httpx.MockTransport`, as
+well as an injected model capability.
 
 COMPETITOR_ANALYSIS and MARKET_ANALYSIS share the existing cache-free
 `build_public_site_analyzer()` capability over `UrlAnalyzer.analyze_url`, safe

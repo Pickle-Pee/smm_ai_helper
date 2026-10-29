@@ -32,7 +32,7 @@ def test_adapter_preserves_schema_bound_and_raw_text(monkeypatch):
     seen = []
     def respond(request):
         seen.append(json.loads(request.content))
-        return httpx.Response(200, json={"output_text": '{"malformed":true}', "usage": {"total_tokens": 12}})
+        return httpx.Response(200, json={"status": "completed", "output_text": '{"malformed":true}', "usage": {"total_tokens": 12}})
     clients = install_transport(monkeypatch, respond)
     schema = {"type": "object", "properties": {}, "additionalProperties": False, "required": []}
     raw = asyncio.run(production_model_call(instruction="Strict JSON; no hidden reasoning", text="input", response_schema=schema))
@@ -64,7 +64,7 @@ def test_one_request_no_fallback_no_expansion_and_safe_errors(monkeypatch, caplo
         if mode == "incomplete":
             return httpx.Response(200, json={"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
                                              "output_text": "{}"})
-        return httpx.Response(200, json={"output": [{"type": "message", "role": "assistant",
+        return httpx.Response(200, json={"status": "completed", "output": [{"type": "message", "role": "assistant",
                                                     "content": [{"type": "refusal", "refusal": "SECRET"}]}]})
     clients = install_transport(monkeypatch, respond)
     with pytest.raises(Exception) as caught:
@@ -80,7 +80,7 @@ def test_empty_or_malformed_text_reaches_strict_executor_without_retry(monkeypat
     calls = []
     def respond(request):
         calls.append(request)
-        return httpx.Response(200, json={"output_text": "not JSON SECRET"})
+        return httpx.Response(200, json={"status": "completed", "output_text": "not JSON SECRET"})
     install_transport(monkeypatch, respond)
     runtime = build_production_graph_runtime(queue=queue(), analyzer=analyzer())
     with pytest.raises(ExecutorOutputError):

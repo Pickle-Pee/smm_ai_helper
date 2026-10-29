@@ -28,7 +28,8 @@ No provider text is placed in the exception; decoder context is suppressed.
 Refusal is checked before the convenience `output_text` shortcut. Completed
 nonempty text and usage retain their successful return shape; JSON semantics
 remain the executor's responsibility. The legacy refusal exception also uses
-the safe enum, without changing legacy retry ownership.
+the safe enum. Legacy local retries now follow the bounded
+[Responses transport policy](responses-transport-hardening.md).
 
 The rejection warning contains only `reason`, configured `model`, effective
 `max_output_tokens`, and optional `output_tokens`/`reasoning_tokens`. Counters
