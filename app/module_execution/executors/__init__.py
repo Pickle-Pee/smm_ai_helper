@@ -33,6 +33,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    positioning_minimal_provider_schema: bool = False,
                                    positioning_product_support_wire: bool = False,
                                    experiments_schema_projection: bool = False,
+                                   experiments_strategic_parent_wire: bool = False,
                                    virtual_cmo_numeric_quote_catalog: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
     implementations = [
@@ -49,7 +50,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
             VirtualCMOExecutor(model_call=model_call, composer=composer,
                                numeric_quote_catalog_enabled=virtual_cmo_numeric_quote_catalog),
             ExperimentsExecutor(model_call=model_call, composer=composer,
-                                provider_schema_projection=experiments_schema_projection),
+                                provider_schema_projection=experiments_schema_projection,
+                                strategic_parent_wire=experiments_strategic_parent_wire),
         ))
     registry = ModuleExecutorRegistry(implementations)
     validate_executor_coherence(metadata, registry)

@@ -9,11 +9,16 @@ from app.module_registry import ModuleId, ModuleRegistry
 from app.model_generation_policy import ModuleOutputBudget
 
 from .common import (
-    LocalEvidence, OutputFailureStage, ResultContractError, ResultFailureRule,
+    LocalEvidence, ExecutorOutputError, OutputFailureStage, ResultContractError, ResultFailureRule,
     blocked, first_party_evidence, log, normalize_result, parent_claims,
     scoped_facts, stable_id,
 )
-from .provider_schema import schema_measurement, SchemaProjectionError
+from .provider_schema import (
+    schema_measurement, SchemaProjectionError,
+    collapse_redundant_support_anyof, collapse_single_support_anyof,
+)
+from .support_schema import SupportRequirement
+from .experiments_support_wire import WIRE_VERSION, strategic_parent_wire_schema, decode_strategic_parent_wire
 from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
@@ -50,16 +55,35 @@ Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes 
 learning_record explicit in requested canonical outputs. At most three experiments."""
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
 
-    def __init__(self, *, model_call, composer=None, provider_schema_projection=False):
+    def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
+                 strategic_parent_wire=False):
         if type(provider_schema_projection) is not bool:
             raise TypeError("Expected boolean EXPERIMENTS projection policy")
+        if type(strategic_parent_wire) is not bool:
+            raise TypeError("Expected boolean EXPERIMENTS strategic parent wire policy")
         super().__init__(model_call=model_call, composer=composer)
         self._provider_schema_projection = provider_schema_projection
+        self._strategic_parent_wire = strategic_parent_wire
+
+    def support_requirement_for(self, request):
+        # Every accepted output already requires an eligible strategic parent
+        # in build_result. Express the nonempty part before model execution.
+        return SupportRequirement.PARENT_REQUIRED
+
+    def wire_schema_for(self, request, validation_schema, evidence):
+        if self._strategic_parent_wire:
+            return strategic_parent_wire_schema(validation_schema, strategic_parents(request))
+        return validation_schema
+
+    def decode_wire_payload(self, request, payload, evidence):
+        return decode_strategic_parent_wire(payload, strategic_parents(request))
 
     def provider_schema_for(self, request, validation_schema):
         try:
             if self._provider_schema_projection:
-                provider_schema, removed = strip_schema_annotations(validation_schema)
+                simplified = collapse_redundant_support_anyof(validation_schema)
+                simplified = collapse_single_support_anyof(simplified)
+                provider_schema, removed = strip_schema_annotations(simplified)
             else:
                 provider_schema = super().provider_schema_for(request, validation_schema)
                 removed = 0
@@ -68,8 +92,11 @@ learning_record explicit in requested canonical outputs. At most three experimen
         except (SchemaProjectionError, TypeError, ValueError, RecursionError):
             log.warning("EXPERIMENTS schema projection rejected code=equivalence_unproved")
             raise SchemaProjectionError("annotation_projection_not_equivalent") from None
-        fields = {"schema_projection_enabled": self._provider_schema_projection,
-            "schema_projection_applied": removed > 0, "schema_projection_annotations_removed": removed,
+        fields = {"strategic_parent_wire_enabled": self._strategic_parent_wire,
+            "schema_contract_version": WIRE_VERSION if self._strategic_parent_wire else self.schema_version,
+            "schema_projection_enabled": self._provider_schema_projection,
+            "schema_projection_applied": provider_schema != validation_schema,
+            "schema_projection_annotations_removed": removed,
             "validation_schema_bytes": original["bytes"], "validation_schema_sha256": original["sha256"],
             "provider_schema_bytes": provider["bytes"], "provider_schema_sha256": provider["sha256"]}
         log.info("EXPERIMENTS provider schema " + " ".join(f"{key}=%s" for key in fields),
@@ -99,6 +126,11 @@ learning_record explicit in requested canonical outputs. At most three experimen
     def build_result(self, request, output, evidence, parents):
         eligible = strategic_parents(request)
         for output_index, statement in enumerate(output.outputs):
+            # Reject before the first output's design/constraint union. That
+            # normalization must never repair duplicated model citations.
+            if (len(statement.evidence_ids) != len(set(statement.evidence_ids))
+                    or len(statement.parent_claim_ids) != len(set(statement.parent_claim_ids))):
+                raise ExecutorOutputError(stage=OutputFailureStage.SUPPORT_IDENTITY_INVALID)
             if not set(statement.parent_claim_ids) & eligible.keys():
                 raise ResultContractError(ResultFailureRule.OUTPUT_MISSING_STRATEGIC_PARENT, output_index=output_index)
         for experiment_index, experiment in enumerate(output.experiments):
