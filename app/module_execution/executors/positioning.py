@@ -51,7 +51,10 @@ HYPOTHESIS. Without customer_job_or_need, JTBD_frame and demand_context must be
 HYPOTHESIS. Without relevant_alternative, category, frame_of_reference and
 points_of_parity must be HYPOTHESIS, including when citing accepted factual parents.
 Never treat an upstream hypothesis as observed evidence. Cite materially used
-COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
+COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids.
+Within each statement, evidence_ids and parent_claim_ids must each contain unique
+IDs. Cite each source once per array; do not repeat the product-truth ID when it
+already appears among that statement's evidence_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
