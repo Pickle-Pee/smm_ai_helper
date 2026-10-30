@@ -30,6 +30,27 @@ from tests.test_copilot_application import (
 from tests.test_strategy_builder import strategy_compiled, strategy_executors
 
 
+@pytest.mark.parametrize("family", ["evidence_ids", "parent_claim_ids"])
+def test_positioning_instructs_unique_citations_and_still_rejects_duplicates(family):
+    from app.module_execution import UpstreamExecutionResult
+    parent = dispatch(request(ModuleId.POSITIONING))
+    invocation = request(ModuleId.POSITIONING, upstream=(
+        UpstreamExecutionResult(producer_node_id="accepted_positioning", result=parent),))
+
+    def duplicate(payload, data):
+        ids = payload["outputs"][0][family]
+        assert ids
+        ids.append(ids[0])
+
+    model = FakeModel(duplicate, use_parents=True)
+    with pytest.raises(ExecutorOutputError) as caught:
+        dispatch(invocation, model)
+    assert caught.value.stage is OutputFailureStage.SUPPORT_IDENTITY_INVALID
+    assert len(model.calls) == 1
+    assert "evidence_ids and parent_claim_ids must each contain unique" in model.calls[0]["instruction"]
+    assert "do not repeat the product-truth ID" in model.calls[0]["instruction"]
+
+
 @pytest.fixture(params=[False, True], ids=["logger-enabled", "logger-disabled"])
 def rejection_log(monkeypatch, request):
     from app.module_execution.executors.common import log
