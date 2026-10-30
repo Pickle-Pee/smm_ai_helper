@@ -10,6 +10,7 @@ from .common import (
 from .provider_schema import (
     SchemaProjectionError, collapse_single_support_anyof, single_support_anyof_count, schema_measurement,
 )
+from .positioning_provider_schema import minimal_positioning_schema
 from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
     PositioningWithoutSeedsOutput,
@@ -54,7 +55,12 @@ COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
-                 product_support_wire=False):
+                 product_support_wire=False, minimal_provider_schema=False):
+        if type(minimal_provider_schema) is not bool:
+            raise TypeError("Expected boolean POSITIONING minimal provider schema policy")
+        if minimal_provider_schema and (provider_schema_projection or product_support_wire):
+            raise ValueError("POSITIONING minimal schema requires other POSITIONING experiments disabled")
+        self._minimal_provider_schema = minimal_provider_schema
         if type(provider_schema_projection) is not bool:
             raise TypeError("Expected boolean POSITIONING projection policy")
         super().__init__(model_call=model_call, composer=composer)
@@ -81,7 +87,9 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
 
     def provider_schema_for(self, request, validation_schema):
         collapsed = 0
-        if self._provider_schema_projection and single_support_anyof_count(validation_schema):
+        if self._minimal_provider_schema:
+            provider_schema = minimal_positioning_schema()
+        elif self._provider_schema_projection and single_support_anyof_count(validation_schema):
             try:
                 provider_schema = collapse_single_support_anyof(validation_schema)
             except SchemaProjectionError:
@@ -94,6 +102,7 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
         original = schema_measurement(validation_schema)
         provider = schema_measurement(provider_schema)
         fields = {"module_id": self.module_id.value, "execution_id": request.execution_id,
+            "minimal_provider_schema_enabled": self._minimal_provider_schema,
             "schema_projection_enabled": self._provider_schema_projection,
             "schema_projection_applied": collapsed > 0, "schema_projection_nodes": collapsed,
             "validation_schema_bytes": original["bytes"], "validation_schema_sha256": original["sha256"],

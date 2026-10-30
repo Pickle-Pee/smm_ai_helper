@@ -1,0 +1,661 @@
+{
+  "comparisons": {
+    "job_0_alternative_0": {
+      "canonicalization": "UTF-8, sorted keys, compact separators, ensure_ascii=False",
+      "http_body_encoding": "httpx.Request(json=payload).content; insertion order; no headers",
+      "hypothesis": "unproven",
+      "live_calls": 0,
+      "max_output_tokens": 16000,
+      "minimal": {
+        "http_body": {
+          "bytes": 59132,
+          "sha256": "81298a9a9f39524b13ead7af0f79c92b1ef1b6aaa747d7312ea040e410ee697e"
+        },
+        "payload": {
+          "bytes": 59132,
+          "sha256": "9ecb62cb01c64a09ee179a827a572280f3ab8e7f42286cb62d7908517287d4a4"
+        },
+        "required_field_occurrences": 9,
+        "schema": {
+          "bytes": 644,
+          "sha256": "9d603cd2f94cba8959d3939c64288d32005d8fe2d76658915748cbf65a4a6c52"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 0,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 0,
+          "enum_values_count": 0,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 0,
+            "$ref": 0,
+            "additionalProperties": 2,
+            "allOf": 0,
+            "anyOf": 0,
+            "const": 0,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 0,
+            "if": 0,
+            "maxItems": 0,
+            "maxLength": 0,
+            "minItems": 0,
+            "minLength": 0,
+            "not": 0,
+            "oneOf": 0,
+            "required": 2,
+            "then": 0,
+            "type": 15
+          },
+          "object_nodes": 2,
+          "property_occurrences": 9,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 0,
+          "resolved_anyof_nodes": 0,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 86,
+          "single_branch_anyof_nodes": 0,
+          "support_allowlist_counts": [
+            0,
+            0
+          ],
+          "support_anyof_nodes": 0,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "model": "gpt-5",
+      "only_changed_path": "text.format.schema",
+      "original": {
+        "http_body": {
+          "bytes": 65922,
+          "sha256": "e8c14edbe577c66b3a6c5e7252bc6740ae983c3cfa46bf6b4a2b084ffbbcabf7"
+        },
+        "payload": {
+          "bytes": 65922,
+          "sha256": "34c4b0adde87bbb0d1fd3c7f8166ae8c6ab4dc4280ad95c8ad5348e0674c2dfe"
+        },
+        "required_field_occurrences": 51,
+        "schema": {
+          "bytes": 7434,
+          "sha256": "8e683c5cb10fe37329ca8fff3eff53bf06561861d732be20d950c8ce5a4fe0e7"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 5,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 826,
+          "enum_values_count": 75,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 1,
+            "$ref": 12,
+            "additionalProperties": 9,
+            "allOf": 0,
+            "anyOf": 5,
+            "const": 6,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 19,
+            "if": 0,
+            "maxItems": 19,
+            "maxLength": 19,
+            "minItems": 5,
+            "minLength": 19,
+            "not": 0,
+            "oneOf": 0,
+            "required": 9,
+            "then": 0,
+            "type": 71
+          },
+          "object_nodes": 9,
+          "property_occurrences": 51,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 2,
+          "resolved_anyof_nodes": 5,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 1516,
+          "single_branch_anyof_nodes": 4,
+          "support_allowlist_counts": [
+            3,
+            0
+          ],
+          "support_anyof_nodes": 4,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "package_versions": {
+        "httpx": "0.28.1",
+        "jsonschema": "4.26.0",
+        "pydantic": "2.13.4"
+      },
+      "reasoning": {
+        "effort": "low"
+      },
+      "schema_version": "positioning_schema_experiment.v1",
+      "shared_payload_without_schema": {
+        "bytes": 58478,
+        "sha256": "3beda6357df084292a90173f21eb19cbe3bab668c69f3dca98dff03be6628ab2"
+      }
+    },
+    "job_0_alternative_1": {
+      "canonicalization": "UTF-8, sorted keys, compact separators, ensure_ascii=False",
+      "http_body_encoding": "httpx.Request(json=payload).content; insertion order; no headers",
+      "hypothesis": "unproven",
+      "live_calls": 0,
+      "max_output_tokens": 16000,
+      "minimal": {
+        "http_body": {
+          "bytes": 59885,
+          "sha256": "7757a3cc9427c658003ab7cd999985574a9fccb81fd81d9289ebbf8aa51dab7b"
+        },
+        "payload": {
+          "bytes": 59885,
+          "sha256": "dd4f547ca1c8905622d265706de459bd0c8b7c71e858b05e49404372504e72e5"
+        },
+        "required_field_occurrences": 9,
+        "schema": {
+          "bytes": 644,
+          "sha256": "9d603cd2f94cba8959d3939c64288d32005d8fe2d76658915748cbf65a4a6c52"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 0,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 0,
+          "enum_values_count": 0,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 0,
+            "$ref": 0,
+            "additionalProperties": 2,
+            "allOf": 0,
+            "anyOf": 0,
+            "const": 0,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 0,
+            "if": 0,
+            "maxItems": 0,
+            "maxLength": 0,
+            "minItems": 0,
+            "minLength": 0,
+            "not": 0,
+            "oneOf": 0,
+            "required": 2,
+            "then": 0,
+            "type": 15
+          },
+          "object_nodes": 2,
+          "property_occurrences": 9,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 0,
+          "resolved_anyof_nodes": 0,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 86,
+          "single_branch_anyof_nodes": 0,
+          "support_allowlist_counts": [
+            0,
+            0
+          ],
+          "support_anyof_nodes": 0,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "model": "gpt-5",
+      "only_changed_path": "text.format.schema",
+      "original": {
+        "http_body": {
+          "bytes": 66786,
+          "sha256": "fa951bab066fd7ac0367bc8190023b785c5aa57be5e943d686cd61340676afe8"
+        },
+        "payload": {
+          "bytes": 66786,
+          "sha256": "1c3afc4dc472412ec494466974c7783a9781f9307eda2c96d2fe490da1e226e3"
+        },
+        "required_field_occurrences": 51,
+        "schema": {
+          "bytes": 7545,
+          "sha256": "6a710072c6af41f0b88b5a715f602086ae9a0f93589c711930b9530037ef47a7"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 5,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 966,
+          "enum_values_count": 84,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 1,
+            "$ref": 12,
+            "additionalProperties": 9,
+            "allOf": 0,
+            "anyOf": 5,
+            "const": 4,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 21,
+            "if": 0,
+            "maxItems": 19,
+            "maxLength": 19,
+            "minItems": 5,
+            "minLength": 19,
+            "not": 0,
+            "oneOf": 0,
+            "required": 9,
+            "then": 0,
+            "type": 71
+          },
+          "object_nodes": 9,
+          "property_occurrences": 51,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 2,
+          "resolved_anyof_nodes": 5,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 1626,
+          "single_branch_anyof_nodes": 4,
+          "support_allowlist_counts": [
+            4,
+            0
+          ],
+          "support_anyof_nodes": 4,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "package_versions": {
+        "httpx": "0.28.1",
+        "jsonschema": "4.26.0",
+        "pydantic": "2.13.4"
+      },
+      "reasoning": {
+        "effort": "low"
+      },
+      "schema_version": "positioning_schema_experiment.v1",
+      "shared_payload_without_schema": {
+        "bytes": 59231,
+        "sha256": "6a736e35bfb635f9d9e9e903aab62c1136992652d488691cbad62ff77f444136"
+      }
+    },
+    "job_1_alternative_0": {
+      "canonicalization": "UTF-8, sorted keys, compact separators, ensure_ascii=False",
+      "http_body_encoding": "httpx.Request(json=payload).content; insertion order; no headers",
+      "hypothesis": "unproven",
+      "live_calls": 0,
+      "max_output_tokens": 16000,
+      "minimal": {
+        "http_body": {
+          "bytes": 59885,
+          "sha256": "d505640b42cc53041f33a205ffdae770422c0e957e07fe13c3bea12fdcd04a2e"
+        },
+        "payload": {
+          "bytes": 59885,
+          "sha256": "a92a9fffebbac769514789ba38a7f10ba0c381d05af49d9981265aa6fbd2b109"
+        },
+        "required_field_occurrences": 9,
+        "schema": {
+          "bytes": 644,
+          "sha256": "9d603cd2f94cba8959d3939c64288d32005d8fe2d76658915748cbf65a4a6c52"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 0,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 0,
+          "enum_values_count": 0,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 0,
+            "$ref": 0,
+            "additionalProperties": 2,
+            "allOf": 0,
+            "anyOf": 0,
+            "const": 0,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 0,
+            "if": 0,
+            "maxItems": 0,
+            "maxLength": 0,
+            "minItems": 0,
+            "minLength": 0,
+            "not": 0,
+            "oneOf": 0,
+            "required": 2,
+            "then": 0,
+            "type": 15
+          },
+          "object_nodes": 2,
+          "property_occurrences": 9,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 0,
+          "resolved_anyof_nodes": 0,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 86,
+          "single_branch_anyof_nodes": 0,
+          "support_allowlist_counts": [
+            0,
+            0
+          ],
+          "support_anyof_nodes": 0,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "model": "gpt-5",
+      "only_changed_path": "text.format.schema",
+      "original": {
+        "http_body": {
+          "bytes": 66794,
+          "sha256": "8998de4463e1063f25a165b71999286226dc66433f6218fbab2fb8cdf274d9b6"
+        },
+        "payload": {
+          "bytes": 66794,
+          "sha256": "097d5383eb42f63467bda3d36b4bd77b1747d2301f63ab042d1e9f230557e403"
+        },
+        "required_field_occurrences": 51,
+        "schema": {
+          "bytes": 7553,
+          "sha256": "67eff899356d0247549fc4010a217e796b616f70798eb3048be8db72ebdf12e3"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 5,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 966,
+          "enum_values_count": 84,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 1,
+            "$ref": 12,
+            "additionalProperties": 9,
+            "allOf": 0,
+            "anyOf": 5,
+            "const": 4,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 21,
+            "if": 0,
+            "maxItems": 19,
+            "maxLength": 19,
+            "minItems": 5,
+            "minLength": 19,
+            "not": 0,
+            "oneOf": 0,
+            "required": 9,
+            "then": 0,
+            "type": 71
+          },
+          "object_nodes": 9,
+          "property_occurrences": 51,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 2,
+          "resolved_anyof_nodes": 5,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 1626,
+          "single_branch_anyof_nodes": 4,
+          "support_allowlist_counts": [
+            4,
+            0
+          ],
+          "support_anyof_nodes": 4,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "package_versions": {
+        "httpx": "0.28.1",
+        "jsonschema": "4.26.0",
+        "pydantic": "2.13.4"
+      },
+      "reasoning": {
+        "effort": "low"
+      },
+      "schema_version": "positioning_schema_experiment.v1",
+      "shared_payload_without_schema": {
+        "bytes": 59231,
+        "sha256": "dd19d0051111ce817fd0dad3d812357231e395aaf1873281c0b83581ee452ef0"
+      }
+    },
+    "job_1_alternative_1": {
+      "canonicalization": "UTF-8, sorted keys, compact separators, ensure_ascii=False",
+      "http_body_encoding": "httpx.Request(json=payload).content; insertion order; no headers",
+      "hypothesis": "unproven",
+      "live_calls": 0,
+      "max_output_tokens": 16000,
+      "minimal": {
+        "http_body": {
+          "bytes": 60638,
+          "sha256": "93d237e9421915130a1b96550aced65c2b62723cb3eac7f91c938e119aeb4425"
+        },
+        "payload": {
+          "bytes": 60638,
+          "sha256": "ea02281a7292535f54b280b1534cdf232dfc76cd3945e2d1d952fc6e071568bb"
+        },
+        "required_field_occurrences": 9,
+        "schema": {
+          "bytes": 644,
+          "sha256": "9d603cd2f94cba8959d3939c64288d32005d8fe2d76658915748cbf65a4a6c52"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 0,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 0,
+          "enum_values_count": 0,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 0,
+            "$ref": 0,
+            "additionalProperties": 2,
+            "allOf": 0,
+            "anyOf": 0,
+            "const": 0,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 0,
+            "if": 0,
+            "maxItems": 0,
+            "maxLength": 0,
+            "minItems": 0,
+            "minLength": 0,
+            "not": 0,
+            "oneOf": 0,
+            "required": 2,
+            "then": 0,
+            "type": 15
+          },
+          "object_nodes": 2,
+          "property_occurrences": 9,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 0,
+          "resolved_anyof_nodes": 0,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 86,
+          "single_branch_anyof_nodes": 0,
+          "support_allowlist_counts": [
+            0,
+            0
+          ],
+          "support_anyof_nodes": 0,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "model": "gpt-5",
+      "only_changed_path": "text.format.schema",
+      "original": {
+        "http_body": {
+          "bytes": 64442,
+          "sha256": "e955afde711fe6011dfaf20da2a2d62ff901d4f142bd5d03b6e55c5952420db6"
+        },
+        "payload": {
+          "bytes": 64442,
+          "sha256": "3c52305b5125b13647f88e6838e75a482f772939ff4093e1a4908b3ddadecfac"
+        },
+        "required_field_occurrences": 27,
+        "schema": {
+          "bytes": 4448,
+          "sha256": "2077c8eb7cea843c1915ea4fbdd2f11eaa7e561ddd4bb8175ad108efdfff6754"
+        },
+        "structure": {
+          "additional_properties_mismatch_nodes": 0,
+          "contradictory_length_ranges": 0,
+          "definitions_count": 3,
+          "documented_limits_exceeded": {
+            "container_depth": false,
+            "enum_values": false,
+            "large_enum_characters": false,
+            "properties": false,
+            "string_characters": false
+          },
+          "enum_value_characters": 850,
+          "enum_values_count": 61,
+          "json_schema_valid": true,
+          "keyword_counts": {
+            "$defs": 1,
+            "$ref": 6,
+            "additionalProperties": 5,
+            "allOf": 0,
+            "anyOf": 3,
+            "const": 2,
+            "dependentRequired": 0,
+            "dependentSchemas": 0,
+            "else": 0,
+            "enum": 11,
+            "if": 0,
+            "maxItems": 11,
+            "maxLength": 11,
+            "minItems": 3,
+            "minLength": 11,
+            "not": 0,
+            "oneOf": 0,
+            "required": 5,
+            "then": 0,
+            "type": 39
+          },
+          "object_nodes": 5,
+          "property_occurrences": 27,
+          "provider_compatibility": "not_verified",
+          "reference_expansion": "local_acyclic",
+          "required_mismatch_nodes": 0,
+          "resolved_anyof_depth": 2,
+          "resolved_anyof_nodes": 3,
+          "resolved_container_depth": 4,
+          "root_anyof": false,
+          "root_is_object": true,
+          "schema_string_characters": 1194,
+          "single_branch_anyof_nodes": 2,
+          "support_allowlist_counts": [
+            5,
+            0
+          ],
+          "support_anyof_nodes": 2,
+          "type_list_unions": 0,
+          "unsupported_composition_occurrences": 0
+        }
+      },
+      "package_versions": {
+        "httpx": "0.28.1",
+        "jsonschema": "4.26.0",
+        "pydantic": "2.13.4"
+      },
+      "reasoning": {
+        "effort": "low"
+      },
+      "schema_version": "positioning_schema_experiment.v1",
+      "shared_payload_without_schema": {
+        "bytes": 59984,
+        "sha256": "57cb842a5d6616fd792d448969d9939a6002756c66dd5cc70ad506e9465e5cce"
+      }
+    }
+  },
+  "source": "synthetic_fixture"
+}

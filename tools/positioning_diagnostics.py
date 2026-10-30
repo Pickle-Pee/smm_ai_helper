@@ -47,7 +47,7 @@ class Replay:
     arguments: dict = field(repr=False)
 
 
-async def capture_request(request, *, model):
+async def capture_request(request, *, model, minimal_provider_schema=False):
     """Execute POSITIONING up to its provider boundary, then real wire builder."""
     from app.module_execution.executors import PositioningExecutor
     arguments = {}
@@ -57,7 +57,8 @@ async def capture_request(request, *, model):
         raise _Captured()
 
     try:
-        await PositioningExecutor(model_call=capture, provider_schema_projection=False).execute(request)
+        await PositioningExecutor(model_call=capture, provider_schema_projection=False,
+            minimal_provider_schema=minimal_provider_schema).execute(request)
     except _Captured:
         pass
     if not arguments:

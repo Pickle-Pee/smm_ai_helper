@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Rollout gate: original server schemas and disabled-by-default provider projection.
     POSITIONING_SCHEMA_PROJECTION_ENABLED: bool = False
+    POSITIONING_MINIMAL_PROVIDER_SCHEMA_ENABLED: bool = False
     POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED: bool = False
     EXPERIMENTS_SCHEMA_PROJECTION_ENABLED: bool = False
     VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED: bool = False
