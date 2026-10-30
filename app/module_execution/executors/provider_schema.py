@@ -132,6 +132,65 @@ def single_support_anyof_count(schema):
         for node in nodes(schema))
 
 
+def collapse_redundant_support_anyof(schema):
+    """Remove a support OR only with an exact parent-object witness branch.
+
+    P AND (P OR Q) is P. PARENT_REQUIRED generation supplies that witness;
+    ordinary evidence-or-parent support does not. Preserve every parent bound,
+    enum and reference. Refuse scope-sensitive schemas and pointers into branches
+    so deleting a subtree cannot change reference resolution or evaluation.
+    """
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError
+
+    def fail():
+        raise SchemaProjectionError("redundant_support_anyof_not_equivalent") from None
+
+    if type(schema) is not dict:
+        fail()
+    try:
+        Draft202012Validator.check_schema(schema)
+    except (SchemaError, TypeError, ValueError):
+        fail()
+    definitions = schema.get("$defs", {})
+    for node in nodes(schema):
+        if any(key in node for key in ("$id", "$anchor", "$dynamicAnchor", "$dynamicRef",
+                                       "unevaluatedProperties", "unevaluatedItems")):
+            fail()
+        if "$ref" in node:
+            ref = node["$ref"]
+            if (not isinstance(ref, str) or not ref.startswith("#/$defs/")
+                    or "/" in ref[len("#/$defs/"):]
+                    or "~" in ref[len("#/$defs/"):]
+                    or ref[len("#/$defs/"):] not in definitions):
+                fail()
+    result = deepcopy(schema)
+    support = {"evidence_ids", "parent_claim_ids"}
+    for node in list(nodes(result)):
+        branches = node.get("anyOf", [])
+        if len(branches) != 2 or not support <= node.get("properties", {}).keys():
+            continue
+        parent = {key: deepcopy(value) for key, value in node.items() if key != "anyOf"}
+        if (parent.get("type") != "object" or parent.get("additionalProperties") is not False
+                or set(parent.get("required", [])) != set(parent["properties"])):
+            fail()
+        comparison = deepcopy(parent)
+        comparison.pop("title", None)
+        witnesses = []
+        for branch in branches:
+            if type(branch) is not dict:
+                fail()
+            branch = deepcopy(branch)
+            branch.pop("title", None)
+            # Python's equality conflates true and 1 in enums/const values.
+            witnesses.append(json.dumps(branch, sort_keys=True, allow_nan=False)
+                             == json.dumps(comparison, sort_keys=True, allow_nan=False))
+        if any(witnesses):
+            node.clear()
+            node.update(parent)
+    return result
+
+
 def schema_measurement(schema):
     raw = json.dumps(schema, ensure_ascii=False, sort_keys=True,
                      separators=(",", ":"), allow_nan=False).encode("utf-8")

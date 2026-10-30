@@ -72,8 +72,13 @@ def test_every_emitted_statement_schema_and_parser_agree(emitted_contract, local
         # Strict-compatible anyOf objects preserve all inherited constraints.
         supports = [field for field, available in (("evidence_ids", available_local),
                                                   ("parent_claim_ids", available_parent)) if available]
-        assert len(definition["anyOf"]) == len(supports)
-        for branch, support in zip(definition["anyOf"], supports):
+        if "anyOf" not in definition:
+            # CMO's required-parent floor implies its removed support OR.
+            # The acceptance assertions above still exercise every combination.
+            assert parent_required and name in {"MainGrowthConstraintStatement", "OtherStrategyStatement"}
+        else:
+            assert len(definition["anyOf"]) == len(supports)
+        for branch, support in zip(definition.get("anyOf", []), supports):
             assert branch["additionalProperties"] is False
             assert set(branch["required"]) == set(properties)
             assert branch["properties"][support]["minItems"] == 1
