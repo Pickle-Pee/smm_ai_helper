@@ -99,7 +99,7 @@ def test_intelligence_profile_is_server_owned(module, budget):
     assert ModuleOutputBudget.EXPERIMENTS_FULL not in (ModuleOutputBudget.VIRTUAL_CMO, ModuleOutputBudget.POSITIONING_FULL)
 
 
-def test_cmo_transport_preserves_exact_scoped_schema(monkeypatch):
+def test_cmo_transport_preserves_equivalent_scoped_schema(monkeypatch):
     from app.module_execution.executors.common import first_party_evidence, scoped_facts, parent_claims
     from app.module_execution.executors.support_schema import support_response_schema
     from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
@@ -111,6 +111,8 @@ def test_cmo_transport_preserves_exact_scoped_schema(monkeypatch):
     evidence = first_party_evidence(req, scoped_facts(req))
     expected = support_response_schema(executor.output_type, (e.record.evidence_id for e in evidence),
                                       parent_claims(req).keys(), requirement=executor.support_requirement_for(req))
+    from app.module_execution.executors.provider_schema import collapse_redundant_support_anyof
+    expected = collapse_redundant_support_anyof(expected)
     provider = DaycareProvider(None)
     install_transport(monkeypatch, provider)
     result = run(req, model=production_model_call)

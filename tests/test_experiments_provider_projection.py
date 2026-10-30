@@ -153,8 +153,10 @@ def test_independent_production_switches_and_unprojected_diagnostics(monkeypatch
     runtime = build_production_graph_runtime(queue=queue(), analyzer=analyzer())
     assert runtime.executors.resolve("positioning.v1")._provider_schema_projection is positioning
     assert runtime.executors.resolve("experiments.v1")._provider_schema_projection is experiments
-    for key in ("creator.v1", "virtual_cmo.v1", "market_analysis.v1", "competitor_analysis.v1"):
+    for key in ("creator.v1", "market_analysis.v1", "competitor_analysis.v1"):
         assert type(runtime.executors.resolve(key)).provider_schema_for is common.BaseExecutor.provider_schema_for
+    from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
+    assert type(runtime.executors.resolve("virtual_cmo.v1")) is VirtualCMOExecutor
     invocation = restored()
     baseline = asyncio.run(capture_request(invocation))
     provider = ExperimentsProvider()

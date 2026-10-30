@@ -19,6 +19,7 @@ from .numeric_grounding import (
 )
 from .claim_support import StrategyClaim, StoredNumericContext
 from .numeric_diagnostics import observe
+from .provider_schema import collapse_redundant_support_anyof
 
 
 log = logging.getLogger(__name__)
@@ -76,6 +77,11 @@ without economics."""
 
     def output_budget_for(self, request) -> ModuleOutputBudget:
         return ModuleOutputBudget.VIRTUAL_CMO
+
+    def provider_schema_for(self, request, validation_schema):
+        # Keep the full local contract; remove only provably redundant support
+        # branches from the provider grammar. No support enum/floor is relaxed.
+        return collapse_redundant_support_anyof(validation_schema)
 
     def normalize_output_payload(self, request, payload, evidence, parents):
         if not self._numeric_quote_catalog_enabled:
