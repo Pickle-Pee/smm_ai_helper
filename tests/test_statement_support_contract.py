@@ -125,13 +125,12 @@ def test_parent_only_intelligence_remains_valid_but_missing_lineage_fails(module
     assert all(c.parent_claim_ids and not c.evidence_ids for c in result.normalized_result.claims)
     def omit_parent(raw, data):
         raw["outputs"][0].update(parent_claim_ids=[], evidence_ids=[data["local_evidence"][0]["evidence_id"]])
-    # EXPERIMENTS also has local context in this variant; its strategic parent
-    # rule must reject evidence-only even though the generic floor accepts it.
+    # EXPERIMENTS also has local context in this variant; its explicit parent
+    # floor must reject evidence-only before semantic strategic-parent checks.
     if module is ModuleId.EXPERIMENTS:
         from dataclasses import replace
         from tests.test_module_executors import fact
         req = replace(req, context_packet=replace(req.context_packet, known_facts=(fact("business_goal"),)))
     with pytest.raises(ExecutorOutputError) as caught:
         run(req, omit_parent)
-    assert caught.value.stage is (OutputFailureStage.SCHEMA_INVALID
-        if module is ModuleId.VIRTUAL_CMO else OutputFailureStage.RESULT_CONTRACT_INVALID)
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID

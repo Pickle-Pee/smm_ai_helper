@@ -142,7 +142,7 @@ def metadata(replay, request):
     from app.module_execution.executors.experiments import strategic_parents
     from app.module_execution.executors.common import parent_claims
     report = common_metadata(replay)
-    report["baseline_mode"] = "current_production_builders_incident_model"
+    report["baseline_mode"] = "current_parent_required_builders_incident_model"
     report["model_matches_incident"] = replay.payload["model"] == "gpt-5-mini"
     report["output_budget"] = {"actual": replay.payload["max_output_tokens"], "incident": 16000,
         "matches": replay.payload["max_output_tokens"] == 16000}

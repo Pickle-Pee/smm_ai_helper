@@ -13,7 +13,7 @@ Latest reported replay: `req_06d7388ca87640c180cd187eb4b0bd27` completed with
 `failure_rule` and available zero-based `output_index` / `experiment_index` on
 such rejection, without response text or exception details. See the
 [closed rule definitions and unchanged kind mismatch](../development/experiments-result-diagnostics.md).
-All four fingerprints below are pinned to the latest production incident for
+All four fingerprints below are historical incident pins, not current builder fingerprints for
 this run/job. Explicit permission for one live call is still required; the
 reported fingerprints do not grant approval.
 
@@ -52,7 +52,7 @@ from app.module_execution.executors import ExperimentsExecutor
 from app.module_execution.executors.common import ResultContractError
 from app.module_execution.executors.experiments import strategic_parents
 from app.module_execution.executors.intelligence_schemas import ExperimentsOutput
-from app.module_execution.executors.provider_schema import schema_measurement
+from app.module_execution.executors.provider_schema import schema_measurement, collapse_redundant_support_anyof, collapse_single_support_anyof
 from app.module_execution.executors.schema_annotations import strip_schema_annotations
 from app.module_registry import ModuleId, ModuleRegistry
 from app.orchestration_runtime.model_adapter import production_model_call
@@ -79,7 +79,7 @@ async def verify():
     request = await restore_database(run_id=RUN_ID, job_id=JOB_ID)
     baseline = await capture_request(request)  # Explicitly unprojected, no provider call.
     original = baseline.arguments["response_schema"]
-    projected, removed = strip_schema_annotations(original)
+    projected, removed = strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(original)))
     names = set(ModuleRegistry.load("1.3.0").get(ModuleId.EXPERIMENTS).outputs)
     if (set(request.expected_outputs) != names or len(request.expected_outputs) != 16
             or not strategic_parents(request) or not removed

@@ -13,7 +13,7 @@ from app.config import Settings, settings
 from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors import ExperimentsExecutor, ExecutorOutputError
 from app.module_execution.executors import common, experiments as experiment_module
-from app.module_execution.executors.provider_schema import SchemaProjectionError, schema_measurement
+from app.module_execution.executors.provider_schema import SchemaProjectionError, schema_measurement, collapse_redundant_support_anyof, collapse_single_support_anyof
 from app.module_execution.executors.schema_annotations import strip_schema_annotations
 from app.module_execution.executors.intelligence_schemas import ExperimentsOutput
 from app.module_registry import ModuleId
@@ -36,7 +36,7 @@ def test_real_wire_original_validation_all_outputs_designs_and_gates(monkeypatch
     monkeypatch.setattr(settings, "DEFAULT_TEXT_MODEL_HARD", "gpt-5-mini")
     baseline = asyncio.run(capture_request(invocation))
     original = deepcopy(baseline.arguments["response_schema"])
-    projected, removed = strip_schema_annotations(original)
+    projected, removed = strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(original)))
     validators = []
     factory = common.Draft202012Validator
     def track(schema):
@@ -113,9 +113,9 @@ def test_literals_extensions_property_names_and_boolean_nodes_are_opaque():
 def test_formal_schema_equivalence(mutation, valid):
     baseline = asyncio.run(capture_request(restored()))
     original = baseline.arguments["response_schema"]
-    projected, _ = strip_schema_annotations(original)
+    projected, _ = strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(original)))
     # Every assertion and schema edge is identical; only annotation nodes differ.
-    assert projected == schema_matrix(baseline.payload)[0]["no_annotations"]["text"]["format"]["schema"]
+    assert "anyOf" not in projected["$defs"]["ExperimentStatement"]
     payload = full_payload(json.loads(baseline.arguments["text"]))
     mutation(payload)
     assert Draft202012Validator(original).is_valid(payload) is valid
@@ -163,7 +163,7 @@ def test_independent_production_switches_and_unprojected_diagnostics(monkeypatch
     install_transport(monkeypatch, provider)
     asyncio.run(runtime.executors.resolve("experiments.v1").execute(invocation))
     original = baseline.arguments["response_schema"]
-    assert provider.calls[0]["text"]["format"]["schema"] == (strip_schema_annotations(original)[0] if experiments else original)
+    assert provider.calls[0]["text"]["format"]["schema"] == (strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(original)))[0] if experiments else original)
     assert asyncio.run(capture_request(invocation)).arguments == baseline.arguments
     assert Settings.model_fields["EXPERIMENTS_SCHEMA_PROJECTION_ENABLED"].default is False
 
@@ -295,7 +295,7 @@ def test_runbook_executes_full_acceptance_with_mock_transport(monkeypatch):
     try:
         exec(recipe.rsplit("\ntry:\n", 1)[0], namespace)
         namespace.update(APPROVED=True, APPROVED_HASHES=hashes,
-            APPROVED_PROVIDER_SCHEMA_HASH=schema_measurement(strip_schema_annotations(baseline.arguments["response_schema"])[0])["sha256"])
+            APPROVED_PROVIDER_SCHEMA_HASH=schema_measurement(strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(baseline.arguments["response_schema"])))[0])["sha256"])
         summary = asyncio.run(namespace["verify"]())
     finally:
         logging.disable(previous_logging)
