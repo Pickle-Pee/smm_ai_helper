@@ -11,7 +11,7 @@ from app.model_generation_policy import ModuleOutputBudget
 from .common import (
     LocalEvidence, ExecutorOutputError, OutputFailureStage, ResultContractError, ResultFailureRule,
     blocked, first_party_evidence, log, normalize_result, parent_claims,
-    scoped_facts, stable_id,
+    scoped_facts, stable_id, plain,
 )
 from .provider_schema import (
     schema_measurement, SchemaProjectionError,
@@ -86,6 +86,10 @@ learning_record explicit in requested canonical outputs. At most three experimen
             return strategic_parent_wire_schema(validation_schema, eligible,
                 tuple(str(e.value) for e in experiment_constraint_evidence(evidence)),
                 strategic_assertions=tuple(text for claim in eligible.values()
+                    for text in assertion_support(claim.value)),
+                statement_assertions=tuple(e.value if isinstance(e.value, str)
+                    else json.dumps(plain(e.value), ensure_ascii=False) for e in evidence) + tuple(
+                    text for claim in parent_claims(request).values()
                     for text in assertion_support(claim.value)))
         return validation_schema
 

@@ -59,7 +59,7 @@ def test_full_wire_original_gates_and_v1_serialization(invocation, projection):
     schema = calls[0]["response_schema"]
     assert set(schema["$defs"]["AllowedStrategicParentId"]["enum"]) == set(eligible)
     assert set(schema["$defs"]["AllowedParentClaimId"]["enum"]) == set(parent_claims(invocation))
-    assert all("anyOf" not in node for node in nodes(schema))
+    assert all("anyOf" not in node for node in nodes(schema) if "properties" in node)
     assert schema["$defs"]["ExperimentDesign"]["properties"]["related_strategic_claim_ids"]["items"] == {"$ref": "#/$defs/AllowedStrategicParentId"}
     for statement in result.payload["outputs"]:
         assert set(statement["parent_claim_ids"]) & eligible.keys()
@@ -344,7 +344,7 @@ def test_design_numeric_schema_exact_full_assertions_and_bounds(invocation, fiel
         set_text(text)
         assert Draft202012Validator(wire).is_valid(payload) is allowed
     assert original == before
-    assert wire["$defs"]["ExperimentStatement"]["properties"]["text"] == original["$defs"]["ExperimentStatement"]["properties"]["text"]
+    assert original["$defs"]["ExperimentStatement"]["properties"]["text"] == before["$defs"]["ExperimentStatement"]["properties"]["text"]
     assert wire["$defs"]["ExperimentDesign"]["properties"]["time_resource_constraints"]["maxItems"] == 0
 
 
@@ -479,3 +479,130 @@ def test_numeric_design_definition_collision_refuses(invocation):
     with pytest.raises(ModuleExecutionContractError, match="Unexpected strategic parent wire contract"):
         strategic_parent_wire_schema(original, strategic_parents(invocation), strategic_assertions=("Test 2 messages",))
     assert original == before
+
+
+
+def test_provider_statement_schema_rejects_invented_numeric_paraphrase(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    wire = strategic_parent_wire_schema(baseline.arguments["response_schema"], strategic_parents(invocation))
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    payload["outputs"][1]["text"] = "Compare 2 alternative messages for the audience"
+    assert not Draft202012Validator(wire).is_valid(payload)
+
+
+
+@pytest.mark.parametrize("projection", [False, True])
+@pytest.mark.parametrize("source", ["local_string", "local_object", "accepted_nonstrategic_parent"])
+def test_statement_full_numeric_assertion_scope_and_actual_citation(invocation, projection, source):
+    from tests.test_module_executors import fact
+    quote = "Supplied scenario contains 20 qualified inquiries"
+    parent_id = "clm_z_additional_recommendation"
+    if source == "accepted_nonstrategic_parent":
+        request = replace_parent_assertion(invocation, parent_id, quote)
+    else:
+        value = quote if source == "local_string" else {"scenario": quote}
+        request = replace(invocation, context_packet=replace(invocation.context_packet,
+            known_facts=(*invocation.context_packet.known_facts, fact("numeric_wire_test", value))))
+        if source == "local_object":
+            quote = json.dumps(value, ensure_ascii=False)
+    baseline = asyncio.run(capture_request(request))
+    captured = []
+    async def model(**kwargs):
+        captured.append(deepcopy(kwargs))
+        schema = kwargs["response_schema"]
+        enum = schema["$defs"]["AllowedExperimentStatementNumericAssertion"]["enum"]
+        assert quote in enum
+        assert sum(node.get("enum") == enum for node in nodes(schema)) == 1
+        payload = wire_payload(json.loads(kwargs["text"]), schema)
+        payload["outputs"][1]["text"] = quote
+        if source == "accepted_nonstrategic_parent":
+            payload["outputs"][1]["parent_claim_ids"] = [parent_id]
+        else:
+            data = json.loads(kwargs["text"])
+            eid = next(item["evidence_id"] for item in data["local_evidence"]
+                       if item["value"] == value)
+            payload["outputs"][1]["evidence_ids"] = [eid]
+        return json.dumps(payload)
+    executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+        provider_schema_projection=projection)
+    result = asyncio.run(executor.execute(request))
+    assert result.payload["outputs"][1]["text"] == quote
+    assert captured[0]["text"] == baseline.arguments["text"]
+    assert captured[0]["instruction"] == baseline.arguments["instruction"]
+    assert result_from_json(result_to_json(result)) == result
+    async def uncited(**kwargs):
+        payload = json.loads(await model(**kwargs))
+        payload["outputs"][1]["evidence_ids"] = []
+        payload["outputs"][1]["parent_claim_ids"] = []
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=uncited, strategic_parent_wire=True,
+            provider_schema_projection=projection).execute(request))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_statement_numeric_enum_bounds_exactness_directref_and_immutability(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    original = baseline.arguments["response_schema"]
+    before = deepcopy(original)
+    quote = "Supplied 20 qualified inquiries"
+    bound = "x" * 3999 + "2"
+    wire = strategic_parent_wire_schema(original, strategic_parents(invocation),
+        statement_assertions=(quote, bound, "x" * 4000 + "2", "Qualitative only"))
+    shared = wire["$defs"]["AllowedExperimentStatementNumericAssertion"]
+    assert shared == {"type":"string", "minLength":1, "maxLength":4000, "enum":sorted([quote, bound])}
+    text = wire["$defs"]["ExperimentStatement"]["properties"]["text"]
+    assert text["anyOf"][1] == {"$ref":"#/$defs/AllowedExperimentStatementNumericAssertion"}
+    assert text["anyOf"][0]["minLength"] == 1 and text["anyOf"][0]["maxLength"] == 4000
+    wire_before = deepcopy(wire)
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    for value, accepted in [(quote,True), (bound,True), ("Qualitative text",True),
+                            ("20 qualified inquiries",False), (quote + " after launch",False),
+                            ("Supplied 40 qualified inquiries",False), ("Compare 2 variants",False),
+                            ("",False), ("x" * 4000 + "2",False)]:
+        payload["outputs"][1]["text"] = value
+        assert Draft202012Validator(wire).is_valid(payload) is accepted
+    assert original == before and wire == wire_before
+
+
+def test_statement_structured_parent_numeric_context_is_excluded(invocation):
+    quote = "Supplied 37 qualified inquiries"
+    value = json.dumps({"summary":"Qualitative strategic hypothesis", "items":["Validate the message"],
+        "numeric_context":[{"support_id":"evd_context", "quote":quote, "attribution":"supplied_context"}]})
+    request = replace_parent_assertion(invocation, "clm_z_additional_recommendation", value)
+    async def model(**kwargs):
+        schema = kwargs["response_schema"]
+        allowed = schema["$defs"].get("AllowedExperimentStatementNumericAssertion", {}).get("enum", [])
+        assert quote not in allowed and value not in allowed
+        payload = wire_payload(json.loads(kwargs["text"]), schema)
+        payload["outputs"][1].update(text=quote, parent_claim_ids=["clm_z_additional_recommendation"])
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(request))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+def test_statement_definition_collision_and_combined_corpus_budget_refuse(invocation):
+    from app.module_execution.errors import ModuleExecutionContractError
+    baseline = asyncio.run(capture_request(invocation))
+    original = deepcopy(baseline.arguments["response_schema"])
+    original["$defs"]["AllowedExperimentStatementNumericAssertion"] = {"type":"string"}
+    before = deepcopy(original)
+    with pytest.raises(ModuleExecutionContractError, match="Unexpected strategic parent wire contract"):
+        strategic_parent_wire_schema(original, strategic_parents(invocation))
+    assert original == before
+    with pytest.raises(ModuleExecutionContractError, match="exceeds provider bounds"):
+        strategic_parent_wire_schema(baseline.arguments["response_schema"], strategic_parents(invocation),
+            strategic_assertions=tuple(f"d{i}" for i in range(501)),
+            statement_assertions=tuple(f"s{i}" for i in range(501)))
+
+
+def test_statement_flags_off_keeps_original_schema(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    executor = ExperimentsExecutor(model_call=AsyncMock(), strategic_parent_wire=False)
+    original = deepcopy(baseline.arguments["response_schema"])
+    before = deepcopy(original)
+    assert executor.wire_schema_for(invocation, original, ()) is original
+    assert original == before
+    assert "pattern" not in original["$defs"]["ExperimentStatement"]["properties"]["text"]

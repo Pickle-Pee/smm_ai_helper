@@ -12,30 +12,32 @@ WIRE_VERSION = "experiments.wire.v2"
 SELECTED_PARENT = "strategic_parent_id"
 STRATEGIC_DEFINITION = "AllowedStrategicParentId"
 NUMERIC_ASSERTION_DEFINITION = "AllowedExperimentNumericAssertion"
+STATEMENT_NUMERIC_ASSERTION_DEFINITION = "AllowedExperimentStatementNumericAssertion"
 
 
 QUALITATIVE_DESIGN_PATTERN = "^[^0-9]*$"
 
 
-def design_assertion_schema(original, numeric_assertions_available):
+def assertion_text_schema(original, numeric_assertions_available, *, limit, enum_definition):
     """Generate qualitative text or a complete, bounded supplied assertion.
 
     The portable provider pattern excludes ASCII digits. The unchanged canonical
     numerical guard remains authoritative for all Unicode decimal digits and for
-    actual per-design cited-parent provenance.
+    actual cited-source provenance.
     """
     if (original.get("type") != "string" or original.get("minLength") != 1
-            or original.get("maxLength") != 300
+            or original.get("maxLength") != limit
             or any(key in original for key in ("anyOf", "allOf", "oneOf", "pattern", "enum", "$ref"))):
-        raise ModuleExecutionContractError("Unexpected experiment design text contract")
+        raise ModuleExecutionContractError("Unexpected experiment assertion text contract")
     qualitative = deepcopy(original)
     qualitative["pattern"] = QUALITATIVE_DESIGN_PATTERN
     if not numeric_assertions_available:
         return qualitative
-    return {"anyOf": [qualitative, {"$ref": "#/$defs/" + NUMERIC_ASSERTION_DEFINITION}]}
+    return {"anyOf": [qualitative, {"$ref": "#/$defs/" + enum_definition}]}
 
 
-def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(), strategic_assertions=()):
+def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(), strategic_assertions=(),
+                                 *, statement_assertions=()):
     """Reserve one canonical parent slot for an explicit accepted hypothesis.
 
     Additional parents retain the original complete allowlist, including accepted
@@ -49,10 +51,19 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     schema = collapse_redundant_support_anyof(validation_schema)
     schema = collapse_single_support_anyof(schema)
     definitions = schema["$defs"]
-    if (STRATEGIC_DEFINITION in definitions or NUMERIC_ASSERTION_DEFINITION in definitions
+    if (any(name in definitions for name in (STRATEGIC_DEFINITION, NUMERIC_ASSERTION_DEFINITION,
+                                            STATEMENT_NUMERIC_ASSERTION_DEFINITION))
             or "wire_contract_version" in schema["properties"]):
         raise ModuleExecutionContractError("Unexpected strategic parent wire contract")
     definitions[STRATEGIC_DEFINITION] = {"type": "string", "minLength": 1, "maxLength": 128, "enum": allowed}
+    statement_assertions = tuple(statement_assertions)
+    if any(type(value) is not str for value in statement_assertions):
+        raise ModuleExecutionContractError("Invalid experiment statement assertion wire scope")
+    statement_numeric_assertions = sorted({text for text in statement_assertions
+                                          if 1 <= len(text) <= 4000 and re.search(r"\d", text)})
+    if statement_numeric_assertions:
+        definitions[STATEMENT_NUMERIC_ASSERTION_DEFINITION] = {
+            "type": "string", "minLength": 1, "maxLength": 4000, "enum": statement_numeric_assertions}
     statements = 0
     for node in nodes(schema):
         properties = node.get("properties", {})
@@ -65,6 +76,8 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
         if set(properties.get("kind", {}).get("enum", ())) != {"OBSERVATION", "INFERENCE", "HYPOTHESIS", "RECOMMENDATION"}:
             raise ModuleExecutionContractError("Unexpected experiment statement kind contract")
         properties["kind"]["enum"] = ["HYPOTHESIS", "RECOMMENDATION"]
+        properties["text"] = assertion_text_schema(properties["text"], bool(statement_numeric_assertions),
+            limit=4000, enum_definition=STATEMENT_NUMERIC_ASSERTION_DEFINITION)
         properties[SELECTED_PARENT] = {"$ref": "#/$defs/" + STRATEGIC_DEFINITION}
         node["required"].append(SELECTED_PARENT)
         # The explicit scalar supplies the original mandatory parent floor.
@@ -87,9 +100,11 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
         if name in ("related_strategic_claim_ids", "time_resource_constraints"):
             continue
         if name == "minimum_required_inputs":
-            definition["items"] = design_assertion_schema(definition["items"], bool(numeric_assertions))
+            definition["items"] = assertion_text_schema(definition["items"], bool(numeric_assertions),
+                limit=300, enum_definition=NUMERIC_ASSERTION_DEFINITION)
         else:
-            design[name] = design_assertion_schema(definition, bool(numeric_assertions))
+            design[name] = assertion_text_schema(definition, bool(numeric_assertions),
+                limit=300, enum_definition=NUMERIC_ASSERTION_DEFINITION)
     constraints = tuple(constraints)
     if any(type(value) is not str or not 1 <= len(value) <= 300 for value in constraints):
         raise ModuleExecutionContractError("Invalid experiment constraint wire scope")

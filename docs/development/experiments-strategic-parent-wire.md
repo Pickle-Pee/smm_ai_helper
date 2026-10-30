@@ -92,7 +92,7 @@ complete supplied assertions, rather than every substring accepted by the
 canonical guard. Longer source assertions cannot fit these design fields and do
 not become enum entries. New words, fragments and calculated replacements are
 not added to the enum. Structured `numeric_context` quotes are never assertion
-support. The canonical statement text schema is unchanged.
+support. The canonical persisted validation schema remains unchanged; provider statement generation is constrained separately below.
 
 The portable pattern excludes ASCII digits; it is not a proof about all Unicode
 decimal digits. The existing Unicode-aware numerical guard remains authoritative.
@@ -104,3 +104,33 @@ reference bounds, selected-parent decoding and stored v1 payloads are unchanged.
 With the wire disabled, the canonical design schema is unchanged. Complete-schema
 provider enum/string limits are checked after these additions, and refusal never
 falls back to a permissive schema. This change performs no output rewriting.
+
+
+## Canonical statement generation
+
+Canonical `ExperimentStatement.text` now follows the same qualitative-or-exact
+provider rule, with its original 1..4000 character bounds. A single shared
+`AllowedExperimentStatementNumericAssertion` string enum contains complete
+bounded numerical support values. The text field uses a direct local reference
+alongside the qualitative ASCII pattern. Without numerical support it uses the
+pattern alone. Name collisions refuse generation. The existing design enum and
+its 1..300 bounds remain separate.
+
+Statement assertion scope exactly matches the available channels of the existing
+`intelligence_common.supported_text`: local evidence string values are retained;
+other local values use `json.dumps(plain(value), ensure_ascii=False)`; all accepted
+parent claims provide `assertion_support(value)`, including accepted nonstrategic
+parents. This differs deliberately from design assertions, which only use
+eligible strategic parents. Structured parent `numeric_context` remains excluded.
+The executor does not invent a source quote or change the model input, decoder,
+statement text, canonical payload schema, or persisted payloads.
+
+The enum is a request-wide generation aid. Existing numerical semantics still
+require the output to be supported by the evidence/parents actually cited on that
+statement. A complete assertion selected from an uncited available source remains
+invalid locally. The provider enum allows only full supplied assertions, although
+the unchanged canonical guard accepts literal substrings as well. New words,
+numerical paraphrases and calculations do not become enum entries. ASCII pattern
+portability and the authoritative Unicode-aware server guard remain as described
+above. Corpus enum/string budgets are checked once after both shared assertion
+definitions, exact constraints and all request-specific references are installed.
