@@ -12,7 +12,7 @@ SELECTED_PARENT = "strategic_parent_id"
 STRATEGIC_DEFINITION = "AllowedStrategicParentId"
 
 
-def strategic_parent_wire_schema(validation_schema, strategic_ids):
+def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=()):
     """Reserve one canonical parent slot for an explicit accepted hypothesis.
 
     Additional parents retain the original complete allowlist, including accepted
@@ -51,6 +51,17 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids):
     if not statements or "related_strategic_claim_ids" not in design:
         raise ModuleExecutionContractError("Missing strategic parent wire contract")
     design["related_strategic_claim_ids"]["items"] = {"$ref": "#/$defs/" + STRATEGIC_DEFINITION}
+    constraints = tuple(constraints)
+    if any(type(value) is not str or not 1 <= len(value) <= 300 for value in constraints):
+        raise ModuleExecutionContractError("Invalid experiment constraint wire scope")
+    allowed_constraints = sorted(set(constraints))
+    if len(allowed_constraints) > 8:
+        raise ModuleExecutionContractError("Experiment constraint wire scope exceeds bounds")
+    constraint_schema = design["time_resource_constraints"]
+    constraint_schema["minItems"] = len(allowed_constraints)
+    constraint_schema["maxItems"] = len(allowed_constraints)
+    if allowed_constraints:
+        constraint_schema["items"] = {"type": "string", "enum": allowed_constraints}
     schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [WIRE_VERSION]}
     schema["required"].append("wire_contract_version")
     check_schema_bounds(schema)

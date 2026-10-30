@@ -33,6 +33,11 @@ def strategic_parents(request):
     return {key: claim for key, claim in parent_claims(request).items() if key in eligible}
 
 
+def experiment_constraint_evidence(evidence):
+    return tuple(e for e in evidence if e.input_key in (
+        "constraints", "time_resource_constraint", "budget", "duration"))
+
+
 class ExperimentsExecutor(IntelligenceExecutor):
     module_id = ModuleId.EXPERIMENTS
     executor_key = "experiments.v1"
@@ -77,7 +82,8 @@ learning_record explicit in requested canonical outputs. At most three experimen
 
     def wire_schema_for(self, request, validation_schema, evidence):
         if self._strategic_parent_wire:
-            return strategic_parent_wire_schema(validation_schema, strategic_parents(request))
+            return strategic_parent_wire_schema(validation_schema, strategic_parents(request),
+                tuple(str(e.value) for e in experiment_constraint_evidence(evidence)))
         return validation_schema
 
     def decode_wire_payload(self, request, payload, evidence):
@@ -152,8 +158,7 @@ learning_record explicit in requested canonical outputs. At most three experimen
                     continue
                 for text in value if isinstance(value, list) else [value]:
                     require_supported_numbers(text, supports)
-            constraints = tuple(e for e in evidence if e.input_key in (
-                "constraints", "time_resource_constraint", "budget", "duration"))
+            constraints = experiment_constraint_evidence(evidence)
             if (len(experiment.time_resource_constraints) != len(set(experiment.time_resource_constraints))
                     or set(experiment.time_resource_constraints) != {str(e.value) for e in constraints}):
                 raise ResultContractError(ResultFailureRule.EXPERIMENT_CONSTRAINTS_MISMATCH, experiment_index=experiment_index)

@@ -63,3 +63,14 @@ constraint array. Entire supported numeric assertions remain allowed verbatim;
 there is no local acceptance relaxation. Current composed instructions are 53477
 UTF-8 bytes; the historical incident pin remains 53096 and diagnostics report the
 381-byte difference instead of claiming an exact replay.
+
+That guidance probe completed but the original constraint-equality guard rejected
+`experiment_constraints_mismatch`. The wire now expresses the same authoritative
+constraint set: exact cardinality and an enum of the supplied verbatim values,
+or an empty array when no constraints exist. It uses the same evidence selector
+as local validation (scoped constraints, time_resource_constraint, budget and
+duration), without inferring constraints from unrelated product descriptions.
+The unchanged local uniqueness/set-equality guard still rejects duplicates and
+omissions; no decoder adds, removes or rewrites constraints. Unrepresentable
+input stops before provider I/O. These wire restrictions do not change the
+canonical accepted set or stored v1 payload.

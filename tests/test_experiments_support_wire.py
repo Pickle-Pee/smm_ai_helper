@@ -159,6 +159,55 @@ def test_original_schema_survives_provider_mutation(invocation):
         asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(invocation))
 
 
+def test_wire_expresses_empty_constraint_contract(invocation):
+    captured = asyncio.run(capture_request(invocation))
+    schema = strategic_parent_wire_schema(captured.arguments["response_schema"], strategic_parents(invocation))
+    payload = wire_payload(json.loads(captured.arguments["text"]), schema)
+    assert Draft202012Validator(schema).is_valid(payload)
+    payload["experiments"][0]["time_resource_constraints"] = ["Duration 14 days"]
+    assert not Draft202012Validator(schema).is_valid(payload)
+
+
+@pytest.mark.parametrize("projection", [False, True])
+def test_wire_preserves_exact_supplied_constraints(invocation, projection):
+    from tests.test_module_executors import fact
+    constraints = ("Duration 14 days", "Budget 500 dollars")
+    request = replace(invocation, context_packet=replace(invocation.context_packet,
+        constraints=(constraints[0],),
+        known_facts=(*invocation.context_packet.known_facts, fact("budget", constraints[1]))))
+    calls = []
+    async def model(**kwargs):
+        calls.append(True)
+        schema = kwargs["response_schema"]
+        field = schema["$defs"]["ExperimentDesign"]["properties"]["time_resource_constraints"]
+        assert field["minItems"] == field["maxItems"] == 2
+        assert set(field["items"]["enum"]) == set(constraints)
+        payload = wire_payload(json.loads(kwargs["text"]), schema)
+        for design in payload["experiments"]:
+            design["time_resource_constraints"] = list(constraints)
+        assert Draft202012Validator(schema).is_valid(payload)
+        for invalid in ([], [constraints[0]], [*constraints, "Extra constraint"],
+                        [constraints[0], "Budget is 500 dollars"]):
+            bad = deepcopy(payload)
+            bad["experiments"][0]["time_resource_constraints"] = invalid
+            assert not Draft202012Validator(schema).is_valid(bad)
+        return json.dumps(payload)
+    result = asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+        provider_schema_projection=projection).execute(request))
+    assert calls == [True]
+    assert all(tuple(d["time_resource_constraints"]) == constraints for d in result.payload["experiments"])
+    quality = evaluate_result(request.execution_id, result, request.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+
+
+@pytest.mark.parametrize("constraints", [("x" * 301,), ("",), tuple(str(i) for i in range(9))])
+def test_unrepresentable_constraints_refused_before_provider(invocation, constraints):
+    from app.module_execution.errors import ModuleExecutionContractError
+    captured = asyncio.run(capture_request(invocation))
+    with pytest.raises(ModuleExecutionContractError):
+        strategic_parent_wire_schema(captured.arguments["response_schema"], strategic_parents(invocation), constraints)
+
+
 def test_projection_proof_refusal_prevents_provider(monkeypatch, invocation):
     from app.module_execution.executors import experiments
     def refuse(schema):
