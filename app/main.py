@@ -9,6 +9,7 @@ from app.readiness import readiness
 from app.services.task_finalization_service import TaskFinalizationUnavailable
 from app.routers.workflows import router as workflow_router, delivery_router
 from app.routers.copilot import router as copilot_router, start_copilot_api, close_copilot_api
+from app.routers.projects import router as projects_router
 from app.routers import (
     agents_router,
     brand_profile_router,
@@ -48,6 +49,7 @@ app.include_router(brand_profile_router)
 app.include_router(workflow_router)
 app.include_router(delivery_router)
 app.include_router(copilot_router)
+app.include_router(projects_router)
 
 
 @app.get("/health")

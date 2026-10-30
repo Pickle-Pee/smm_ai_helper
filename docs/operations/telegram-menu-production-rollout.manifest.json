@@ -1,0 +1,52 @@
+{
+  "schema_version": "telegram_menu_rollout_public.v2",
+  "status": "DEPLOYED_WITH_LIMITATIONS",
+  "deployment_state": "DEPLOYED",
+  "deployment_date": "2026-10-27",
+  "source": {
+    "dependency_pr": 129,
+    "dependency_sha": "b04685bc586845592f509eababc5388672852926",
+    "menu_pr": 131,
+    "menu_sha": "26ec261d0ed1d34f9c83be32780208a9b61752f2",
+    "driver_fix_pr": 133,
+    "driver_fix_sha": "173d7613ca2865cfd91ba39dd1febe6505d8165f",
+    "candidate_pr": 134,
+    "candidate_sha": "420df1ae1b90762a494a3fa95df4ee4fa31ef609",
+    "ci_tree_matches_candidate": true,
+    "excluded_prs": [130]
+  },
+  "gates": {
+    "backup_created": {"state": "PASSED", "evidence": "EXECUTED"},
+    "backup_checksum_verified": {"state": "PASSED", "evidence": "EXECUTED"},
+    "restore_rehearsal": {"state": "PASSED", "evidence": "EXECUTED"},
+    "original_data_preserved_at_cutover": {"state": "PASSED", "evidence": "EXECUTED"},
+    "driver_fix_ci": {"state": "PASSED", "evidence": "OBSERVED"},
+    "candidate_ci": {"state": "PASSED", "evidence": "OBSERVED"},
+    "immutable_release": {"state": "PASSED", "evidence": "EXECUTED"},
+    "staging_acceptance": {"state": "PASSED", "evidence": "EXECUTED"},
+    "migration_rehearsal": {"state": "PASSED", "evidence": "EXECUTED"},
+    "rollback_artifacts_archived": {"state": "PASSED", "evidence": "EXECUTED"},
+    "application_rollback_rehearsal": {"state": "PASSED", "evidence": "EXECUTED"},
+    "ingress_barrier": {"state": "PASSED", "evidence": "EXECUTED"},
+    "live_worker_drain": {"state": "PASSED", "evidence": "EXECUTED"},
+    "production_migration_and_parity": {"state": "PASSED", "evidence": "EXECUTED"},
+    "production_application_health": {"state": "PASSED", "evidence": "OBSERVED"},
+    "production_configuration_preserved": {"state": "PASSED", "evidence": "OBSERVED"},
+    "production_menu_synthetic_acceptance": {"state": "PASSED", "evidence": "EXECUTED"},
+    "real_telegram_transport_acceptance": {"state": "WAIVED_BY_USER", "evidence": "NOT_VERIFIED"},
+    "real_user_saved_strategy_acceptance": {"state": "NOT_RUN", "evidence": "NOT_VERIFIED"},
+    "paid_provider_acceptance": {"state": "NOT_RUN", "evidence": "NOT_VERIFIED"}
+  },
+  "ci_runs": [
+    {"url": "https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/40569782776", "scope": "driver_fix", "result": "SUCCESS", "python_passed": 1580, "container_passed": 237},
+    {"url": "https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/40569594539", "scope": "release_candidate", "result": "SUCCESS", "python_passed": 4391, "container_passed": 695}
+  ],
+  "blocker_categories": [],
+  "limitations": ["Real Telegram test transport waived by user", "Production saved-strategy smoke used only a synthetic operator-owned fixture", "Paid-provider continuation and live semantic quality not verified", "Documented bounded dialogue context remains"],
+  "further_actions": ["Optional real Telegram acceptance must use a controlled operator account", "Any paid-provider smoke requires a separately authorized budget"],
+  "production_cutover_performed": true,
+  "production_rollback_performed": false,
+  "operator_fixture_retained": true,
+  "detailed_evidence": "protected_operator_storage",
+  "historical_operational_details_remain_in_git_history": true
+}

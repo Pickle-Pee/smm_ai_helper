@@ -387,6 +387,9 @@ def test_architecture_separates_metadata_from_implementations_and_forbids_revers
                 ROOT / "app/marketing_copilot/application_contracts.py", ROOT / "app/marketing_copilot/factory.py",
                 ROOT / "app/marketing_copilot/service.py",
                 ROOT / "app/marketing_copilot/api_service.py", ROOT / "app/marketing_copilot/presentation.py",
+                # The saved-case presentation reader consumes typed outputs and
+                # claim-support helpers, without invoking execution capabilities.
+                ROOT / "app/marketing_copilot/mentor.py",
             }:
                 # Inspect dependencies; a telemetry field named module_execution_id is not an import.
                 assert not [name for name in _imports(path, resolve_relative=True) if name.startswith("app.module_execution")], path

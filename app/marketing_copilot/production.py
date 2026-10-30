@@ -12,7 +12,7 @@ _DEFAULT = object()
 
 def build_production_copilot_api(*, sessions=AsyncSessionLocal, queue=None,
         intent_model=application_model_call, module_model=_DEFAULT, analyzer=_DEFAULT,
-        owned_analyzer=None, extractor=owned_site_extractor):
+        owned_analyzer=None, extractor=owned_site_extractor, mentor_model=application_model_call):
     queue = queue if queue is not None else RedisWakeups(key=GRAPH_WAKEUP_KEY)
     kwargs = {"queue": queue, "sessions": sessions}
     if module_model is not _DEFAULT:
@@ -27,4 +27,4 @@ def build_production_copilot_api(*, sessions=AsyncSessionLocal, queue=None,
     copilot.interpreter = PublicIntentInterpreter(intent_model)
     acquisition = OwnedProductEvidenceService(analyzer=owned_analyzer if owned_analyzer is not None else build_owned_site_analyzer(),
                                              extractor=extractor)
-    return CopilotAPIService(sessions=sessions, copilot=copilot, acquisition=acquisition, queue=queue)
+    return CopilotAPIService(sessions=sessions, copilot=copilot, acquisition=acquisition, queue=queue, mentor_model=mentor_model)

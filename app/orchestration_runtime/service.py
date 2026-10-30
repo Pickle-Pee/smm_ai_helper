@@ -36,6 +36,18 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+def history_title(plan):
+    """Small immutable display metadata from explicit saved facts; no model call."""
+    labels = {"strategy_builder_v1": "Стратегия продвижения",
+              "competitive_positioning_v1": "Анализ конкурентов"}
+    title = labels.get(plan.scenario_key, "Маркетинговый запрос")
+    for node in plan.nodes:
+        for fact in (*node.context_packet.relevant_project_context, *node.context_packet.known_facts):
+            if fact.label == "product" and isinstance(fact.value, str) and fact.value.strip():
+                return title + " — " + " ".join(fact.value.split())[:100]
+    return title
+
+
 def routing(run_id, revision, plan, node):
     return {"schema_version": "module_job.v1", "run_id": run_id, "plan_revision": revision,
             "plan_fingerprint": plan.execution_fingerprint, "node_id": node.node_id,
@@ -109,7 +121,11 @@ class GraphExecutionService:
             # ON CONFLICT waits for concurrent start, then exact identity is checked.
             created = await session.scalar(insert(MarketingRun).values(
                 run_id=run_id, user_id=owner_id, workflow_type=WORKFLOW_TYPE, status="queued",
-                input_json={"responses_retry": new_policy(len(plan.nodes), self.responses_output_budget)} if self.responses_governance else {}, state_json={},
+                input_json={
+                    "history_title": history_title(plan),
+                    **({"responses_retry": new_policy(len(plan.nodes), self.responses_output_budget)}
+                       if self.responses_governance else {}),
+                }, state_json={},
             ).on_conflict_do_nothing(index_elements=[MarketingRun.run_id]).returning(MarketingRun.run_id))
             run = await session.scalar(select(MarketingRun).where(MarketingRun.run_id == run_id).with_for_update())
             if run.user_id != owner_id or run.workflow_type != WORKFLOW_TYPE:

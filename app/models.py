@@ -92,6 +92,7 @@ class InterpretedRequestRecord(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (Index("ix_tasks_owner_created", "user_id", "created_at", "id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -139,6 +140,7 @@ class BrandProfile(Base):
 
 class MarketingRun(Base):
     __tablename__ = "marketing_runs"
+    __table_args__ = (Index("ix_marketing_runs_owner_type_activity", "user_id", "workflow_type", "updated_at", "run_id"),)
 
     run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
@@ -527,3 +529,56 @@ class WorkflowDelivery(Base):
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class ProjectSession(Base):
+    """A source-owned discussion thread; source artifacts remain authoritative."""
+    __tablename__ = "project_sessions"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "public_id", name="uq_project_session_owner_source"),
+        CheckConstraint("mode IN ('mentor', 'project_chat')", name="ck_project_session_mode"),
+    )
+    session_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    public_id: Mapped[str] = mapped_column(String(80))
+    source_type: Mapped[str] = mapped_column(String(16))
+    source_id: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(255))
+    mode: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActiveProjectBinding(Base):
+    """CAS version is retained on deactivation so old buttons never regain authority."""
+    __tablename__ = "active_project_bindings"
+    __table_args__ = (
+        CheckConstraint("version >= 0", name="ck_active_project_version"),
+        CheckConstraint("actor_id = chat_id AND actor_id > 0", name="ck_active_project_private"),
+    )
+    actor_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("project_sessions.session_id", ondelete="SET NULL"), nullable=True)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProjectDiscussionTurn(Base):
+    """Committed execution identity survives restarts; unknown outcomes fail closed."""
+    __tablename__ = "project_discussion_turns"
+    __table_args__ = (
+        UniqueConstraint("actor_id", "request_key", name="uq_project_turn_actor_request"),
+        CheckConstraint("status IN ('running', 'completed', 'unknown')", name="ck_project_turn_status"),
+        CheckConstraint("(status = 'completed') = (reply IS NOT NULL)", name="ck_project_turn_result"),
+        Index("ix_project_turn_session_created", "session_id", "created_at", "turn_id"),
+    )
+    turn_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("project_sessions.session_id", ondelete="CASCADE"))
+    actor_id: Mapped[int] = mapped_column(BigInteger)
+    request_key: Mapped[str] = mapped_column(String(128))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    question: Mapped[str] = mapped_column(Text)
+    reply: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -6,20 +6,42 @@ from aiogram.fsm.storage.memory import SimpleEventIsolation
 from app.config import settings
 from app.logging import setup_logging
 from bot.backend import validate_configuration
-from bot.handlers import menu, agent_flow, history, chat, workflow, copilot
+from bot.handlers import menu, agent_flow, history, chat, workflow, copilot, mentor
 from bot.delivery import delivery_loop
+from bot.operation_guard import OperationGuard
+from bot.project_navigation import context_router
 
 
 def create_dispatcher():
     # Serialize a user's message/callback FSM updates, including HTTP awaits.
-    dp = Dispatcher(events_isolation=SimpleEventIsolation())
+    dp = Dispatcher(events_isolation=SimpleEventIsolation(), disable_fsm=True)
+    guard = OperationGuard()
+    dp["operation_guard"] = guard
+    dp.update.outer_middleware(guard)
+    dp.update.outer_middleware(dp.fsm)
     dp.include_router(menu.router)
+    dp.include_router(context_router)
     dp.include_router(copilot.router)
+    dp.include_router(mentor.router)
     dp.include_router(workflow.router)
     dp.include_router(agent_flow.router)
     dp.include_router(history.router)   # <- тут
     dp.include_router(chat.router)
+    dp.startup.register(register_commands)
     return dp
+
+
+async def register_commands(bot):
+    from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats
+    await bot.set_my_commands([
+        BotCommand(command="menu", description="Главное меню"),
+        BotCommand(command="new", description="Новый запрос"),
+        BotCommand(command="history", description="Проекты и история"),
+        BotCommand(command="active", description="Текущий контекст"),
+        BotCommand(command="case_history", description="Обсуждение стратегии"),
+        BotCommand(command="cancel", description="Отменить уточнения"),
+        BotCommand(command="help", description="Помощь"),
+    ], scope=BotCommandScopeAllPrivateChats())
 
 
 async def main():
@@ -27,12 +49,22 @@ async def main():
     validate_configuration()
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     dp = create_dispatcher()
-    async with asyncio.TaskGroup() as group:
-        delivery_task = group.create_task(delivery_loop(bot))
-        try:
-            await dp.start_polling(bot)
-        finally:
-            delivery_task.cancel()
+    # Close the Telegram session only after the delivery owner has stopped.
+    async with bot:
+        async with asyncio.TaskGroup() as group:
+            delivery_task = group.create_task(delivery_loop(bot))
+            try:
+                await dp.start_polling(bot, close_bot_session=False)
+            finally:
+                delivery_task.cancel()
+                # Aiogram owns tasks before they enter our middleware (including
+                # tasks waiting for its concurrency semaphore). start_polling
+                # does not drain this set when polling stops.
+                updates = tuple(dp._handle_update_tasks)
+                for task in updates:
+                    task.cancel()
+                await asyncio.gather(*updates, return_exceptions=True)
+                await dp["operation_guard"].close()
 
 
 if __name__ == "__main__":
