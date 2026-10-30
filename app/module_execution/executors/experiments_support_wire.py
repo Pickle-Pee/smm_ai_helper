@@ -1,5 +1,6 @@
 """Explicit strategic selection for EXPERIMENTS; persisted payload remains v1."""
 from copy import deepcopy
+import re
 
 from jsonschema import Draft202012Validator
 
@@ -10,9 +11,31 @@ from .support_schema import check_schema_bounds
 WIRE_VERSION = "experiments.wire.v2"
 SELECTED_PARENT = "strategic_parent_id"
 STRATEGIC_DEFINITION = "AllowedStrategicParentId"
+NUMERIC_ASSERTION_DEFINITION = "AllowedExperimentNumericAssertion"
 
 
-def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=()):
+QUALITATIVE_DESIGN_PATTERN = "^[^0-9]*$"
+
+
+def design_assertion_schema(original, numeric_assertions_available):
+    """Generate qualitative text or a complete, bounded supplied assertion.
+
+    The portable provider pattern excludes ASCII digits. The unchanged canonical
+    numerical guard remains authoritative for all Unicode decimal digits and for
+    actual per-design cited-parent provenance.
+    """
+    if (original.get("type") != "string" or original.get("minLength") != 1
+            or original.get("maxLength") != 300
+            or any(key in original for key in ("anyOf", "allOf", "oneOf", "pattern", "enum", "$ref"))):
+        raise ModuleExecutionContractError("Unexpected experiment design text contract")
+    qualitative = deepcopy(original)
+    qualitative["pattern"] = QUALITATIVE_DESIGN_PATTERN
+    if not numeric_assertions_available:
+        return qualitative
+    return {"anyOf": [qualitative, {"$ref": "#/$defs/" + NUMERIC_ASSERTION_DEFINITION}]}
+
+
+def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(), strategic_assertions=()):
     """Reserve one canonical parent slot for an explicit accepted hypothesis.
 
     Additional parents retain the original complete allowlist, including accepted
@@ -26,7 +49,8 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     schema = collapse_redundant_support_anyof(validation_schema)
     schema = collapse_single_support_anyof(schema)
     definitions = schema["$defs"]
-    if STRATEGIC_DEFINITION in definitions or "wire_contract_version" in schema["properties"]:
+    if (STRATEGIC_DEFINITION in definitions or NUMERIC_ASSERTION_DEFINITION in definitions
+            or "wire_contract_version" in schema["properties"]):
         raise ModuleExecutionContractError("Unexpected strategic parent wire contract")
     definitions[STRATEGIC_DEFINITION] = {"type": "string", "minLength": 1, "maxLength": 128, "enum": allowed}
     statements = 0
@@ -51,6 +75,21 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     if not statements or "related_strategic_claim_ids" not in design:
         raise ModuleExecutionContractError("Missing strategic parent wire contract")
     design["related_strategic_claim_ids"]["items"] = {"$ref": "#/$defs/" + STRATEGIC_DEFINITION}
+    strategic_assertions = tuple(strategic_assertions)
+    if any(type(value) is not str for value in strategic_assertions):
+        raise ModuleExecutionContractError("Invalid experiment assertion wire scope")
+    numeric_assertions = sorted({text for text in strategic_assertions
+                                 if 1 <= len(text) <= 300 and re.search(r"\d", text)})
+    if numeric_assertions:
+        definitions[NUMERIC_ASSERTION_DEFINITION] = {
+            "type": "string", "minLength": 1, "maxLength": 300, "enum": numeric_assertions}
+    for name, definition in tuple(design.items()):
+        if name in ("related_strategic_claim_ids", "time_resource_constraints"):
+            continue
+        if name == "minimum_required_inputs":
+            definition["items"] = design_assertion_schema(definition["items"], bool(numeric_assertions))
+        else:
+            design[name] = design_assertion_schema(definition, bool(numeric_assertions))
     constraints = tuple(constraints)
     if any(type(value) is not str or not 1 <= len(value) <= 300 for value in constraints):
         raise ModuleExecutionContractError("Invalid experiment constraint wire scope")

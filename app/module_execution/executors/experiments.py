@@ -82,8 +82,11 @@ learning_record explicit in requested canonical outputs. At most three experimen
 
     def wire_schema_for(self, request, validation_schema, evidence):
         if self._strategic_parent_wire:
-            return strategic_parent_wire_schema(validation_schema, strategic_parents(request),
-                tuple(str(e.value) for e in experiment_constraint_evidence(evidence)))
+            eligible = strategic_parents(request)
+            return strategic_parent_wire_schema(validation_schema, eligible,
+                tuple(str(e.value) for e in experiment_constraint_evidence(evidence)),
+                strategic_assertions=tuple(text for claim in eligible.values()
+                    for text in assertion_support(claim.value)))
         return validation_schema
 
     def decode_wire_payload(self, request, payload, evidence):

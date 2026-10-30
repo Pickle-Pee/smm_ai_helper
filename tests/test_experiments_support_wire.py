@@ -300,3 +300,182 @@ def test_duplicate_evidence_is_not_repaired_by_wire(invocation):
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError):
         asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(invocation))
+
+
+
+def test_provider_design_schema_rejects_invented_numeric_intervention(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    wire = strategic_parent_wire_schema(baseline.arguments["response_schema"], strategic_parents(invocation))
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    payload["experiments"][1]["intervention"] = "Compare 2 new messages"
+    # Canonical semantics already reject this; provider generation must express it.
+    assert not Draft202012Validator(wire).is_valid(payload)
+
+
+
+def replace_parent_assertion(request, claim_id, value):
+    upstream = []
+    for item in request.upstream_results:
+        if any(c.claim_id == claim_id for c in item.result.normalized_result.claims):
+            normalized = replace(item.result.normalized_result, claims=tuple(
+                replace(c, value=value) if c.claim_id == claim_id else c
+                for c in item.result.normalized_result.claims))
+            item = replace(item, result=replace(item.result,
+                payload=result_to_json(item.result)["payload"], normalized_result=normalized))
+        upstream.append(item)
+    return replace(request, upstream_results=tuple(upstream))
+
+
+@pytest.mark.parametrize("field", ["hypothesis", "target_metric", "intervention", "expected_signal", "failure_condition", "minimum_required_inputs"])
+def test_design_numeric_schema_exact_full_assertions_and_bounds(invocation, field):
+    baseline = asyncio.run(capture_request(invocation))
+    original = baseline.arguments["response_schema"]
+    before = deepcopy(original)
+    quote = "Test a 20% directional uplift hypothesis"
+    wire = strategic_parent_wire_schema(original, strategic_parents(invocation), strategic_assertions=(quote, "x" * 300 + "2", "Qualitative only"))
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    def set_text(value):
+        payload["experiments"][0][field] = [value] if field == "minimum_required_inputs" else value
+    for text, allowed in [(quote, True), ("Qualitative design without invented quantities", True),
+                          ("20% directional uplift", False), (quote + " after launch", False),
+                          ("Test a 40% directional uplift hypothesis", False),
+                          ("Compare 2 variants", False), ("", False), ("x" * 301, False),
+                          ("x" * 300 + "2", False)]:
+        set_text(text)
+        assert Draft202012Validator(wire).is_valid(payload) is allowed
+    assert original == before
+    assert wire["$defs"]["ExperimentStatement"]["properties"]["text"] == original["$defs"]["ExperimentStatement"]["properties"]["text"]
+    assert wire["$defs"]["ExperimentDesign"]["properties"]["time_resource_constraints"]["maxItems"] == 0
+
+
+@pytest.mark.parametrize("projection", [False, True])
+def test_supported_numeric_assertion_uses_authoritative_parents_and_original_guard(invocation, projection):
+    numeric_id, *other_ids = strategic_parents(invocation)
+    quote = "Test a 20% directional uplift hypothesis"
+    request = replace_parent_assertion(invocation, numeric_id, quote)
+    async def model(**kwargs):
+        payload = wire_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        for design in payload["experiments"]:
+            design["related_strategic_claim_ids"] = [numeric_id]
+        payload["experiments"][0]["intervention"] = quote
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    result = asyncio.run(ExperimentsExecutor(model_call=model,
+        strategic_parent_wire=True, provider_schema_projection=projection).execute(request))
+    assert result.payload["experiments"][0]["intervention"] == quote
+    assert "wire_contract_version" not in result.payload
+    async def wrong_citation(**kwargs):
+        payload = json.loads(await model(**kwargs))
+        payload["experiments"][0]["related_strategic_claim_ids"] = [other_ids[0]]
+        # The request-wide provider enum permits it, but its cited source does not.
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=wrong_citation,
+            strategic_parent_wire=True, provider_schema_projection=projection).execute(request))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_structured_numeric_context_does_not_enter_design_assertion_allowlist(invocation):
+    numeric_id = next(iter(strategic_parents(invocation)))
+    quote = "Test a 20% directional uplift hypothesis"
+    value = json.dumps({"summary":"Qualitative strategic hypothesis", "items":["Validate the message"],
+        "numeric_context":[{"support_id":"evd_context", "quote":quote, "attribution":"supplied_context"}]})
+    request = replace_parent_assertion(invocation, numeric_id, value)
+    async def model(**kwargs):
+        design = kwargs["response_schema"]["$defs"]["ExperimentDesign"]["properties"]
+        assert "anyOf" not in design["intervention"]
+        payload = wire_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        payload["experiments"][0]["intervention"] = quote
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(request))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+def test_qualitative_design_wire_does_not_change_exact_constraints(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    wire = strategic_parent_wire_schema(baseline.arguments["response_schema"],
+        strategic_parents(invocation), constraints=("Budget 500 dollars",), strategic_assertions=("Test 2 messages",))
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    for design in payload["experiments"]:
+        design["time_resource_constraints"] = ["Budget 500 dollars"]
+    assert Draft202012Validator(wire).is_valid(payload)
+    payload["experiments"][0]["time_resource_constraints"] = ["Budget 600 dollars"]
+    assert not Draft202012Validator(wire).is_valid(payload)
+
+
+def test_design_schema_flags_off_remains_original(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    executor = ExperimentsExecutor(model_call=AsyncMock(), strategic_parent_wire=False)
+    original = deepcopy(baseline.arguments["response_schema"])
+    assert executor.wire_schema_for(invocation, original, ()) is original
+    assert original == baseline.arguments["response_schema"]
+    assert "pattern" not in original["$defs"]["ExperimentDesign"]["properties"]["intervention"]
+
+
+
+def test_numeric_design_additions_keep_complete_provider_budget_guard(invocation):
+    from app.module_execution.errors import ModuleExecutionContractError
+    baseline = asyncio.run(capture_request(invocation))
+    assertions = tuple(f"Supplied numerical hypothesis {i}" for i in range(1001))
+    with pytest.raises(ModuleExecutionContractError, match="exceeds provider bounds"):
+        strategic_parent_wire_schema(baseline.arguments["response_schema"],
+            strategic_parents(invocation), strategic_assertions=assertions)
+
+
+def test_unicode_decimal_numeric_guard_remains_authoritative(invocation):
+    async def model(**kwargs):
+        payload = wire_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        payload["experiments"][0]["intervention"] = "Compare \u0662 variants"
+        # The portable ASCII generation pattern deliberately makes no Unicode proof.
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(invocation))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+
+def test_numeric_design_enum_is_shared_direct_ref_and_read_only_equivalent(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    original = baseline.arguments["response_schema"]
+    original_before = deepcopy(original)
+    quotes = ["Test a 20% directional uplift hypothesis", "Compare 2 supplied messages"]
+    wire = strategic_parent_wire_schema(original, strategic_parents(invocation), strategic_assertions=quotes)
+    shared = wire["$defs"]["AllowedExperimentNumericAssertion"]
+    assert shared == {"type":"string", "minLength":1, "maxLength":300, "enum":sorted(quotes)}
+    assert sum(node.get("enum") == sorted(quotes) for node in nodes(wire)) == 1
+    design = wire["$defs"]["ExperimentDesign"]["properties"]
+    fields = ("hypothesis", "target_metric", "intervention", "expected_signal", "failure_condition", "minimum_required_inputs")
+    for name in fields:
+        text = design[name]["items"] if name == "minimum_required_inputs" else design[name]
+        assert text["anyOf"][1] == {"$ref":"#/$defs/AllowedExperimentNumericAssertion"}
+        assert text["anyOf"][0]["minLength"] == 1 and text["anyOf"][0]["maxLength"] == 300
+    # Inline a copy of the shared definition to reproduce the previous encoding.
+    inline = deepcopy(wire)
+    for node in list(nodes(inline)):
+        if node == {"$ref":"#/$defs/AllowedExperimentNumericAssertion"}:
+            node.clear()
+            node.update(deepcopy(shared))
+    inline["$defs"].pop("AllowedExperimentNumericAssertion")
+    before = deepcopy(wire)
+    direct_validator, inline_validator = Draft202012Validator(wire), Draft202012Validator(inline)
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    for name in fields:
+        for value in (*quotes, "Qualitative assertion", "20% uplift", "Compare 4 supplied messages", "", "x" * 301):
+            payload["experiments"][0][name] = [value] if name == "minimum_required_inputs" else value
+            assert direct_validator.is_valid(payload) == inline_validator.is_valid(payload)
+        payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    assert wire == before and original == original_before
+
+
+def test_numeric_design_definition_collision_refuses(invocation):
+    from app.module_execution.errors import ModuleExecutionContractError
+    baseline = asyncio.run(capture_request(invocation))
+    original = deepcopy(baseline.arguments["response_schema"])
+    original["$defs"]["AllowedExperimentNumericAssertion"] = {"type":"string"}
+    before = deepcopy(original)
+    with pytest.raises(ModuleExecutionContractError, match="Unexpected strategic parent wire contract"):
+        strategic_parent_wire_schema(original, strategic_parents(invocation), strategic_assertions=("Test 2 messages",))
+    assert original == before

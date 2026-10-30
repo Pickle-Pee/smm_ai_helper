@@ -74,3 +74,33 @@ The unchanged local uniqueness/set-equality guard still rejects duplicates and
 omissions; no decoder adds, removes or rewrites constraints. Unrepresentable
 input stops before provider I/O. These wire restrictions do not change the
 canonical accepted set or stored v1 payload.
+
+
+## Qualitative design generation and exact numeric assertions
+
+With the strategic wire enabled, the five free-text ExperimentDesign fields and
+string items in `minimum_required_inputs` use a portable `^[^0-9]*$` pattern.
+When authoritative `assertion_support` from eligible strategic parents supplies
+complete numerical assertions of 1..300 characters, the field instead accepts a
+nested `anyOf`: qualitative text or a direct local reference to the shared
+`AllowedExperimentNumericAssertion` definition. That single string enum contains
+the exact full assertions with the same original 1..300 character bounds. All
+six fields reuse it instead of repeating its values. Definition-name collisions
+fail closed. This encoding accepts the same values as six inline enums. No numeric assertions means
+pattern only, with no extra OR. This provider restriction intentionally allows
+complete supplied assertions, rather than every substring accepted by the
+canonical guard. Longer source assertions cannot fit these design fields and do
+not become enum entries. New words, fragments and calculated replacements are
+not added to the enum. Structured `numeric_context` quotes are never assertion
+support. The canonical statement text schema is unchanged.
+
+The portable pattern excludes ASCII digits; it is not a proof about all Unicode
+decimal digits. The existing Unicode-aware numerical guard remains authoritative.
+The provider allowlist spans eligible request parents; the unchanged original
+per-design guard still requires a numerical field to be supported by its actual
+`related_strategic_claim_ids`. Thus selecting a full assertion from one parent
+while citing another still fails locally. Exact time/resource constraint enums,
+reference bounds, selected-parent decoding and stored v1 payloads are unchanged.
+With the wire disabled, the canonical design schema is unchanged. Complete-schema
+provider enum/string limits are checked after these additions, and refusal never
+falls back to a permissive schema. This change performs no output rewriting.
