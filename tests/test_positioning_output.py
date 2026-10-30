@@ -228,3 +228,23 @@ def test_result_construction_diagnostics_are_safe(monkeypatch, rejection_log):
         "POSITIONING", "result_contract_invalid", "result_normalization_invalid", 0, None)
     assert "PRIVATE_SENTINEL" not in str(rejection_log.call_args)
     assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.parametrize("projection", [False, True])
+def test_invented_numeric_validation_plan_fails_through_production_transport(monkeypatch, rejection_log, projection):
+    from tests.test_positioning_numeric_grounding import UNSUPPORTED_VALIDATION_PLAN
+
+    def mutate(payload, data):
+        statement = next(item for item in payload["outputs"] if item["output_name"] == "validation_plan.")
+        statement["text"] = UNSUPPORTED_VALIDATION_PLAN
+
+    provider = PositioningProvider(mutate)
+    install_transport(monkeypatch, provider)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(PositioningExecutor(model_call=production_model_call,
+            provider_schema_projection=projection).execute(request(ModuleId.POSITIONING)))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(provider.calls) == 1 and not transient(caught.value)
+    rejection_log.assert_called_once_with("Module output rejected module=%s stage=%s rule=%s",
+        "POSITIONING", "statement_semantics_invalid", "numerical_support_required")
+    assert UNSUPPORTED_VALIDATION_PLAN not in str(rejection_log.call_args)

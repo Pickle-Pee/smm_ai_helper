@@ -11,6 +11,7 @@ from .provider_schema import (
     SchemaProjectionError, collapse_single_support_anyof, single_support_anyof_count, schema_measurement,
 )
 from .positioning_provider_schema import minimal_positioning_schema
+from .intelligence_common import require_supported_numbers, supported_text
 from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
     PositioningWithoutSeedsOutput,
@@ -54,7 +55,11 @@ Never treat an upstream hypothesis as observed evidence. Cite materially used
 COMPETITOR_ANALYSIS/MARKET_ANALYSIS predecessor claims via parent_claim_ids.
 Within each statement, evidence_ids and parent_claim_ids must each contain unique
 IDs. Cite each source once per array; do not repeat the product-truth ID when it
-already appears among that statement's evidence_ids."""
+already appears among that statement's evidence_ids.
+Keep statements qualitative, without digits or numbered lists, unless the entire
+statement is copied verbatim from its cited local evidence or accepted parent
+assertion. Never invent numeric thresholds, sample sizes, budgets or deadlines,
+or calculate or combine numbers from sources into a new assertion."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
@@ -177,3 +182,4 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
         if statement.output_name in PRODUCT_OUTPUTS:
             if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
+        require_supported_numbers(statement.text, supported_text(statement, local, parents))
