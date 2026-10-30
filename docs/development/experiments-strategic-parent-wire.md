@@ -53,3 +53,13 @@ o offline test makes a model-quality or rollout claim.
 Offline regression coverage: `test_experiments_support_wire.py`,
 `test_experiments_provider_projection.py`, `test_experiments_result_rules.py`,
 `test_experiments_diagnostics.py`, and `test_strategy_intelligence.py`.
+
+A subsequent one-POST diagnostic with the same wire request completed but was
+rejected specifically by `numerical_support_required`. The unchanged guard rejects
+new numeric prose even when related numbers occur in context. The instruction now
+explicitly requires qualitative newly composed statements/designs, forbids digits
+and numbered lists, and preserves supplied numeric constraints in their verbatim
+constraint array. Entire supported numeric assertions remain allowed verbatim;
+there is no local acceptance relaxation. Current composed instructions are 53477
+UTF-8 bytes; the historical incident pin remains 53096 and diagnostics report the
+381-byte difference instead of claiming an exact replay.

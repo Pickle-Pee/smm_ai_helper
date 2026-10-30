@@ -46,7 +46,12 @@ signal, failure/falsification condition and minimum inputs. Preserve supplied ti
 and resource constraints; otherwise time_resource_constraints is empty. Expected
 changes are hypotheses, never forecasted facts. Do not invent uplift, budget,
 duration, sample size, MDE or significance thresholds. Numerical text must be copied
-verbatim from cited supplied statements, never calculated or invented. Structured
+verbatim from cited supplied statements, never calculated or invented. Keep new
+canonical statements and design fields qualitative, without digits or numbered
+lists, even when context contains numbers. A numeric assertion is allowed only
+when the entire statement or field is copied verbatim from its cited support.
+Preserve supplied numeric constraints verbatim in time_resource_constraints;
+do not weave their numbers into newly composed assertions. Structured
 VIRTUAL_CMO parents supply qualitative summaries/actions only. Their numeric_context
 quotes are attributed context, never numerical support for outputs or design fields.
 Use HYPOTHESIS or RECOMMENDATION kinds. Formal AB designs without baseline,
