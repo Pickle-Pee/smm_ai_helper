@@ -54,10 +54,10 @@ class ProductModel(FakeModel):
                 statement["parent_claim_ids"] = data["allowed_parent_claim_ids"][:1]
             if self.mode == "mixed":
                 statement["evidence_ids"] = [ids["product"], ids["existing_proof"]]
-        if self.kind == "OBSERVATION":
-            # Simulate a canonical/legacy caller despite the provider subset:
-            # positive OBS cases must cite their exact actual product source.
-            for statement in payload["outputs"]:
+        # Positive OBS cases and RTB must quote their actual selected product
+        # source, including proof-mode selection rather than another source.
+        for statement in payload["outputs"]:
+            if self.kind == "OBSERVATION" or statement["output_name"] == "RTB":
                 selected = statement.get("product_support_id")
                 source = next((e for e in data["local_evidence"] if e["evidence_id"] == selected), None)
                 if source is not None:

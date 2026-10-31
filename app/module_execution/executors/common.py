@@ -100,6 +100,7 @@ class SemanticRule(str, Enum):
     MISSING_SEED_REQUIRES_HYPOTHESIS = "missing_seed_requires_hypothesis"
     DIFFERENTIATION_REQUIRES_HYPOTHESIS = "differentiation_requires_hypothesis"
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
+    RTB_QUOTE_REQUIRED = "rtb_quote_required"
 
 
 class NumericContextFailureReason(str, Enum):

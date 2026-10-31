@@ -76,6 +76,12 @@ Preserve supplied fulfillment conditions, including postprocessing and delayed
 collection. Do not turn them into promises of completion in a single visit,
 immediate delivery or no further actions. New operational promises require owner
 confirmation and must not be asserted as an offer.
+RTB is supplied substantiation, not a new inference or promotional promise. Its
+entire text must be a verbatim contiguous quotation from one actually cited local
+product_truth or existing_proof source. Copy the source wording without adding
+conclusions such as no further actions, guaranteed convenience or proven results.
+Do not paraphrase or strengthen the proof. Supplied owner statements are not
+independent verification; retain that limitation instead of inventing evidence.
 Observations must quote one actually cited local source or accepted factual parent
 verbatim; an upstream hypothesis is not observed evidence. Use HYPOTHESIS or
 INFERENCE for unsupported reasoning. Provider generation permits INFERENCE,
@@ -205,6 +211,13 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
             if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         require_supported_numbers(statement.text, supported_text(statement, local, parents))
+        if statement.output_name == "RTB":
+            proof = statement.model_copy(update={
+                "evidence_ids": [e for e in statement.evidence_ids if local[e].input_key in PRODUCT_CATEGORIES],
+                "parent_claim_ids": [],
+            })
+            if not any(statement.text in source for source in supported_text(proof, local, parents)):
+                raise StatementSemanticsError(SemanticRule.RTB_QUOTE_REQUIRED)
         if statement.kind == "OBSERVATION":
             # Preserve numeric authority separately: only factual parents can
             # authorize an observation, and only their assertion channel counts.
