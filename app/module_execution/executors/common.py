@@ -96,6 +96,7 @@ class SemanticRule(str, Enum):
     STRATEGY_PARENT_REQUIRED = "strategy_parent_required"
     MAIN_GROWTH_CONSTRAINT_INVALID = "main_growth_constraint_invalid"
     NUMERICAL_SUPPORT_REQUIRED = "numerical_support_required"
+    OBSERVATION_SUPPORT_REQUIRED = "observation_support_required"
     MISSING_SEED_REQUIRES_HYPOTHESIS = "missing_seed_requires_hypothesis"
     DIFFERENTIATION_REQUIRES_HYPOTHESIS = "differentiation_requires_hypothesis"
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"

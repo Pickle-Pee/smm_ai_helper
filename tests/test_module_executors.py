@@ -429,14 +429,17 @@ def test_positioning_missing_seed_rejects_unmarked_reasoning(seed, name, kind):
 ])
 def test_positioning_missing_seed_requires_matching_factual_parent(parent_kind, parent_output, allowed):
     from app.module_execution.executors.schemas import OutputStatement
-    parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)),
-                      FakeModel(lambda r, d: r["outputs"][0].update(kind=parent_kind)))
+    def parent_statement(payload, data):
+        payload["outputs"][0].update(kind=parent_kind)
+        if parent_kind == "OBSERVATION":
+            payload["outputs"][0]["text"] = data["local_evidence"][0]["value"]
+    parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)), FakeModel(parent_statement))
     facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != "customer_job_or_need")
     req = request(ModuleId.POSITIONING, facts=facts, outputs=("JTBD_frame",),
                   identity="child.positioning", upstream=(UpstreamExecutionResult(producer_node_id="parent", result=parent),))
     evidence = first_party_evidence(req, scoped_facts(req))
     parent_claim = parent.normalized_result.claims[0]
-    statement = OutputStatement(output_name="JTBD_frame", text="Synthetic parent-supported reasoning",
+    statement = OutputStatement(output_name="JTBD_frame", text=parent_claim.value,
         kind="OBSERVATION", confidence="MEDIUM", evidence_ids=[evidence[0].record.evidence_id],
         parent_claim_ids=[parent_claim.claim_id])
     executor = PositioningExecutor(model_call=None)

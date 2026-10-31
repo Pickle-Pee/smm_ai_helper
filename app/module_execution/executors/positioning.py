@@ -11,6 +11,7 @@ from .provider_schema import (
     SchemaProjectionError, collapse_single_support_anyof, single_support_anyof_count, schema_measurement,
 )
 from .positioning_provider_schema import minimal_positioning_schema
+from .positioning_observation_schema import positioning_observation_schema
 from .intelligence_common import require_supported_numbers, supported_text
 from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
@@ -59,7 +60,11 @@ already appears among that statement's evidence_ids.
 Keep statements qualitative, without digits or numbered lists, unless the entire
 statement is copied verbatim from its cited local evidence or accepted parent
 assertion. Never invent numeric thresholds, sample sizes, budgets or deadlines,
-or calculate or combine numbers from sources into a new assertion."""
+or calculate or combine numbers from sources into a new assertion.
+Observations must quote one actually cited local source or accepted factual parent
+verbatim; an upstream hypothesis is not observed evidence. Use HYPOTHESIS or
+INFERENCE for unsupported reasoning. Provider generation permits INFERENCE,
+HYPOTHESIS and RECOMMENDATION only, subject to the stricter output-specific kinds."""
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
@@ -107,6 +112,8 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
             collapsed = single_support_anyof_count(validation_schema) - single_support_anyof_count(provider_schema)
         else:
             provider_schema = super().provider_schema_for(request, validation_schema)
+        provider_schema = positioning_observation_schema(
+            provider_schema, minimal=self._minimal_provider_schema)
         original = schema_measurement(validation_schema)
         provider = schema_measurement(provider_schema)
         fields = {"module_id": self.module_id.value, "execution_id": request.execution_id,
@@ -183,3 +190,11 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
             if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         require_supported_numbers(statement.text, supported_text(statement, local, parents))
+        if statement.kind == "OBSERVATION":
+            # Preserve numeric authority separately: only factual parents can
+            # authorize an observation, and only their assertion channel counts.
+            factual = [pid for pid in statement.parent_claim_ids
+                       if parents[pid].claim_type in (ClaimType.OBSERVATION, ClaimType.FACT)]
+            observed = statement.model_copy(update={"parent_claim_ids": factual})
+            if not any(statement.text in source for source in supported_text(observed, local, parents)):
+                raise StatementSemanticsError(SemanticRule.OBSERVATION_SUPPORT_REQUIRED)

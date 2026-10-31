@@ -47,7 +47,7 @@ def test_semantic_diagnostic_location_categories_privacy(index, reverse, categor
     assert record.kind == "HYPOTHESIS"
     assert record.evidence_categories == [category if category != "private_label" else "other"]
     assert record.execution_id == req.execution_id
-    assert record.validation_schema_sha256 == record.provider_schema_sha256
+    assert record.validation_schema_sha256 != record.provider_schema_sha256
     assert record.provider_schema_sha256 == schema_measurement(model.calls[0]["response_schema"])["sha256"]
     assert caught.value.stage.value == "statement_semantics_invalid"
     assert type(caught.value) is ExecutorOutputError

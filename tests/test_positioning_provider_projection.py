@@ -16,6 +16,7 @@ from app.module_execution.executors.provider_schema import (
     SchemaProjectionError, collapse_single_support_anyof, schema_measurement,
 )
 from app.module_registry import ModuleId, ModuleRegistry
+from app.module_execution.executors.positioning_observation_schema import positioning_observation_schema
 from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.orchestration_runtime.model_adapter import production_model_call
 from app.orchestration_runtime.service import evaluate_result
@@ -55,7 +56,7 @@ def test_real_adapter_projects_only_wire_schema_and_passes_original_validation_a
         result = asyncio.run(PositioningExecutor(model_call=production_model_call,
             provider_schema_projection=enabled).execute(invocation))
     assert validators == [original]
-    projected = collapse_single_support_anyof(original) if enabled else original
+    projected = positioning_observation_schema(collapse_single_support_anyof(original) if enabled else original)
     expected_wire = deepcopy(baseline.payload)
     expected_wire["text"]["format"]["schema"] = projected
     assert provider.calls == [expected_wire]
@@ -85,7 +86,7 @@ def test_config_gate_is_injected_into_production_registry(monkeypatch, enabled):
     invocation = seed_request(True, False)
     baseline = asyncio.run(capture_request(invocation, model=settings.DEFAULT_TEXT_MODEL_HARD))
     asyncio.run(runtime.executors.resolve("positioning.v1").execute(invocation))
-    assert provider.calls[0]["text"]["format"]["schema"] == (
+    assert provider.calls[0]["text"]["format"]["schema"] == positioning_observation_schema(
         collapse_single_support_anyof(baseline.arguments["response_schema"]) if enabled else baseline.arguments["response_schema"])
     # A globally enabled production configuration must never project diagnostic baseline.
     assert asyncio.run(capture_request(invocation, model=settings.DEFAULT_TEXT_MODEL_HARD)).payload == baseline.payload
