@@ -221,3 +221,39 @@ def test_distinct_concurrent_questions_serialize_and_use_first_answer(mvp_databa
             release.set()
             await remove_actor(mvp_database, actor)
     asyncio.run(check())
+
+
+def test_invented_population_is_not_saved_or_retried_after_service_recreation(mvp_database, monkeypatch):
+    from app.marketing_copilot.mentor_contracts import MentorQuestion
+    from app.marketing_copilot.api_errors import ProviderUnavailable
+    import pytest
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
+    async def check():
+        actor = int(uuid.uuid4().hex[:12], 16)
+        calls = []
+        async def unsupported(**kwargs):
+            calls.append(kwargs)
+            return json.dumps({"focus": "verification", "paragraphs": [
+                "Запланируйте тестовую партию, например, 4–8 участников."],
+                "source_sections": ["verification"], "unknowns": []}, ensure_ascii=False)
+        api = configured(mvp_database, IntentKind.MARKETING_STRATEGY,
+            module_model=StrategyModel(use_parents=True), mentor_model=unsupported)
+        try:
+            rid = await completed_case(mvp_database, api, actor)
+            request = MentorQuestion(request_key="unsupported-population", question="Как проверить спрос?")
+            with pytest.raises(ProviderUnavailable):
+                await api.mentor.question(actor, rid, request)
+            assert (await api.mentor.history(actor, rid)).turns == []
+            fresh = CaseMentorService(mvp_database, api.copilot.graph_service, model_call=unsupported)
+            with pytest.raises(ProviderUnavailable):
+                await fresh.question(actor, rid, request)
+            assert len(calls) == 1
+            key = "question:" + __import__("hashlib").sha256(request.request_key.encode()).hexdigest()
+            async with mvp_database() as session:
+                saved = await session.scalar(select(MarketingArtifact).where(
+                    MarketingArtifact.run_id == fresh.companion_id(rid), MarketingArtifact.artifact_key == key))
+                assert saved.artifact_type == "case_mentor_execution.v1"
+                assert saved.payload_json["state"] == "unknown" and "value" not in saved.payload_json
+        finally:
+            await remove_actor(mvp_database, actor)
+    asyncio.run(check())
