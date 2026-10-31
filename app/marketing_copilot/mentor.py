@@ -148,7 +148,7 @@ def explanation(run_id, plan, accepted):
                     f"Метрика: {experiment.target_metric}", f"Ожидаемый сигнал (не фактический результат): {experiment.expected_signal}",
                     f"Условие отказа: {experiment.failure_condition}",
                     *[f"Нужные данные: {v}" for v in experiment.minimum_required_inputs],
-                    *[f"Ресурсное ограничение: {v}" for v in experiment.time_resource_constraints]])
+                    *[f"Ограничение запроса: {v}" for v in experiment.time_resource_constraints]])
     if not verification:
         verification = ["Отдельный план эксперимента не сохранён. Неизвестны необходимый объём выборки и фактическая эффективность.", *selected("decision_triggers")]
     limitations = [*wire.limitations, *wire.assumptions, *packet.assumptions, *packet.constraints, *packet.open_questions,
@@ -156,7 +156,7 @@ def explanation(run_id, plan, accepted):
         "Рекомендации и прогнозы AI не являются фактическими результатами. Связь с источником не доказывает причинность и не гарантирует продажи.",
         "Разбор показывает сохранённые решения и их основания; недоступная история рассуждений модели не восстанавливается."]
     if not any(f.label == "economics" and f.value for f in (*packet.relevant_project_context, *packet.known_facts)):
-        limitations.append("Отдельное экономическое обоснование не сохранено: доступность каналов и окупаемость не подтверждены. Сохранённые ресурсные ограничения приведены выше.")
+        limitations.append("Отдельное экономическое обоснование не сохранено: доступность каналов и окупаемость не подтверждены. Сохранённые ограничения запроса приведены выше.")
     source_values = []
     for item in accepted.values():
         for source in sources(item):
