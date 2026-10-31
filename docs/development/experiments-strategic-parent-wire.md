@@ -134,3 +134,28 @@ numerical paraphrases and calculations do not become enum entries. ASCII pattern
 portability and the authoritative Unicode-aware server guard remain as described
 above. Corpus enum/string budgets are checked once after both shared assertion
 definitions, exact constraints and all request-specific references are installed.
+
+
+## One primary hypothesis per generated experiment
+
+The strategic provider wire constrains each design's
+`related_strategic_claim_ids` to exactly one eligible strategic hypothesis
+(`minItems=1`, `maxItems=1`). A generated experiment therefore targets one primary
+falsifiable hypothesis. This is an intentional provider-generation subset, not
+an equivalence claim about the complete canonical payload language: even two
+distinct eligible references are excluded from generation in this mode.
+
+Canonical `ExperimentDesign` retains its existing 1..8 bound. With the wire off,
+valid designs citing multiple strategic parents still pass original validation,
+semantic checks and Quality Gates. Existing stored multi-parent artifacts remain
+readable. Other material context remains expressible through canonical outputs'
+`parent_claim_ids`, whose complete accepted-parent allowlist and bounds remain
+unchanged. No instruction or model-input change is involved.
+
+The decoder does not deduplicate, truncate or repair design references. A model
+that returns duplicates remains invalid: the wire rejects its oversized array,
+and the unchanged canonical duplicate guard still rejects malformed references
+when that guard is reached. Empty, unknown and nonstrategic design references
+remain invalid. Numeric provenance, full assertion enums, exact resource
+constraints, final gates and persistence remain authoritative. No `uniqueItems`
+keyword is introduced.
