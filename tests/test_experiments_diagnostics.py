@@ -109,7 +109,8 @@ def test_failed_replay_matches_original_dispatch_and_production_wire(monkeypatch
     assert calls == [replay.payload]
     assert replay.payload["max_output_tokens"] == 16000
     report = diagnostic.metadata(replay, invocation)
-    assert report["components"]["instructions"]["bytes"] == 53477
+    # Current runtime guidance; historical INCIDENT measurements remain immutable.
+    assert report["components"]["instructions"]["bytes"] == 53720
     assert report["incident_comparison"]["instructions"]["matches"] is False
     assert report["support_or_branches"] == {"single": 0, "two": 1}
     assert report["experiment_design"]["strategic_parent_count"] == len(strategic_parents(invocation))
