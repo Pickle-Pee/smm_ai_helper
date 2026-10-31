@@ -34,7 +34,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    positioning_product_support_wire: bool = False,
                                    experiments_schema_projection: bool = False,
                                    experiments_strategic_parent_wire: bool = False,
-                                   virtual_cmo_numeric_quote_catalog: bool = False) -> ModuleExecutorRegistry:
+                                   virtual_cmo_numeric_quote_catalog: bool = False,
+                                   virtual_cmo_support_selection_wire: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
     implementations = [
         CompetitorAnalysisExecutor(model_call=model_call, analyzer=analyzer, composer=composer),
@@ -48,7 +49,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
         implementations.extend((
             MarketAnalysisExecutor(model_call=model_call, analyzer=market_analyzer, composer=composer),
             VirtualCMOExecutor(model_call=model_call, composer=composer,
-                               numeric_quote_catalog_enabled=virtual_cmo_numeric_quote_catalog),
+                               numeric_quote_catalog_enabled=virtual_cmo_numeric_quote_catalog,
+                               support_selection_wire=virtual_cmo_support_selection_wire),
             ExperimentsExecutor(model_call=model_call, composer=composer,
                                 provider_schema_projection=experiments_schema_projection,
                                 strategic_parent_wire=experiments_strategic_parent_wire),

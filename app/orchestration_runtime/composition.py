@@ -62,7 +62,8 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
         positioning_product_support_wire=settings.POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED,
         experiments_schema_projection=settings.EXPERIMENTS_SCHEMA_PROJECTION_ENABLED,
         experiments_strategic_parent_wire=settings.EXPERIMENTS_STRATEGIC_PARENT_WIRE_ENABLED,
-        virtual_cmo_numeric_quote_catalog=settings.VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED)
+        virtual_cmo_numeric_quote_catalog=settings.VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED,
+        virtual_cmo_support_selection_wire=settings.VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED)
     validate_executor_coherence(metadata, executors)
     service = GraphExecutionService(sessions, executors=executors, queue=queue,
         lease_seconds=settings.GRAPH_LEASE_SECONDS, max_attempts=3,

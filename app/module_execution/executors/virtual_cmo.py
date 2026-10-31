@@ -1,5 +1,6 @@
 """Bounded strategic synthesis, never planning, routing or scheduling."""
 from dataclasses import replace
+from copy import deepcopy
 import logging
 
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
@@ -10,7 +11,7 @@ from .common import (
     SemanticRule, StatementSemanticsError, blocked, facts_for,
     first_party_evidence, parent_claims, scoped_facts,
 )
-from .support_schema import SupportRequirement
+from .support_schema import SupportRequirement, support_response_schema
 from .intelligence_common import IntelligenceExecutor
 from .intelligence_schemas import StrategyOutput
 from .numeric_grounding import (
@@ -20,6 +21,9 @@ from .numeric_grounding import (
 from .claim_support import StrategyClaim, StoredNumericContext
 from .numeric_diagnostics import observe
 from .cmo_provider_contract import cmo_provider_schema
+from .cmo_support_wire import (
+    WIRE_VERSION, support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
+)
 
 
 log = logging.getLogger(__name__)
@@ -57,11 +61,29 @@ numeric_context when none applies. Qualitative resource prioritization is allowe
 without economics."""
     limitation = "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims."
 
-    def __init__(self, *, model_call, composer=None, numeric_quote_catalog_enabled=False):
+    def __init__(self, *, model_call, composer=None, numeric_quote_catalog_enabled=False,
+                 support_selection_wire=False):
+        if type(support_selection_wire) is not bool:
+            raise TypeError("Expected boolean VIRTUAL_CMO support selection wire policy")
         super().__init__(model_call=model_call, composer=composer)
         self._numeric_quote_catalog_enabled = numeric_quote_catalog_enabled
+        self._support_selection_wire = support_selection_wire
+        if support_selection_wire:
+            self.instruction += f"\nUse wire_contract_version {WIRE_VERSION}. " + """Return outputs as the exact requested-name object, not an array; omit output_name,
+evidence_ids and parent_claim_ids from each statement. Select source aliases from
+support_selection_catalog: primary_parent_key is required when parents exist,
+otherwise primary_evidence_key is required; the other primary field is null.
+Return all required additional_parent_support/additional_evidence_support boolean
+keys. True selects additional support; false does not exclude the primary or a
+source explicitly selected by a valid numeric_context support_id/quote pair.
+Those choices jointly define the canonical citation set. Select at most thirty-two
+distinct sources per family in total. Never invent aliases or source/quote pairs.
+Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):
+        if self._support_selection_wire:
+            return {**data, "support_selection_catalog": support_selection_catalog(
+                (e.record.evidence_id for e in evidence), parents)}
         if not self._numeric_quote_catalog_enabled:
             return data
         return {**data,
@@ -78,7 +100,26 @@ without economics."""
     def output_budget_for(self, request) -> ModuleOutputBudget:
         return ModuleOutputBudget.VIRTUAL_CMO
 
+    def wire_schema_for(self, request, validation_schema, evidence):
+        if not self._support_selection_wire:
+            return validation_schema
+        parents = parent_claims(request)
+        catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
+        return support_selection_wire_schema(validation_schema, request.expected_outputs,
+            (e.record.evidence_id for e in evidence), parents, catalog)
+
+    def decode_wire_payload(self, request, payload, evidence):
+        parents = parent_claims(request)
+        evidence_ids = tuple(e.record.evidence_id for e in evidence)
+        canonical = support_response_schema(self.output_type_for(request, evidence), evidence_ids,
+            parents, requirement=self.support_requirement_for(request))
+        catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
+        return decode_support_selection_wire(payload, canonical, request.expected_outputs,
+            evidence_ids, parents, catalog)
+
     def provider_schema_for(self, request, validation_schema):
+        if self._support_selection_wire:
+            return deepcopy(validation_schema)
         # Reuse the exact quotation selector without enabling catalog advice or
         # citation binding. The original local schema/gates remain authoritative.
         evidence = first_party_evidence(request, scoped_facts(request))
@@ -86,7 +127,7 @@ without economics."""
         return cmo_provider_schema(validation_schema, catalog)
 
     def normalize_output_payload(self, request, payload, evidence, parents):
-        if not self._numeric_quote_catalog_enabled:
+        if self._support_selection_wire or not self._numeric_quote_catalog_enabled:
             return payload
         normalized, count = bind_numeric_context_citations(
             payload, {e.record.evidence_id: e for e in evidence}, parents)
@@ -96,7 +137,7 @@ without economics."""
 
     def observe_output_rejection(self, request, payload, output, evidence, parents, error):
         observe(request, payload, output, evidence, parents, error,
-                catalog_enabled=self._numeric_quote_catalog_enabled)
+                catalog_enabled=self._numeric_quote_catalog_enabled and not self._support_selection_wire)
 
     def support_requirement_for(self, request) -> SupportRequirement:
         return (SupportRequirement.PARENT_REQUIRED if parent_claims(request)
