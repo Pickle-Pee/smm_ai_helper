@@ -32,6 +32,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    positioning_schema_projection: bool = False,
                                    positioning_minimal_provider_schema: bool = False,
                                    positioning_product_support_wire: bool = False,
+                                   positioning_support_selection_wire: bool = False,
                                    experiments_schema_projection: bool = False,
                                    experiments_strategic_parent_wire: bool = False,
                                    experiments_support_selection_wire: bool = False,
@@ -43,7 +44,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
         PositioningExecutor(model_call=model_call, composer=composer,
                             provider_schema_projection=positioning_schema_projection,
                             minimal_provider_schema=positioning_minimal_provider_schema,
-                            product_support_wire=positioning_product_support_wire),
+                            product_support_wire=positioning_product_support_wire,
+                            support_selection_wire=positioning_support_selection_wire),
         CreatorExecutor(model_call=model_call, composer=composer),
     ]
     if registry_version in {"1.2.0", "1.3.0"}:
