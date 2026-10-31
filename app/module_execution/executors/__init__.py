@@ -34,6 +34,7 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                    positioning_product_support_wire: bool = False,
                                    experiments_schema_projection: bool = False,
                                    experiments_strategic_parent_wire: bool = False,
+                                   experiments_support_selection_wire: bool = False,
                                    virtual_cmo_numeric_quote_catalog: bool = False,
                                    virtual_cmo_support_selection_wire: bool = False) -> ModuleExecutorRegistry:
     metadata = ModuleRegistry.load(registry_version)
@@ -53,7 +54,8 @@ def build_module_executor_registry(*, model_call: ModuleModelCall | None, analyz
                                support_selection_wire=virtual_cmo_support_selection_wire),
             ExperimentsExecutor(model_call=model_call, composer=composer,
                                 provider_schema_projection=experiments_schema_projection,
-                                strategic_parent_wire=experiments_strategic_parent_wire),
+                                strategic_parent_wire=experiments_strategic_parent_wire,
+                                support_selection_wire=experiments_support_selection_wire),
         ))
     registry = ModuleExecutorRegistry(implementations)
     validate_executor_coherence(metadata, registry)
