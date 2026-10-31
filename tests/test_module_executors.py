@@ -84,6 +84,10 @@ class FakeModel:
                                "kind": "HYPOTHESIS", "confidence": "HIGH", "evidence_ids": ids,
                                "parent_claim_ids": parents} for name in data["expected_outputs"]],
                   "assumptions": [], "limitations": []}
+        for statement in result["outputs"]:
+            if statement["output_name"] == "RTB":
+                source = next(e for e in local if e["input_key"] in {"product_truth", "existing_proof"})
+                statement["text"] = source["value"] if isinstance(source["value"], str) else json.dumps(source["value"], ensure_ascii=False)
         if "post" in kwargs["response_schema"]["properties"]:
             result["post"] = {"headline": "Plan your next post", "body": "Use the supplied product to prepare your content.", "cta": "Learn more"}
         if self.mutate:

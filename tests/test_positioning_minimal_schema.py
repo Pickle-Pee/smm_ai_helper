@@ -129,6 +129,9 @@ def test_production_registry_and_http_payload(monkeypatch, enabled):
         payload = {"outputs": [{"output_name": name, "text": "Supported hypothesis", "kind": "HYPOTHESIS",
             "confidence": "MEDIUM", "evidence_ids": [e["evidence_id"] for e in data["local_evidence"]],
             "parent_claim_ids": []} for name in data["expected_outputs"]], "assumptions": [], "limitations": []}
+        for statement in payload["outputs"]:
+            if statement["output_name"] == "RTB":
+                statement["text"] = next(e["value"] for e in data["local_evidence"] if e["input_key"] == "product_truth")
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
     install_transport(monkeypatch, respond)
     runtime = build_production_graph_runtime(queue=queue(), analyzer=analyzer())

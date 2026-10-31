@@ -65,6 +65,9 @@ class PositioningProvider:
             statement = dict(output_name=name, kind=kind, confidence="MEDIUM",
                 text="Synthetic supported finding for " + name,
                 evidence_ids=[evidence[input_key]] if input_key in evidence else [], parent_claim_ids=[])
+            if name == "RTB":
+                source = next(e for e in data["local_evidence"] if e["evidence_id"] == statement["evidence_ids"][0])
+                statement["text"] = source["value"] if isinstance(source["value"], str) else json.dumps(source["value"], ensure_ascii=False)
             # First propose no support when the preferred seed is absent. Only
             # the actual strict schema may exclude that proposal; this is model
             # generation constrained by schema, not server-side result repair.

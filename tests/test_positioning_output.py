@@ -193,7 +193,10 @@ def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, rejection_lo
 def test_product_claim_support_remains_required(name, input_key, valid):
     from tests.test_module_executors import fact, facts_for_module
     def support(payload, data):
-        payload["outputs"][0]["evidence_ids"] = [next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"] == input_key)]
+        source = next(e for e in data["local_evidence"] if e["input_key"] == input_key)
+        payload["outputs"][0]["evidence_ids"] = [source["evidence_id"]]
+        if name == "RTB" and valid:
+            payload["outputs"][0]["text"] = source["value"]
     invocation = request(ModuleId.POSITIONING, outputs=(name,),
         facts=(*facts_for_module(ModuleId.POSITIONING), fact("existing_proof")))
     if valid:
