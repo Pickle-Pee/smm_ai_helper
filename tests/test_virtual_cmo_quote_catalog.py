@@ -211,8 +211,8 @@ def test_disabled_full_http_bytes_equal_prefeature_hook_and_enabled_is_data_only
     assert "numeric_quote_catalog_guidance" not in str(enabled.normalized_result)
     expected_schema = support_response_schema(StrategyOutput, local, parent_claims(req),
         requirement=VirtualCMOExecutor(model_call=None).support_requirement_for(req))
-    from app.module_execution.executors.provider_schema import collapse_redundant_support_anyof
-    assert off["text"]["format"]["schema"] == collapse_redundant_support_anyof(expected_schema)
+    from app.module_execution.executors.cmo_provider_contract import cmo_provider_schema
+    assert off["text"]["format"]["schema"] == cmo_provider_schema(expected_schema, catalog)
     assert on["max_output_tokens"] == off["max_output_tokens"] == 16000
 
 

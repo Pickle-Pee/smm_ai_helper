@@ -19,7 +19,7 @@ from .numeric_grounding import (
 )
 from .claim_support import StrategyClaim, StoredNumericContext
 from .numeric_diagnostics import observe
-from .provider_schema import collapse_redundant_support_anyof
+from .cmo_provider_contract import cmo_provider_schema
 
 
 log = logging.getLogger(__name__)
@@ -79,9 +79,11 @@ without economics."""
         return ModuleOutputBudget.VIRTUAL_CMO
 
     def provider_schema_for(self, request, validation_schema):
-        # Keep the full local contract; remove only provably redundant support
-        # branches from the provider grammar. No support enum/floor is relaxed.
-        return collapse_redundant_support_anyof(validation_schema)
+        # Reuse the exact quotation selector without enabling catalog advice or
+        # citation binding. The original local schema/gates remain authoritative.
+        evidence = first_party_evidence(request, scoped_facts(request))
+        catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parent_claims(request))
+        return cmo_provider_schema(validation_schema, catalog)
 
     def normalize_output_payload(self, request, payload, evidence, parents):
         if not self._numeric_quote_catalog_enabled:
