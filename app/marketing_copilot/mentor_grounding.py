@@ -2,8 +2,6 @@
 import json
 import re
 
-from app.module_execution.executors.numeric_quantity import has_numeric_quantity
-
 
 class MentorGroundingError(ValueError):
     """A generated quantitative line has no literal authorized source."""
@@ -18,11 +16,11 @@ _ONE_OFF = re.compile(
 UNKNOWN_PREFIX = "Неизвестно / нужно уточнить: "
 
 
-def validate_answer_quantities(generated, packet):
-    validate_quantitative_lines((*generated.paragraphs, *generated.unknowns), packet)
+def validate_answer_quantities(generated, packet, *, quantity_check):
+    validate_quantitative_lines((*generated.paragraphs, *generated.unknowns), packet, quantity_check=quantity_check)
 
 
-def validate_quantitative_lines(paragraphs, packet, *, saved_answer=False):
+def validate_quantitative_lines(paragraphs, packet, *, quantity_check, saved_answer=False):
     """Require the whole emitted quantitative line in an authorized source.
 
     Only the actual bounded packet's supplied inputs, user questions/reports and
@@ -43,6 +41,6 @@ def validate_quantitative_lines(paragraphs, packet, *, saved_answer=False):
         for line in paragraph.splitlines():
             candidate = _LIST_PREFIX.sub("", line).strip()
             detected = _IDENTIFIER.sub(lambda m: "" if m.group() in identifiers else m.group(), candidate)
-            if ((has_numeric_quantity(detected) or _ONE_OFF.search(detected))
+            if ((quantity_check(detected) or _ONE_OFF.search(detected))
                     and not any(candidate in source for source in authority)):
                 raise MentorGroundingError("numerical_support_required")

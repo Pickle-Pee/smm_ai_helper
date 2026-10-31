@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.models import MarketingArtifact, MarketingRun, User
 from app.module_execution.executors.claim_support import assertion_support
+from app.module_execution.executors.numeric_quantity import has_numeric_quantity
 from app.module_execution.executors.common import plain
 from app.module_execution.executors.intelligence_schemas import StrategyOutput, ExperimentsOutput
 from app.module_registry import ModuleId
@@ -100,7 +101,7 @@ def context_packet(case, turns, feedback, question):
                    "older_turns_omitted": True}}
     for prior, turn in zip(packet["dialogue"], turns):
         try:
-            validate_quantitative_lines(turn.answer.paragraphs, packet, saved_answer=True)
+            validate_quantitative_lines(turn.answer.paragraphs, packet, quantity_check=has_numeric_quantity, saved_answer=True)
         except MentorGroundingError:
             # Preserve the durable answer/history. Unsupported legacy AI advice
             # must not seed a new factual or numerical claim after restoration.
@@ -343,7 +344,7 @@ class CaseMentorService:
                 raw = await self.model_call(instruction=instruction,
                     text=json.dumps(claimed, ensure_ascii=False), response_schema=MentorGeneration.model_json_schema())
             generated = MentorGeneration.model_validate_json(raw)
-            validate_answer_quantities(generated, claimed)
+            validate_answer_quantities(generated, claimed, quantity_check=has_numeric_quantity)
             answer = MentorAnswer(run_id=run_id, question=request.question, focus=generated.focus,
                 paragraphs=[*generated.paragraphs, *[UNKNOWN_PREFIX + value for value in generated.unknowns]])
         except BaseException as exc:

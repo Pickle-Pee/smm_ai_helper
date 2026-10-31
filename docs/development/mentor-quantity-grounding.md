@@ -20,6 +20,9 @@ prior assistant replies, run identifiers and window metadata grant no authority.
 Hypothetical numeric allocations previously permitted by instructions are now
 restricted to qualitative discussion; deterministic calculations can be quoted.
 This intentionally rejects numeric paraphrases and newly calculated allocations.
+The existing saved-case application boundary imports the shared detector and
+passes it to the pure grounding helper. The helper does not depend on module
+execution; the existing architecture dependency test remains unchanged.
 
 List indices (`1.` or `1)` plus whitespace) and exact already-supplied ASCII
 underscore-namespaced identifiers are ignored only for quantity detection.

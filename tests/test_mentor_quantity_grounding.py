@@ -8,7 +8,12 @@ from app.marketing_copilot.api_errors import ProviderUnavailable
 from app.marketing_copilot.mentor import CaseMentorService, context_packet
 from app.marketing_copilot.mentor_contracts import MentorQuestion
 from app.marketing_copilot.mentor_contracts import MentorGeneration
-from app.marketing_copilot.mentor_grounding import MentorGroundingError, validate_answer_quantities
+from app.marketing_copilot.mentor_grounding import MentorGroundingError, validate_answer_quantities as validate_quantities
+from app.module_execution.executors.numeric_quantity import has_numeric_quantity
+
+
+def validate_answer_quantities(generated, packet):
+    return validate_quantities(generated, packet, quantity_check=has_numeric_quantity)
 
 
 def packet():
