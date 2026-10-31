@@ -1,4 +1,6 @@
 """Positioning from explicit product truth and optional predecessor results."""
+import re
+
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason, ClaimType
 from app.module_registry import ModuleId, ModuleRegistry
 from app.model_generation_policy import ModuleOutputBudget
@@ -31,6 +33,13 @@ _SEED_LIMITATIONS = {
     "customer_job_or_need": "customer_job_or_need was not supplied; customer job and demand context are hypotheses requiring validation.",
     "relevant_alternative": "relevant_alternative was not supplied; category, frame of reference and points of parity are hypotheses requiring validation.",
 }
+
+# A finite promotional-strengthening boundary, not a semantic entailment model.
+# Match whole words so experiment/experience descriptions are not qualifications.
+_ASSURANCE = re.compile(
+    r"\b(?:гаранти\w*|опытн\w*|квалифицированн\w*|сертифицированн\w*|"
+    r"профессиональн\w*|безусловн\w*|guarantee\w*|experienced|qualified|"
+    r"certified|professional|unconditional\w*)\b", re.IGNORECASE)
 
 
 class PositioningExecutor(BaseExecutor):
@@ -82,6 +91,16 @@ product_truth or existing_proof source. Copy the source wording without adding
 conclusions such as no further actions, guaranteed convenience or proven results.
 Do not paraphrase or strengthen the proof. Supplied owner statements are not
 independent verification; retain that limitation instead of inventing evidence.
+Across ALL outputs, do not add guarantees or qualifications to supplied facts:
+"with a master" does not mean an experienced, qualified, professional or certified
+master; a finished product after firing does not establish a guarantee. Avoid
+guarantee/qualification words (гарантия, опытный, квалифицированный,
+профессиональный, сертифицированный, безусловный; guarantee, experienced,
+qualified, professional, certified, unconditional) unless the WHOLE statement is
+copied verbatim from actually cited local product_truth/existing_proof. This also
+applies to hypotheses and recommendations; discuss risks with neutral wording
+instead. Preserve delayed collection in product messages. Do not strengthen the
+owner's statements when writing slogans or message hierarchies.
 Observations must quote one actually cited local source or accepted factual parent
 verbatim; an upstream hypothesis is not observed evidence. Use HYPOTHESIS or
 INFERENCE for unsupported reasoning. Provider generation permits INFERENCE,
@@ -211,13 +230,15 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
             if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         require_supported_numbers(statement.text, supported_text(statement, local, parents))
-        if statement.output_name == "RTB":
+        if statement.output_name == "RTB" or _ASSURANCE.search(statement.text):
             proof = statement.model_copy(update={
                 "evidence_ids": [e for e in statement.evidence_ids if local[e].input_key in PRODUCT_CATEGORIES],
                 "parent_claim_ids": [],
             })
             if not any(statement.text in source for source in supported_text(proof, local, parents)):
-                raise StatementSemanticsError(SemanticRule.RTB_QUOTE_REQUIRED)
+                rule = (SemanticRule.RTB_QUOTE_REQUIRED if statement.output_name == "RTB"
+                        else SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED)
+                raise StatementSemanticsError(rule)
         if statement.kind == "OBSERVATION":
             # Preserve numeric authority separately: only factual parents can
             # authorize an observation, and only their assertion channel counts.
