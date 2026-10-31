@@ -1,6 +1,9 @@
 """Deterministic Russian presentation of the public HTTP contract, plain text only."""
 from bot import copilot_contracts as dto
 
+STRATEGY_NOTICE = ("Стратегические выводы ниже — рабочие гипотезы и рекомендации; "
+                   "спрос, причины отказа и эффективность каналов требуют проверки.")
+
 SECTIONS = {
     "strategic_diagnosis": "Стратегический диагноз",
     "main_growth_constraint": "Главное ограничение роста",
@@ -129,6 +132,7 @@ def run(value: dto.RunResponse) -> list[str]:
         return ["Нужно уточнить запрос. Начните новый запрос: /new"]
     messages = ["Стратегия готова." if value.strategy else "Результат готов."]
     if value.strategy:
+        messages[0] += "\n\n" + STRATEGY_NOTICE
         for key, label in SECTIONS.items():
             section = getattr(value.strategy, key)
             context = "\n" + bullets(section.numeric_context) if section.numeric_context else ""
@@ -140,7 +144,7 @@ def run(value: dto.RunResponse) -> list[str]:
                 f"Изменение: {experiment.intervention}\nОжидаемый сигнал: {experiment.expected_signal}\n"
                 f"Условие неудачи: {experiment.failure_condition}\n"
                 f"Нужные данные:\n{bullets(experiment.minimum_required_inputs)}\n"
-                f"Время и ресурсы:\n{bullets(experiment.time_resource_constraints)}")
+                f"Ограничения запроса:\n{bullets(experiment.time_resource_constraints)}")
     for detail in value.details:
         messages.extend(module(detail))
     coverage = value.evidence_coverage
