@@ -75,14 +75,19 @@ def test_entire_statement_not_just_matching_qualification_must_be_supported():
             statement("An experienced master ensures a finished product without further actions."), local, {})
 
 
-def test_rejection_on_dispatch_is_bounded_and_does_not_retry_or_repair(caplog):
+def test_rejection_on_dispatch_is_bounded_and_does_not_retry_or_repair(monkeypatch):
+    from unittest.mock import Mock
+    from app.module_execution.executors import common
     from tests.test_module_executors import FakeModel, request, dispatch
     from app.module_registry import ModuleId
     from app.module_execution.executors import ExecutorOutputError
+    warning = Mock()
+    monkeypatch.setattr(common.log, "warning", warning)
     model = FakeModel(lambda p, d: p["outputs"][0].update(text="Guaranteed result."))
     with pytest.raises(ExecutorOutputError) as caught:
         dispatch(request(ModuleId.POSITIONING, outputs=("offer",)), model)
     assert caught.value.stage.value == "statement_semantics_invalid"
-    assert "rule=product_assurance_support_required" in caplog.text
-    assert "Guaranteed result" not in caplog.text + str(caught.value)
+    warning.assert_called_once_with("Module output rejected module=%s stage=%s rule=%s",
+        "POSITIONING", "statement_semantics_invalid", "product_assurance_support_required")
+    assert "Guaranteed result" not in str(warning.call_args) + str(caught.value)
     assert len(model.calls) == 1
