@@ -61,6 +61,12 @@ Keep statements qualitative, without digits or numbered lists, unless the entire
 statement is copied verbatim from its cited local evidence or accepted parent
 assertion. Never invent numeric thresholds, sample sizes, budgets or deadlines,
 or calculate or combine numbers from sources into a new assertion.
+Quantities written as words are numbers too: never invent counts of visits,
+questions, participants or other units; use an entire verbatim supported statement.
+Preserve supplied fulfillment conditions, including postprocessing and delayed
+collection. Do not turn them into promises of completion in a single visit,
+immediate delivery or no further actions. New operational promises require owner
+confirmation and must not be asserted as an offer.
 Observations must quote one actually cited local source or accepted factual parent
 verbatim; an upstream hypothesis is not observed evidence. Use HYPOTHESIS or
 INFERENCE for unsupported reasoning. Provider generation permits INFERENCE,

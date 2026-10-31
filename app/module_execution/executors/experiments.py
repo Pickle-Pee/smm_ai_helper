@@ -55,6 +55,9 @@ verbatim from cited supplied statements, never calculated or invented. Keep new
 canonical statements and design fields qualitative, without digits or numbered
 lists, even when context contains numbers. A numeric assertion is allowed only
 when the entire statement or field is copied verbatim from its cited support.
+Quantities written as words are numbers too. Do not invent counts of questions,
+visits, participants or other units in interventions or minimum required inputs;
+keep unsupplied quantities qualitative rather than spelling out invented numbers.
 Preserve supplied numeric constraints verbatim in time_resource_constraints;
 do not weave their numbers into newly composed assertions. Structured
 VIRTUAL_CMO parents supply qualitative summaries/actions only. Their numeric_context

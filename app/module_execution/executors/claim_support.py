@@ -1,11 +1,11 @@
 """Server-owned decoding of persisted strategy claims, with separate authority channels."""
 import json
-import re
 from typing import Literal
 
 from pydantic import ConfigDict, Field
 
 from .schemas import StrictOutput, Text
+from .numeric_quantity import has_numeric_quantity
 from .intelligence_schemas import NumericContext, ShortText
 
 
@@ -53,5 +53,5 @@ def assertion_support(value):
         return ()
     if value.lstrip().startswith(("{", "[")):
         parsed = strategy_claim(value)
-        return tuple(t for t in (parsed.summary, *parsed.items) if not re.search(r"\d", t)) if parsed else ()
+        return tuple(t for t in (parsed.summary, *parsed.items) if not has_numeric_quantity(t)) if parsed else ()
     return (value,)

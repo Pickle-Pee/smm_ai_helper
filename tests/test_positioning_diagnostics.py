@@ -79,8 +79,8 @@ def test_terminal_replay_matches_load_work_and_wire(monkeypatch, upstream):
     report = metadata(replay)
     assert report["core_copies"] == 1 and report["core_sections_count"] == 59
     # Current runtime instruction golden; historical incident measurements are unchanged.
-    assert report["components"]["instructions"] == {"bytes": 53992,
-        "sha256": "7239deef6edf0d3f91079df55cc18d90c182d4b9de11e2567211a568a0c0a8a0"}
+    assert report["components"]["instructions"] == {"bytes": 54439,
+        "sha256": "7a6fda00daa9f0d6276cdb16fc49eccab7e42040e5ed32ee88c8d75a2ad07ebc"}
     assert report["output_fields_count"] == 16 and report["facts_count"] > 0
     assert report["evidence_ids_count"] == report["facts_count"]
     assert "Supplied" not in json.dumps(report)
@@ -277,7 +277,7 @@ def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_p
     assert completed.returncode == 0
     assert not marker.exists()
     report = json.loads(completed.stdout)
-    assert report["components"]["instructions"]["bytes"] == 53992
+    assert report["components"]["instructions"]["bytes"] == 54439
     assert report["core_copies"] == 1 and "probes" not in report
     assert report["baseline_mode"] == "original_unprojected"
     if schema_only:

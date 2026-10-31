@@ -47,7 +47,10 @@ Missing economics means unknown profitability and resource affordability, not a
 license to invent budgets or unit economics. No new market/economic facts.
 Only HYPOTHESIS or RECOMMENDATION kinds. Keep text and items qualitative, with no
 digits, including ages, prices, numbered lists, targets or deadlines. Preserve
-relevant supplied numerical facts separately in numeric_context (at most three):
+relevant supplied numerical facts separately in numeric_context (at most three).
+Quantities written as words are numbers too: never put invented counts into text
+or items; preserve supplied quantities only as complete numeric_context quotes.
+For each numeric_context entry:
 support_id must also be cited in this statement's evidence_ids or parent_claim_ids;
 quote must copy a COMPLETE textual source value/leaf verbatim, including qualifiers.
 For a structured accepted CMO claim, quote its complete summary, item or prior
