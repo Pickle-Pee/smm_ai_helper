@@ -24,6 +24,7 @@ from .api_errors import CopilotAPIError, ProviderUnavailable
 from .mentor_contracts import (MentorExplanation, MentorSection, MentorAnswer, SavedFeedback,
     MentorGeneration, MentorHistory, MentorTurn)
 from .mentor_metrics import analyze_metrics
+from .mentor_grounding import MentorGroundingError, validate_answer_quantities
 from .provider_adapters import application_model_call, expected_provider_failure
 from app.services.expert_instruction_composer import ExpertInstructionComposer
 from .presentation import sources
@@ -49,8 +50,15 @@ preserve FACT/HYPOTHESIS/ASSUMPTION/confidence and source labels. New user assum
 unverified. If an alternative was not tested, compare conditionally and propose a test.
 Never invent financial figures, research, results, causal effects or profitability.
 Only use deterministic reported calculations supplied in feedback.analysis; respect its
-clarifications and limitations. A hypothetical budget allocation may use the user's stated
-budget but must be explicitly a proposed experiment, never a proven optimal split.
+clarifications and limitations. Keep new advice qualitative. Never invent sample sizes,
+participant counts, test durations, capacity, prices, allocations or thresholds, even as
+examples or proposed experiments. Do not turn an unspecified lesson into a one-off lesson
+or change pickup, firing, delivery or other product conditions. Preserve supplied conditions.
+Numbers and spelled quantities may appear only as standalone, verbatim lines or excerpts
+from supplied inputs, user questions/reports or feedback.analysis. Keep their unverified/
+source meaning; no new arithmetic, paraphrase or numeric allocation. Prior assistant
+replies and generated strategy prose are not numerical authority. Use bullets rather than
+numbered lists. Ask for missing population, capacity, budget or baseline instead of making it up.
 If information is insufficient, say exactly what is unknown and ask a focused clarification.
 Source_sections must name accepted case sections used. Do not reconstruct hidden reasoning.
 Do not rewrite the accepted strategy or business profile. Output only the requested JSON.
@@ -320,13 +328,14 @@ class CaseMentorService:
                 raw = await self.model_call(instruction=instruction,
                     text=json.dumps(claimed, ensure_ascii=False), response_schema=MentorGeneration.model_json_schema())
             generated = MentorGeneration.model_validate_json(raw)
+            validate_answer_quantities(generated, claimed)
             answer = MentorAnswer(run_id=run_id, question=request.question, focus=generated.focus,
                 paragraphs=[*generated.paragraphs, *["Неизвестно / нужно уточнить: " + value for value in generated.unknowns]])
         except BaseException as exc:
             # Persist uncertainty separately from the provider call. Cancellation
             # can interrupt cleanup; the committed claim still fails closed on restart.
             await self._finish_question(actor, run_id, key, token, None)
-            if isinstance(exc, (ValidationError, TimeoutError, asyncio.CancelledError, CopilotAPIError)) or expected_provider_failure(exc):
+            if isinstance(exc, (ValidationError, MentorGroundingError, TimeoutError, asyncio.CancelledError, CopilotAPIError)) or expected_provider_failure(exc):
                 if isinstance(exc, asyncio.CancelledError):
                     raise
                 raise ProviderUnavailable() from exc
