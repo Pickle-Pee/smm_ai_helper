@@ -7,7 +7,7 @@ from app.model_generation_policy import ModuleOutputBudget
 
 from .common import (
     BaseExecutor, SemanticRule, StatementSemanticsError, blocked, facts_for,
-    first_party_evidence, scoped_facts, log,
+    first_party_evidence, scoped_facts, parent_claims, log,
 )
 from .provider_schema import (
     SchemaProjectionError, collapse_single_support_anyof, single_support_anyof_count, schema_measurement,
@@ -19,6 +19,11 @@ from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
     PositioningWithoutSeedsOutput,
 )
+from .positioning_support_selection import (
+    support_selection_wire_schema, decode_support_selection_wire, support_selection_catalog,
+    WIRE_VERSION as SELECTION_WIRE_VERSION,
+)
+from .support_schema import support_response_schema
 from .product_support import (
     PRODUCT_OUTPUTS, PRODUCT_CATEGORIES, WIRE_VERSION, product_wire_schema, decode_product_wire,
 )
@@ -108,7 +113,12 @@ HYPOTHESIS and RECOMMENDATION only, subject to the stricter output-specific kind
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
-                 product_support_wire=False, minimal_provider_schema=False):
+                 product_support_wire=False, minimal_provider_schema=False, support_selection_wire=False):
+        if type(support_selection_wire) is not bool:
+            raise TypeError("Expected boolean POSITIONING support selection policy")
+        if support_selection_wire and (product_support_wire or minimal_provider_schema):
+            raise ValueError("POSITIONING support selection requires other wire experiments disabled")
+        self._support_selection_wire = support_selection_wire
         if type(minimal_provider_schema) is not bool:
             raise TypeError("Expected boolean POSITIONING minimal provider schema policy")
         if minimal_provider_schema and (provider_schema_projection or product_support_wire):
@@ -128,12 +138,43 @@ for every kind, including HYPOTHESIS. evidence_ids contains only additional loca
 support (at most 31); do not repeat the selected ID there. parent_claim_ids remains
 available for materially used accepted parents. No inferred or fabricated IDs."""
 
+        if support_selection_wire:
+            self.instruction += f"\nUse wire_contract_version {SELECTION_WIRE_VERSION}." + """
+Return outputs as an object keyed by exactly the requested output names. Do not
+emit evidence_ids/parent_claim_ids arrays. Use positioning_support_selection_catalog
+aliases: select primary_support_key from the schema enum and set every closed
+boolean evidence_support/parent_support flag explicitly. True means the source
+is materially used, false means unused. Product outputs require primary local
+product truth/proof; other outputs may use accepted parents or local evidence.
+Primary and true additional overlap denotes one citation. Retain all original
+source authority, numeric, RTB, assurance, kind and fulfillment conditions."""
+
+    def model_input_for(self, request, data, evidence, parents):
+        if self._support_selection_wire:
+            return {**data, "positioning_support_selection_catalog": support_selection_catalog(
+                (e.record.evidence_id for e in evidence), parents)}
+        return data
+
     def wire_schema_for(self, request, validation_schema, evidence):
+        if self._support_selection_wire:
+            parents = parent_claims(request)
+            choices = support_selection_catalog((e.record.evidence_id for e in evidence), parents)
+            log.info("POSITIONING support selection outputs=%d evidence_choices=%d parent_choices=%d required_boolean_flags=%d",
+                len(request.expected_outputs), len(choices["evidence"]), len(choices["parents"]),
+                len(request.expected_outputs) * sum(map(len, choices.values())))
+            return support_selection_wire_schema(validation_schema, self.output_type_for(request, evidence),
+                request.expected_outputs, evidence, parents)
         if self._product_support_wire:
             return product_wire_schema(validation_schema, evidence)
         return super().wire_schema_for(request, validation_schema, evidence)
 
     def decode_wire_payload(self, request, payload, evidence):
+        if self._support_selection_wire:
+            parents = parent_claims(request)
+            output_type = self.output_type_for(request, evidence)
+            canonical = support_response_schema(output_type, (e.record.evidence_id for e in evidence), parents)
+            return decode_support_selection_wire(payload, canonical, output_type,
+                request.expected_outputs, evidence, parents)
         if self._product_support_wire:
             return decode_product_wire(payload, evidence)
         return super().decode_wire_payload(request, payload, evidence)
