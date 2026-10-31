@@ -40,7 +40,7 @@ def test_provider_schema_four_seed_states_and_payload_compatibility(job, alterna
     schema = model.calls[0]["response_schema"]
     for names, supplied in ((JOB_OUTPUTS, job), (ALTERNATIVE_OUTPUTS, alternative)):
         for name in names:
-            assert allowed_kinds(schema, name) == (KINDS if supplied else {"HYPOTHESIS"})
+            assert allowed_kinds(schema, name) == (KINDS - {"OBSERVATION"} if supplied else {"HYPOTHESIS"})
     for name in DIFFERENTIATION_OUTPUTS:
         assert allowed_kinds(schema, name) == {"HYPOTHESIS"}
     assert result.schema_version == "positioning.payload.v1"
@@ -71,7 +71,11 @@ def test_nonhypothesis_missing_seed_is_rejected_by_selected_parser(job, alternat
 @pytest.mark.parametrize("name", GUARDED_OUTPUTS)
 @pytest.mark.parametrize("kind", sorted(KINDS))
 def test_supplied_seed_permits_ordinary_statement_kinds(name, kind):
-    model = FakeModel(lambda payload, _: payload["outputs"][0].update(kind=kind))
+    def supported_kind(payload, data):
+        payload["outputs"][0].update(kind=kind)
+        if kind == "OBSERVATION":
+            payload["outputs"][0]["text"] = data["local_evidence"][0]["value"]
+    model = FakeModel(supported_kind)
     result = dispatch(seed_request(True, True, outputs=(name,)), model)
     assert result.payload["outputs"][0]["kind"] == kind
 
@@ -84,7 +88,7 @@ def test_authorized_seed_identity_in_scoped_project_context_is_supplied():
     model = FakeModel()
     dispatch(invocation, model)
     schema = model.calls[0]["response_schema"]
-    assert all(allowed_kinds(schema, name) == KINDS for name in GUARDED_OUTPUTS)
+    assert all(allowed_kinds(schema, name) == KINDS - {"OBSERVATION"} for name in GUARDED_OUTPUTS)
 
 
 @pytest.mark.parametrize("job,alternative", STATES)
@@ -204,7 +208,7 @@ def test_semantic_rule_codes_are_bounded_server_constants():
         "missing_seed_requires_hypothesis", "differentiation_requires_hypothesis",
         "product_claim_requires_truth",
         "strategy_kind_invalid", "strategy_parent_required",
-        "main_growth_constraint_invalid", "numerical_support_required",
+        "main_growth_constraint_invalid", "numerical_support_required", "observation_support_required",
     }
     with pytest.raises(TypeError):
         StatementSemanticsError("PRIVATE_ARBITRARY_RULE")

@@ -15,6 +15,7 @@ from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors import PositioningExecutor, ExecutorOutputError, build_module_executor_registry
 from app.module_execution.executors import common
 from app.module_execution.executors.positioning_provider_schema import minimal_positioning_schema
+from app.module_execution.executors.positioning_observation_schema import positioning_observation_schema
 from app.module_execution.executors.provider_schema import nodes
 from app.module_registry import ModuleId
 from app.orchestration_runtime.composition import build_production_graph_runtime
@@ -54,8 +55,9 @@ def test_same_local_result_and_gates_for_both_provider_schemas(monkeypatch, job,
         assert fully_accepted(results[-1], quality["accepted_result_ids"], quality["accepted_claim_ids"])
         assert len(fake.calls) == 1
     assert results[0] == results[1]
-    assert validators[0] == validators[1] == calls[0]["response_schema"]
-    assert calls[1].pop("response_schema") == minimal_positioning_schema()
+    assert validators[0] == validators[1]
+    assert positioning_observation_schema(validators[0]) == calls[0]["response_schema"]
+    assert calls[1].pop("response_schema") == positioning_observation_schema(minimal_positioning_schema(), minimal=True)
     calls[0].pop("response_schema")
     assert calls[0] == calls[1]
 
@@ -133,8 +135,8 @@ def test_production_registry_and_http_payload(monkeypatch, enabled):
     asyncio.run(runtime.executors.resolve("positioning.v1").execute(invocation))
     baseline = asyncio.run(capture_request(invocation, model=settings.DEFAULT_TEXT_MODEL_HARD)).payload
     expected = deepcopy(baseline)
-    if enabled:
-        expected["text"]["format"]["schema"] = minimal_positioning_schema()
+    expected["text"]["format"]["schema"] = positioning_observation_schema(
+        minimal_positioning_schema() if enabled else expected["text"]["format"]["schema"], minimal=enabled)
     assert seen == [expected]
     assert Settings.model_fields["POSITIONING_MINIMAL_PROVIDER_SCHEMA_ENABLED"].default is False
 

@@ -56,8 +56,16 @@ async def capture_request(request, *, model, minimal_provider_schema=False):
         arguments.update(kwargs)
         raise _Captured()
 
+    class DiagnosticExecutor(PositioningExecutor):
+        def provider_schema_for(self, request, validation_schema):
+            # Explicit offline control: retain the original canonical schema.
+            # Production always applies its observation-generation subset.
+            if not minimal_provider_schema:
+                return copy.deepcopy(validation_schema)
+            return super().provider_schema_for(request, validation_schema)
+
     try:
-        await PositioningExecutor(model_call=capture, provider_schema_projection=False,
+        await DiagnosticExecutor(model_call=capture, provider_schema_projection=False,
             minimal_provider_schema=minimal_provider_schema).execute(request)
     except _Captured:
         pass
