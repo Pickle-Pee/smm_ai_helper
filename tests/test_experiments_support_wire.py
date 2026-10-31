@@ -606,3 +606,72 @@ def test_statement_flags_off_keeps_original_schema(invocation):
     assert executor.wire_schema_for(invocation, original, ()) is original
     assert original == before
     assert "pattern" not in original["$defs"]["ExperimentStatement"]["properties"]["text"]
+
+
+
+def test_provider_design_rejects_repeated_primary_hypothesis(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    wire = strategic_parent_wire_schema(baseline.arguments["response_schema"], strategic_parents(invocation))
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    payload["experiments"][0]["related_strategic_claim_ids"] *= 2
+    assert not Draft202012Validator(wire).is_valid(payload)
+
+
+
+@pytest.mark.parametrize("refs", [[], ["clm_unknown"], ["clm_z_additional_recommendation"]])
+def test_primary_design_refs_reject_empty_unknown_or_nonstrategic(invocation, refs):
+    async def model(**kwargs):
+        payload = wire_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        payload["experiments"][0]["related_strategic_claim_ids"] = refs
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True).execute(invocation))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+def test_primary_design_provider_subset_rejects_even_distinct_valid_parents(invocation):
+    baseline = asyncio.run(capture_request(invocation))
+    original = baseline.arguments["response_schema"]
+    before = deepcopy(original)
+    eligible = list(strategic_parents(invocation))
+    wire = strategic_parent_wire_schema(original, eligible)
+    payload = wire_payload(json.loads(baseline.arguments["text"]), wire)
+    payload["experiments"][0]["related_strategic_claim_ids"] = eligible[:2]
+    assert not Draft202012Validator(wire).is_valid(payload)
+    decoded = decode_strategic_parent_wire(payload, eligible)
+    assert Draft202012Validator(original).is_valid(decoded)
+    assert original["$defs"]["ExperimentDesign"]["properties"]["related_strategic_claim_ids"]["maxItems"] == 8
+    assert original == before
+    assert wire["$defs"]["ExperimentDesign"]["properties"]["related_strategic_claim_ids"]["minItems"] == 1
+    assert wire["$defs"]["ExperimentDesign"]["properties"]["related_strategic_claim_ids"]["maxItems"] == 1
+
+
+@pytest.mark.parametrize("projection", [False, True])
+@pytest.mark.parametrize("count", [2, 8])
+def test_canonical_multi_parent_designs_remain_valid_and_gated_with_wire_off(invocation, projection, count):
+    eligible = list(strategic_parents(invocation))[:count]
+    assert len(eligible) == count
+    async def model(**kwargs):
+        payload = full_payload(json.loads(kwargs["text"]))
+        for design in payload["experiments"]:
+            design["related_strategic_claim_ids"] = eligible
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    result = asyncio.run(ExperimentsExecutor(model_call=model,
+        strategic_parent_wire=False, provider_schema_projection=projection).execute(invocation))
+    assert all(list(design["related_strategic_claim_ids"]) == eligible for design in result.payload["experiments"])
+    quality = evaluate_result(invocation.execution_id, result, invocation.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+    assert result_from_json(result_to_json(result)) == result
+
+
+def test_canonical_duplicate_design_refs_still_rejected_without_repair(invocation):
+    from app.module_execution.executors.common import ResultContractError, ResultFailureRule
+    selected = next(iter(strategic_parents(invocation)))
+    async def model(**kwargs):
+        payload = full_payload(json.loads(kwargs["text"]))
+        payload["experiments"][0]["related_strategic_claim_ids"] = [selected, selected]
+        return json.dumps(payload)
+    with pytest.raises(ResultContractError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=False).execute(invocation))
+    assert caught.value.failure_rule is ResultFailureRule.EXPERIMENT_DUPLICATE_STRATEGIC_REFERENCES

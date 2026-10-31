@@ -87,6 +87,10 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     design = definitions.get("ExperimentDesign", {}).get("properties", {})
     if not statements or "related_strategic_claim_ids" not in design:
         raise ModuleExecutionContractError("Missing strategic parent wire contract")
+    # Generation targets one primary falsifiable hypothesis per design. The
+    # canonical payload still permits multiple refs and rejects duplicates.
+    design["related_strategic_claim_ids"]["minItems"] = 1
+    design["related_strategic_claim_ids"]["maxItems"] = 1
     design["related_strategic_claim_ids"]["items"] = {"$ref": "#/$defs/" + STRATEGIC_DEFINITION}
     strategic_assertions = tuple(strategic_assertions)
     if any(type(value) is not str for value in strategic_assertions):
