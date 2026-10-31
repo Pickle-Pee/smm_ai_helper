@@ -19,6 +19,10 @@ from .provider_schema import (
 )
 from .support_schema import SupportRequirement
 from .experiments_support_wire import WIRE_VERSION, strategic_parent_wire_schema, decode_strategic_parent_wire
+from .experiments_support_selection import (
+    WIRE_VERSION as SELECTION_WIRE_VERSION, support_selection_catalog,
+    support_selection_wire_schema, decode_support_selection_wire,
+)
 from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
@@ -69,12 +73,26 @@ learning_record explicit in requested canonical outputs. At most three experimen
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
-                 strategic_parent_wire=False):
+                 strategic_parent_wire=False, support_selection_wire=False):
         if type(provider_schema_projection) is not bool:
             raise TypeError("Expected boolean EXPERIMENTS projection policy")
         if type(strategic_parent_wire) is not bool:
             raise TypeError("Expected boolean EXPERIMENTS strategic parent wire policy")
+        if type(support_selection_wire) is not bool:
+            raise TypeError("Expected boolean EXPERIMENTS support selection wire policy")
+        if support_selection_wire and not strategic_parent_wire:
+            raise ValueError("EXPERIMENTS support selection requires strategic parent wire")
         super().__init__(model_call=model_call, composer=composer)
+        self._support_selection_wire = support_selection_wire
+        if support_selection_wire:
+            self.instruction += f"\nUse wire_contract_version {SELECTION_WIRE_VERSION}. " + """Keep strategic_parent_id as an explicit eligible strategic source ID. Omit evidence_ids
+and parent_claim_ids arrays. Use experiments_support_selection_catalog aliases in
+additional_evidence_support and additional_parent_support; every required key must
+be boolean. True selects support; false does not exclude the mandatory strategic
+parent. Primary UNION additional true choices defines the canonical citation set.
+Select no more than thirty-two distinct sources per family in total. Cite sources
+actually supporting numerical text; a text or numeric assertion does not add a
+citation. Keep all original grounding, design and exact constraint requirements."""
         self._provider_schema_projection = provider_schema_projection
         self._strategic_parent_wire = strategic_parent_wire
 
@@ -83,7 +101,25 @@ learning_record explicit in requested canonical outputs. At most three experimen
         # in build_result. Express the nonempty part before model execution.
         return SupportRequirement.PARENT_REQUIRED
 
+    def model_input_for(self, request, data, evidence, parents):
+        if self._support_selection_wire:
+            return {**data, "experiments_support_selection_catalog": support_selection_catalog(
+                (e.record.evidence_id for e in evidence), parents)}
+        return data
+
     def wire_schema_for(self, request, validation_schema, evidence):
+        wire = self._v2_wire_schema(request, validation_schema, evidence)
+        if self._support_selection_wire:
+            parents = parent_claims(request)
+            choices = support_selection_catalog((e.record.evidence_id for e in evidence), parents)
+            count = len(request.expected_outputs) * sum(map(len, choices.values()))
+            log.info("EXPERIMENTS support selection schema output_count=%d evidence_choice_count=%d parent_choice_count=%d required_boolean_flags=%d",
+                len(request.expected_outputs), len(choices["evidence"]), len(choices["parents"]), count)
+            return support_selection_wire_schema(wire, len(request.expected_outputs),
+                (e.record.evidence_id for e in evidence), parents)
+        return wire
+
+    def _v2_wire_schema(self, request, validation_schema, evidence):
         if self._strategic_parent_wire:
             eligible = strategic_parents(request)
             return strategic_parent_wire_schema(validation_schema, eligible,
@@ -97,6 +133,14 @@ learning_record explicit in requested canonical outputs. At most three experimen
         return validation_schema
 
     def decode_wire_payload(self, request, payload, evidence):
+        if self._support_selection_wire:
+            from .support_schema import support_response_schema
+            parents = parent_claims(request)
+            evidence_ids = tuple(e.record.evidence_id for e in evidence)
+            canonical = support_response_schema(self.output_type_for(request, evidence), evidence_ids,
+                parents, requirement=self.support_requirement_for(request))
+            return decode_support_selection_wire(payload, self._v2_wire_schema(request, canonical, evidence),
+                len(request.expected_outputs), evidence_ids, parents)
         return decode_strategic_parent_wire(payload, strategic_parents(request))
 
     def provider_schema_for(self, request, validation_schema):
@@ -114,7 +158,9 @@ learning_record explicit in requested canonical outputs. At most three experimen
             log.warning("EXPERIMENTS schema projection rejected code=equivalence_unproved")
             raise SchemaProjectionError("annotation_projection_not_equivalent") from None
         fields = {"strategic_parent_wire_enabled": self._strategic_parent_wire,
-            "schema_contract_version": WIRE_VERSION if self._strategic_parent_wire else self.schema_version,
+            "support_selection_wire_enabled": self._support_selection_wire,
+            "schema_contract_version": (SELECTION_WIRE_VERSION if self._support_selection_wire
+                else WIRE_VERSION if self._strategic_parent_wire else self.schema_version),
             "schema_projection_enabled": self._provider_schema_projection,
             "schema_projection_applied": provider_schema != validation_schema,
             "schema_projection_annotations_removed": removed,
