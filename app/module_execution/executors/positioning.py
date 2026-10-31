@@ -63,6 +63,15 @@ assertion. Never invent numeric thresholds, sample sizes, budgets or deadlines,
 or calculate or combine numbers from sources into a new assertion.
 Quantities written as words are numbers too: never invent counts of visits,
 questions, participants or other units; use an entire verbatim supported statement.
+Across every requested output, including offer, USP_directions and message_hierarchy,
+do not introduce one/single or один/одна/одно/одну as stylistic determiners before
+counted units. Prefer unquantified format wording: "вводное занятие" rather than
+"одно вводное занятие", and "посещение" rather than "одно посещение". Correct
+fulfillment conditions do not authorize an unsupplied count. A quantity is allowed
+only when the WHOLE statement is copied verbatim from its actually cited support.
+Before returning, self-check every statement for counts in digits or words; choose
+unquantified wording during generation when the count is not supplied, preserving
+all supplied fulfillment conditions.
 Preserve supplied fulfillment conditions, including postprocessing and delayed
 collection. Do not turn them into promises of completion in a single visit,
 immediate delivery or no further actions. New operational promises require owner
