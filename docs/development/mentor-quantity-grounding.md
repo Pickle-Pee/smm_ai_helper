@@ -35,8 +35,12 @@ No migration or feature flag is required.
 
 The check establishes literal quantity support, not semantic entailment. An excerpt
 can omit a source qualification; user questions/reports remain unverified data.
-The finite detector does not cover all compound words, languages or meanings;
-`одноразовое` is outside its grammar. Prompt preservation and actual manual quality
+The shared detector does not cover all compound words, languages or meanings.
+A Mentor-specific finite rule also checks the RU adjective families разовый,
+одноразовый, единоразовый, однократный and English one-off/one-time. Live checking
+found reuse of an unsupported one-off lesson description from prior AI advice;
+these operational counts now require the same literal source boundary. This is
+not a general compound-word or fulfillment-condition parser. Prompt preservation and actual manual quality
 review remain necessary. The service does not retroactively certify old answers.
 
 Tests reproduce unsupported population, spelled counts and hypothetical spend

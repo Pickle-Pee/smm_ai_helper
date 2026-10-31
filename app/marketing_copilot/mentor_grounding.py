@@ -11,6 +11,10 @@ class MentorGroundingError(ValueError):
 
 _LIST_PREFIX = re.compile(r"^\s*(?:(?:[-*•]\s+)(?:\d{1,3}[.)]\s+)?|\d{1,3}[.)]\s+)")
 _IDENTIFIER = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b")
+_ADJECTIVE_ENDING = r"(?:ый|ая|ое|ые|ого|ой|ых|ому|ым|ую|ыми|ом)"
+_ONE_OFF = re.compile(
+    r"\b(?:(?:одноразов|единоразов|разов)" + _ADJECTIVE_ENDING
+    + r"|однократн(?:о|" + _ADJECTIVE_ENDING + r")|one[- ‐‑‒–—](?:off|time))\b", re.I)
 
 
 def validate_answer_quantities(generated, packet):
@@ -32,6 +36,6 @@ def validate_answer_quantities(generated, packet):
         for line in paragraph.splitlines():
             candidate = _LIST_PREFIX.sub("", line).strip()
             detected = _IDENTIFIER.sub(lambda m: "" if m.group() in identifiers else m.group(), candidate)
-            if (has_numeric_quantity(detected)
+            if ((has_numeric_quantity(detected) or _ONE_OFF.search(detected))
                     and not any(candidate in source for source in authority)):
                 raise MentorGroundingError("numerical_support_required")

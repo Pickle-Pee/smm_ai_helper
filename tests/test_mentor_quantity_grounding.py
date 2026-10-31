@@ -26,6 +26,9 @@ def generation(text, *, unknowns=()):
     "Запланируйте небольшой пул сессий (например, 4–8 участников) как тестовую партию.",
     "Для проверки достаточно двух занятий.",
     "Предлагаю бюджет 5000 рублей — это лишь гипотетическое распределение.",
+    "Продвигаем одноразовое занятие с мастером.",
+    "Это разовый мастер-класс.",
+    "Promote a one-off clay lesson.",
 ])
 def test_invented_mentor_quantity_is_rejected_before_answer_persistence(text):
     async def check():
@@ -115,3 +118,19 @@ def test_bulleted_source_quotes_keep_authority_but_do_not_hide_new_quantities(pr
     assert emitted.model_dump_json() == before
     with pytest.raises(MentorGroundingError):
         validate_answer_quantities(MentorGeneration.model_validate_json(generation(prefix + "4–8 участников")), data)
+
+
+@pytest.mark.parametrize("text", ["одноразовое занятие", "разовый мастер-класс", "однократное посещение", "one-off lesson", "one time lesson", "единоразовый визит"])
+def test_one_off_conditions_need_literal_input_not_earlier_ai_authority(text):
+    data = packet()
+    data["dialogue"] = [{"user": "Что мы продвигаем?", "assistant": text}]
+    generated = MentorGeneration.model_validate_json(generation(text))
+    with pytest.raises(MentorGroundingError):
+        validate_answer_quantities(generated, data)
+    data["accepted_case"][0]["text"] = "Владелец подтвердил: " + text
+    validate_answer_quantities(generated, data)
+
+
+def test_one_off_guard_does_not_match_unrelated_prefix_or_future_development():
+    validate_answer_quantities(MentorGeneration.model_validate_json(generation(
+        "Разовьём гипотезу, сохраняя выдачу после обжига. Разговор о развитии.")), packet())

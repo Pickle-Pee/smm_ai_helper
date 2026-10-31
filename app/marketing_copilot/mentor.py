@@ -59,6 +59,11 @@ from supplied inputs, user questions/reports or feedback.analysis. Keep their un
 source meaning; no new arithmetic, paraphrase or numeric allocation. Prior assistant
 replies and generated strategy prose are not numerical authority. Use bullets rather than
 numbered lists. Ask for missing population, capacity, budget or baseline instead of making it up.
+Do not use one/single/один/одно before actions, steps or lessons merely as a conversational
+article. Say «следующий шаг» or «пилотная проверка» without specifying their count.
+Prior AI advice can contain unsupported product conditions: derive the business description
+again from supplied inputs only, never from an earlier assistant's description. An earlier
+one-off/одноразовое label is not evidence that the lesson format is one-off.
 If information is insufficient, say exactly what is unknown and ask a focused clarification.
 Source_sections must name accepted case sections used. Do not reconstruct hidden reasoning.
 Do not rewrite the accepted strategy or business profile. Output only the requested JSON.
