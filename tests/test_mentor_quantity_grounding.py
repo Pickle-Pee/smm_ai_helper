@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.marketing_copilot.api_errors import ProviderUnavailable
-from app.marketing_copilot.mentor import CaseMentorService
+from app.marketing_copilot.mentor import CaseMentorService, context_packet
 from app.marketing_copilot.mentor_contracts import MentorQuestion
 from app.marketing_copilot.mentor_contracts import MentorGeneration
 from app.marketing_copilot.mentor_grounding import MentorGroundingError, validate_answer_quantities
@@ -134,3 +134,59 @@ def test_one_off_conditions_need_literal_input_not_earlier_ai_authority(text):
 def test_one_off_guard_does_not_match_unrelated_prefix_or_future_development():
     validate_answer_quantities(MentorGeneration.model_validate_json(generation(
         "Разовьём гипотезу, сохраняя выдачу после обжига. Разговор о развитии.")), packet())
+
+
+@pytest.mark.parametrize("old_text", ["Продукт — одноразовое занятие.", "Запланируйте 4–8 участников."])
+def test_invalid_prior_ai_answer_is_omitted_from_provider_context_not_history(old_text):
+    from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorSection, MentorTurn, MentorAnswer
+    keys = ("goal", "inputs", "principle", "rationale", "alternatives", "limitations", "verification", "takeaway")
+    case = MentorExplanation(run_id="a" * 64, sections=[MentorSection(key=k, title=k,
+        paragraphs=["Занятия с мастером; материалы и обжиг включены, выдача после обжига."]) for k in keys])
+    turn = MentorTurn(request_key="old", question="Что мы продвигаем?", answer=MentorAnswer(
+        run_id=case.run_id, question="Что мы продвигаем?", focus="overview", paragraphs=[old_text]))
+    before = turn.model_dump_json()
+    restored = context_packet(case, [turn], [], "Напомни продукт")
+    prior = restored["dialogue"][0]
+    assert prior["user"] == turn.question
+    assert prior["assistant_omitted"] is True and prior["assistant_omission_reason"] == "unsupported_quantities"
+    assert old_text not in prior["assistant"]
+    assert "выдача после обжига" in restored["accepted_case"][1]["text"]
+    assert turn.model_dump_json() == before
+
+
+def test_grounded_prior_ai_answer_remains_available_with_exact_existing_shape():
+    from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorSection, MentorTurn, MentorAnswer
+    keys = ("goal", "inputs", "principle", "rationale", "alternatives", "limitations", "verification", "takeaway")
+    case = MentorExplanation(run_id="a" * 64, sections=[MentorSection(key=k, title=k,
+        paragraphs=["Длительность курса — 6 недель."]) for k in keys])
+    turn = MentorTurn(request_key="old", question="Напомни формат", answer=MentorAnswer(
+        run_id=case.run_id, question="Напомни формат", focus="overview", paragraphs=["Длительность курса — 6 недель."]))
+    restored = context_packet(case, [turn], [], "Что дальше?")
+    assert restored["dialogue"] == [{"user": turn.question, "assistant": turn.answer.paragraphs[0]}]
+
+
+def test_supported_numeric_unknown_survives_actual_answer_to_context_roundtrip():
+    from app.marketing_copilot.mentor_contracts import MentorExplanation, MentorSection, MentorTurn
+    from app.marketing_copilot.mentor_grounding import UNKNOWN_PREFIX
+    async def check():
+        quote = "Course duration is 6 weeks."
+        keys = ("goal", "inputs", "principle", "rationale", "alternatives", "limitations", "verification", "takeaway")
+        case = MentorExplanation(run_id="a" * 64, sections=[MentorSection(key=k, title=k,
+            paragraphs=[quote]) for k in keys])
+        service = CaseMentorService(None, None)
+        async def claim(*args):return context_packet(case, [], [], "Подтверди актуальность формата")
+        async def model(**kwargs):return generation("Уточните актуальность исходных сведений.", unknowns=[quote])
+        async def finish(*args):pass
+        service._claim_question = claim
+        service.model_call = model
+        service._finish_question = finish
+        request = MentorQuestion(request_key="unknown-roundtrip", question="Подтверди актуальность формата")
+        answer = await service.question(1, case.run_id, request)
+        assert answer.paragraphs[-1] == UNKNOWN_PREFIX + quote
+        turn = MentorTurn(request_key=request.request_key, question=request.question, answer=answer)
+        restored = context_packet(case, [turn], [], "Что дальше?")
+        assert restored["dialogue"] == [{"user": request.question, "assistant": "\n".join(answer.paragraphs)}]
+        unsupported = MentorGeneration.model_validate_json(generation(UNKNOWN_PREFIX + "8 participants"))
+        with pytest.raises(MentorGroundingError):
+            validate_answer_quantities(unsupported, context_packet(case, [], [], "Что дальше?"))
+    asyncio.run(check())

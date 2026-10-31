@@ -27,6 +27,17 @@ Unknown IDs and tokens such as `6weeks` or `sample4to8` cannot bypass the check.
 The original emitted line, after a structural prefix, is used for source matching.
 No output is filtered, repaired, normalized or silently regenerated.
 
+Before a new provider request, the same boundary checks full saved prior AI
+answers. An answer that fails is omitted in its entirety from the provider-only
+dialogue projection, with explicit omission/reason metadata and a history notice.
+Its user question remains. The original answer is preserved and still displayed
+in owner-scoped history/replay; no artifact is changed or deleted. This prevents
+unsupported historical advice from repeatedly poisoning restored business facts.
+Grounded prior answers retain the existing packet shape and bounded text window.
+Historical validation recognizes the exact server-owned unknown-label prefix,
+so a valid quoted unknown survives persistence/restoration. This exception is
+validation-only for saved answers and does not authorize unsupported generated text.
+
 A rejected generation follows the existing safe provider-error path: the durable
 claim becomes unknown, no answer is saved/displayed, same-key replay after service
 recreation cannot call the provider again. Public DTOs, deterministic explanations,

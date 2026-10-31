@@ -15,9 +15,14 @@ _ADJECTIVE_ENDING = r"(?:ый|ая|ое|ые|ого|ой|ых|ому|ым|ую|�
 _ONE_OFF = re.compile(
     r"\b(?:(?:одноразов|единоразов|разов)" + _ADJECTIVE_ENDING
     + r"|однократн(?:о|" + _ADJECTIVE_ENDING + r")|one[- ‐‑‒–—](?:off|time))\b", re.I)
+UNKNOWN_PREFIX = "Неизвестно / нужно уточнить: "
 
 
 def validate_answer_quantities(generated, packet):
+    validate_quantitative_lines((*generated.paragraphs, *generated.unknowns), packet)
+
+
+def validate_quantitative_lines(paragraphs, packet, *, saved_answer=False):
     """Require the whole emitted quantitative line in an authorized source.
 
     Only the actual bounded packet's supplied inputs, user questions/reports and
@@ -32,7 +37,9 @@ def validate_answer_quantities(generated, packet):
         authority.extend((row["notes"], row["metrics"], json.dumps(row["analysis"], ensure_ascii=False)))
     identifiers = {match.group() for source in authority for match in _IDENTIFIER.finditer(source)
                    if any(c.isdecimal() for c in match.group())}
-    for paragraph in (*generated.paragraphs, *generated.unknowns):
+    for paragraph in paragraphs:
+        if saved_answer and paragraph.startswith(UNKNOWN_PREFIX):
+            paragraph = paragraph[len(UNKNOWN_PREFIX):]
         for line in paragraph.splitlines():
             candidate = _LIST_PREFIX.sub("", line).strip()
             detected = _IDENTIFIER.sub(lambda m: "" if m.group() in identifiers else m.group(), candidate)
