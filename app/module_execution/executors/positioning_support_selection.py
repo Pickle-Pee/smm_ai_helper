@@ -10,14 +10,15 @@ from .experiments_support_selection import support_selection_catalog, MAX_REQUIR
 from .product_support import PRODUCT_OUTPUTS, product_support_ids
 from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
-from .numeric_quantity import has_numeric_quantity
+from .positioning_assurance import qualitative_assurance_pattern
 from .common import plain
 
 WIRE_VERSION = "positioning.support_selection.v3"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 SELECTION_FIELDS = {"primary_support_key", "evidence_support", "parent_support"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
-NUMERIC_ASSERTION = "AllowedPositioningNumericAssertion"
+SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
+QUALITATIVE_ASSERTION = "PositioningQualitativeAssertion"
 
 
 def _fail():
@@ -41,9 +42,9 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                            for e in evidence) + tuple(parent_assertions)
         if any(type(value) is not str for value in assertions):
             _fail()
-        numeric = sorted({value for value in assertions if 1 <= len(value) <= 4000 and has_numeric_quantity(value)})
-        if numeric:
-            definitions[NUMERIC_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": numeric}
+        supported = sorted({value for value in assertions if 1 <= len(value) <= 4000})
+        if supported:
+            definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
         for family, definition in MAPS.items():
             definitions[definition] = {"type": "object",
                 "properties": {key: {"type": "boolean"} for key in choices[family]},
@@ -66,8 +67,17 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             # is replaced by a mandatory explicit primary source, not dropped.
             statement.pop("anyOf", None)
             props = statement["properties"]
-            props["text"] = assertion_text_schema(props["text"], bool(numeric),
-                limit=4000, enum_definition=NUMERIC_ASSERTION)
+            text_schema = assertion_text_schema(props["text"], bool(supported),
+                limit=4000, enum_definition=SUPPORTED_ASSERTION)
+            qualitative = text_schema["anyOf"][0] if supported else text_schema
+            qualitative["pattern"] = qualitative_assurance_pattern()
+            if QUALITATIVE_ASSERTION in definitions and definitions[QUALITATIVE_ASSERTION] != qualitative:
+                _fail()
+            definitions[QUALITATIVE_ASSERTION] = qualitative
+            choices_for_text = [{"$ref": "#/$defs/" + QUALITATIVE_ASSERTION}]
+            if supported:
+                choices_for_text.append({"$ref": "#/$defs/" + SUPPORTED_ASSERTION})
+            props["text"] = {"anyOf": choices_for_text} if supported else choices_for_text[0]
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
             keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
