@@ -78,6 +78,6 @@ def test_long_sources_are_not_truncated_into_new_numeric_assertions():
     f = fixture(("offer",))
     f[3][0].value = "6 " + "x" * 4000
     schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
-    assert not any(definition.get("enum") for name, definition in schema["$defs"].items()
-        if name == "AllowedPositioningNumericAssertion")
+    values = schema["$defs"].get("AllowedPositioningSupportedAssertion", {}).get("enum", [])
+    assert f[3][0].value not in values and all(len(v) <= 4000 for v in values)
     assert len(schema["$defs"]["PositioningEvidenceSelection"]["properties"]) == len(f[3])

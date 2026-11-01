@@ -1,6 +1,4 @@
 """Positioning from explicit product truth and optional predecessor results."""
-import re
-
 from app.marketing_orchestrator.quality_gates.contracts import BlockingReason, ClaimType
 from app.module_registry import ModuleId, ModuleRegistry
 from app.model_generation_policy import ModuleOutputBudget
@@ -14,6 +12,7 @@ from .provider_schema import (
 )
 from .positioning_provider_schema import minimal_positioning_schema
 from .positioning_observation_schema import positioning_observation_schema
+from .positioning_assurance import ASSURANCE as _ASSURANCE
 from .intelligence_common import require_supported_numbers, supported_text
 from .claim_support import assertion_support
 from .schemas import (
@@ -40,12 +39,6 @@ _SEED_LIMITATIONS = {
     "relevant_alternative": "relevant_alternative was not supplied; category, frame of reference and points of parity are hypotheses requiring validation.",
 }
 
-# A finite promotional-strengthening boundary, not a semantic entailment model.
-# Match whole words so experiment/experience descriptions are not qualifications.
-_ASSURANCE = re.compile(
-    r"\b(?:гаранти\w*|опытн\w*|квалифицированн\w*|сертифицированн\w*|"
-    r"профессиональн\w*|безусловн\w*|guarantee\w*|experienced|qualified|"
-    r"certified|professional|unconditional\w*)\b", re.IGNORECASE)
 
 
 class PositioningExecutor(BaseExecutor):
@@ -149,8 +142,12 @@ is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
-Free text must stay qualitative. If ANY quantity is needed, including a supplied
-duration, use an ENTIRE exact AllowedPositioningNumericAssertion enum value and
+Free text must stay qualitative, use unqualified roles and end with punctuation.
+Do not add any qualification or guarantee in ANY section, including competitive
+frame or message hierarchy. For a supplied qualification, choose the ENTIRE
+AllowedPositioningSupportedAssertion and its actual local product truth/proof.
+Supplied assertions are literal alternatives; their existence alone is not evidence. If ANY quantity is needed, including a supplied
+duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
 select its actual source. Never paraphrase a numerical fact, respell digits in
 words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
 omit the quantity from that free-form statement. RTB still quotes actual proof;
