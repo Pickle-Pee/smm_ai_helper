@@ -2,6 +2,8 @@
 import re
 from functools import lru_cache
 
+from .numeric_quantity import cardinal_words_for_provider
+
 
 # Preserve the existing canonical detector exactly. Provider grammar is more
 # conservative for suffixed English words; canonical source authority stays here.
@@ -36,11 +38,13 @@ def _character_class(values):
 
 @lru_cache(maxsize=1)
 def qualitative_assurance_pattern():
-    """Exclude finite RU/EN word prefixes using positive regular alternatives.
+    """Exclude assurance prefixes and exact cardinal words with positive regex.
 
     A word can end before a forbidden prefix, or diverge from its trie. Once it
     diverges, its remaining letters are unrestricted. Completed forbidden stems
-    have no valid continuation. Every word consumes a trailing separator, so
+    have no valid continuation. Exact cardinal words cannot end, but can continue
+    into ordinary words (one -> oneself, одна -> однако). Every word consumes a
+    trailing separator, so
     concatenating two short valid tokens cannot bypass a forbidden whole word.
     Literal supplied assertions are a separate schema branch, without this
     punctuation requirement. No lookaround, backreference or negated schema.
@@ -50,20 +54,27 @@ def qualitative_assurance_pattern():
         node = trie
         for char in word:
             node = node.setdefault(char, {})
-        node[None] = {}
+        node[None] = {"prefix": True}
+    for word in sorted(cardinal_words_for_provider()):
+        node = trie
+        for char in word:
+            node = node.setdefault(char, {})
+        node.setdefault(None, {})["word"] = True
     alphabet = _character_class(ALPHABET)
 
     def allowed_word(node, *, root=False):
-        if None in node:
+        terminal = node.get(None, {})
+        if terminal.get("prefix"):
             return None
-        excluded = {char for key in node for char in (key, key.upper())}
+        children = {key: value for key, value in node.items() if key is not None}
+        excluded = {char for key in children for char in (key, key.upper())}
         options = [_character_class(ALPHABET - excluded) + alphabet + "*"]
-        for char, child in sorted(node.items()):
+        for char, child in sorted(children.items()):
             tail = allowed_word(child)
             if tail is not None:
                 options.append(_character_class({char, char.upper()}) + tail)
         body = "(?:" + "|".join(options) + ")"
-        return body if root else body + "?"
+        return body if root or terminal.get("word") else body + "?"
 
     separator = "[^0-9" + alphabet[1:-1] + "]"
     # Every word must end at a separator. This prevents splitting a forbidden

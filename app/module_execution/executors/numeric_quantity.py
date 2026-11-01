@@ -104,3 +104,8 @@ def has_numeric_quantity(text: str) -> bool:
                 break
             previous = following
     return False
+
+
+def cardinal_words_for_provider() -> frozenset[str]:
+    """Share the immutable finite lexicon without changing unit-aware validation."""
+    return _CARDINALS

@@ -39,15 +39,18 @@ def test_actual_executor_accepts_exact_course_duration_with_its_actual_source():
     assert result.payload["outputs"][0]["text"] == COURSE_TRUTH and len(model.calls) == 1
 
 
-@pytest.mark.parametrize("text", ["Онлайн-курс длится шесть недель с обратной связью.",
-    "A course lasting ٦ weeks."])
-def test_portable_ascii_pattern_does_not_replace_full_word_or_unicode_number_validation(text):
-    # These can enter the qualitative provider branch; the original strict guard
-    # must still reject them rather than respelling, filtering or repairing them.
-    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=text))
+@pytest.mark.parametrize("text,wire_allowed", [("Онлайн-курс длится шесть недель с обратной связью.",False),
+    ("A course lasting ٦ weeks.",True)])
+def test_word_generation_constraint_and_unicode_number_validation_remain_independent(text,wire_allowed):
+    changed={}
+    def mutate(payload,data):
+        payload["outputs"]["offer"].update(text=text)
+        changed.update(copy.deepcopy(payload))
+    model = SelectionModel(mutate)
     with pytest.raises(ExecutorOutputError):
         asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(course_request("offer")))
     assert len(model.calls) == 1
+    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(changed) is wire_allowed
 
 
 def test_global_numeric_enum_does_not_authorize_an_uncited_source():
