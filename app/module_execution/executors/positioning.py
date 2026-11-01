@@ -15,6 +15,7 @@ from .provider_schema import (
 from .positioning_provider_schema import minimal_positioning_schema
 from .positioning_observation_schema import positioning_observation_schema
 from .intelligence_common import require_supported_numbers, supported_text
+from .claim_support import assertion_support
 from .schemas import (
     PositioningOutput, PositioningWithoutAlternativeOutput, PositioningWithoutJobOutput,
     PositioningWithoutSeedsOutput,
@@ -147,7 +148,15 @@ boolean evidence_support/parent_support flag explicitly. True means the source
 is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
-source authority, numeric, RTB, assurance, kind and fulfillment conditions."""
+source authority, numeric, RTB, assurance, kind and fulfillment conditions.
+Free text must stay qualitative. If ANY quantity is needed, including a supplied
+duration, use an ENTIRE exact AllowedPositioningNumericAssertion enum value and
+select its actual source. Never paraphrase a numerical fact, respell digits in
+words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
+omit the quantity from that free-form statement. RTB still quotes actual proof;
+other positioning/offer text can stay useful without repeating its duration.
+The numeric enum is an explicit generation alternative, not independent evidence;
+every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
         if self._support_selection_wire:
@@ -163,7 +172,8 @@ source authority, numeric, RTB, assurance, kind and fulfillment conditions."""
                 len(request.expected_outputs), len(choices["evidence"]), len(choices["parents"]),
                 len(request.expected_outputs) * sum(map(len, choices.values())))
             return support_selection_wire_schema(validation_schema, self.output_type_for(request, evidence),
-                request.expected_outputs, evidence, parents)
+                request.expected_outputs, evidence, parents, parent_assertions=tuple(
+                    text for claim in parents.values() for text in assertion_support(claim.value)))
         if self._product_support_wire:
             return product_wire_schema(validation_schema, evidence)
         return super().wire_schema_for(request, validation_schema, evidence)
@@ -174,7 +184,8 @@ source authority, numeric, RTB, assurance, kind and fulfillment conditions."""
             output_type = self.output_type_for(request, evidence)
             canonical = support_response_schema(output_type, (e.record.evidence_id for e in evidence), parents)
             return decode_support_selection_wire(payload, canonical, output_type,
-                request.expected_outputs, evidence, parents)
+                request.expected_outputs, evidence, parents, parent_assertions=tuple(
+                    text for claim in parents.values() for text in assertion_support(claim.value)))
         if self._product_support_wire:
             return decode_product_wire(payload, evidence)
         return super().decode_wire_payload(request, payload, evidence)
