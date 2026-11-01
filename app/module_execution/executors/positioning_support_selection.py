@@ -9,18 +9,22 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .experiments_support_selection import support_selection_catalog, MAX_REQUIRED_BOOLEAN_FLAGS
 from .product_support import PRODUCT_OUTPUTS, product_support_ids
 from .support_schema import support_response_schema, check_schema_bounds
+from .experiments_support_wire import assertion_text_schema
+from .numeric_quantity import has_numeric_quantity
+from .common import plain
 
 WIRE_VERSION = "positioning.support_selection.v3"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 SELECTION_FIELDS = {"primary_support_key", "evidence_support", "parent_support"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
+NUMERIC_ASSERTION = "AllowedPositioningNumericAssertion"
 
 
 def _fail():
     raise ModuleExecutionContractError("Invalid POSITIONING support selection wire") from None
 
 
-def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids):
+def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
     """Transform only the exact server-built contract, never unknown constraints."""
     try:
         names, evidence, parent_ids = tuple(names), tuple(evidence), tuple(parent_ids)
@@ -33,6 +37,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 or len(names) * sum(map(len, choices.values())) > MAX_REQUIRED_BOOLEAN_FLAGS):
             _fail()
         definitions = {}
+        assertions = tuple(e.value if isinstance(e.value, str) else json.dumps(plain(e.value), ensure_ascii=False)
+                           for e in evidence) + tuple(parent_assertions)
+        if any(type(value) is not str for value in assertions):
+            _fail()
+        numeric = sorted({value for value in assertions if 1 <= len(value) <= 4000 and has_numeric_quantity(value)})
+        if numeric:
+            definitions[NUMERIC_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": numeric}
         for family, definition in MAPS.items():
             definitions[definition] = {"type": "object",
                 "properties": {key: {"type": "boolean"} for key in choices[family]},
@@ -55,6 +66,8 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             # is replaced by a mandatory explicit primary source, not dropped.
             statement.pop("anyOf", None)
             props = statement["properties"]
+            props["text"] = assertion_text_schema(props["text"], bool(numeric),
+                limit=4000, enum_definition=NUMERIC_ASSERTION)
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
             keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
@@ -79,12 +92,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         _fail()
 
 
-def decode_support_selection_wire(payload, canonical, output_type, names, evidence, parent_ids):
+def decode_support_selection_wire(payload, canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
     """Only explicit typed choices become arrays; model arrays are forbidden."""
     try:
         names, evidence, parent_ids = tuple(names), tuple(evidence), tuple(parent_ids)
         choices = support_selection_catalog((e.record.evidence_id for e in evidence), parent_ids)
-        schema = support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids)
+        schema = support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids,
+            parent_assertions=parent_assertions)
         if type(payload) is not dict or not Draft202012Validator(schema).is_valid(payload):
             _fail()
         result = deepcopy(payload)
