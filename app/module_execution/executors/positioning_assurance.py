@@ -38,13 +38,14 @@ def _character_class(values):
 
 @lru_cache(maxsize=1)
 def qualitative_assurance_pattern():
-    """Exclude assurance prefixes and exact cardinal words with positive regex.
+    """Exclude assurance and cardinal prefixes with a positive regex.
 
     A word can end before a forbidden prefix, or diverge from its trie. Once it
     diverges, its remaining letters are unrestricted. Completed forbidden stems
-    have no valid continuation. Exact cardinal words cannot end, but can continue
-    into ordinary words (one -> oneself, одна -> однако). Every word consumes a
-    trailing separator, so
+    have no valid continuation. Cardinal continuations are conservatively excluded
+    too (сто -> стоимость, one -> oneself). This prunes terminal subtrees rather
+    than forcing the provider to continue an otherwise complete word. Every word
+    consumes a trailing separator, so
     concatenating two short valid tokens cannot bypass a forbidden whole word.
     Literal supplied assertions are a separate schema branch, without this
     punctuation requirement. No lookaround, backreference or negated schema.
@@ -59,7 +60,7 @@ def qualitative_assurance_pattern():
         node = trie
         for char in word:
             node = node.setdefault(char, {})
-        node.setdefault(None, {})["word"] = True
+        node.setdefault(None, {})["prefix"] = True
     alphabet = _character_class(ALPHABET)
 
     def allowed_word(node, *, root=False):
@@ -74,7 +75,7 @@ def qualitative_assurance_pattern():
             if tail is not None:
                 options.append(_character_class({char, char.upper()}) + tail)
         body = "(?:" + "|".join(options) + ")"
-        return body if root or terminal.get("word") else body + "?"
+        return body if root else body + "?"
 
     separator = "[^0-9" + alphabet[1:-1] + "]"
     # Every word must end at a separator. This prevents splitting a forbidden

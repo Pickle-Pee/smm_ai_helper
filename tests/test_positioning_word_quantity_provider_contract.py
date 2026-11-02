@@ -29,11 +29,27 @@ def test_complete_shared_cardinal_lexicon_is_excluded_as_whole_words():
 
 
 @pytest.mark.parametrize("text", ["Однако вывод требует проверки.", "Триггер записи стоит проверить.",
-    "Статья о процессе занятия.", "Предложить вводное занятие.", "Consider oneself a beginner.",
+    "Статья о процессе занятия.", "Consider oneself a beginner."])
+def test_cardinal_prefix_continuations_are_conservatively_excluded(text):
+    from app.module_execution.executors.positioning_assurance import qualitative_assurance_pattern
+    assert not re.fullmatch(qualitative_assurance_pattern(),text)
+
+
+@pytest.mark.parametrize("text", ["Предложить вводное занятие.",
     "Acquire skills once comfortable.", "Attract first customers."])
-def test_longer_noncardinal_words_and_ordinals_are_not_blocked(text):
+def test_unrelated_words_and_ordinals_remain_generatable(text):
     from app.module_execution.executors.positioning_assurance import qualitative_assurance_pattern
     assert re.fullmatch(qualitative_assurance_pattern(),text)
+
+
+@pytest.mark.parametrize("truth", ["Стоимость неизвестна.", "Однако вывод требует проверки."])
+def test_complete_source_assertion_preserves_conservatively_excluded_words(truth):
+    f=fixture(('offer',));f[3][0].value=truth
+    from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
+    from app.module_execution.executors.schemas import PositioningOutput
+    schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
+    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=truth
+    assert Draft202012Validator(schema).is_valid(value)
 
 
 @pytest.mark.parametrize("truth", ["Курс длится шесть недель.", "Курс длится 6 недель."])

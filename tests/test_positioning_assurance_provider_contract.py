@@ -46,7 +46,8 @@ def test_positive_word_grammar_matches_reference_without_word_splitting():
         words = re.findall(r"[A-Za-zА-Яа-яЁё_]+", text)
         expected = bool(text) and text[-1] not in ALPHABET and not re.search("[0-9]",text)
         expected = bool(expected and not any(any(word.casefold().startswith(stem) for stem in STEMS) for word in words)
-            and not any(word.casefold() in cardinal_words_for_provider() for word in words))
+            and not any(word.casefold().startswith(prefix)
+                for word in words for prefix in cardinal_words_for_provider()))
         assert bool(rx.fullmatch(text)) is expected
     for text in ("опытный.", "опыТНый.", "guaranteed.", "a professional."):
         assert not rx.fullmatch(text)
@@ -55,7 +56,7 @@ def test_positive_word_grammar_matches_reference_without_word_splitting():
 def test_grammar_has_no_lookarounds_and_is_shared_once_per_wire_schema():
     f = fixture();pattern = qualitative_assurance_pattern()
     assert all(token not in pattern for token in ("(?=", "(?!", "(?<=", "(?<!", "\\1"))
-    assert len(pattern.encode()) < 80000
+    assert len(pattern.encode()) < 17000
     from app.module_execution.executors.provider_schema import nodes
     assert sum(node.get("pattern") == pattern for node in nodes(f[1])) == 1
 
