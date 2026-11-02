@@ -10,15 +10,15 @@ from .experiments_support_selection import support_selection_catalog, MAX_REQUIR
 from .product_support import PRODUCT_OUTPUTS, product_support_ids
 from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
-from .positioning_assurance import qualitative_assurance_pattern
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v3"
+WIRE_VERSION = "positioning.support_selection.v4"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 SELECTION_FIELDS = {"primary_support_key", "evidence_support", "parent_support"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
 QUALITATIVE_ASSERTION = "PositioningQualitativeAssertion"
+TEXT_SELECTION = "PositioningTextSelection"
 
 
 def _fail():
@@ -70,14 +70,25 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             text_schema = assertion_text_schema(props["text"], bool(supported),
                 limit=4000, enum_definition=SUPPORTED_ASSERTION)
             qualitative = text_schema["anyOf"][0] if supported else text_schema
-            qualitative["pattern"] = qualitative_assurance_pattern()
             if QUALITATIVE_ASSERTION in definitions and definitions[QUALITATIVE_ASSERTION] != qualitative:
                 _fail()
             definitions[QUALITATIVE_ASSERTION] = qualitative
-            choices_for_text = [{"$ref": "#/$defs/" + QUALITATIVE_ASSERTION}]
-            if supported:
-                choices_for_text.append({"$ref": "#/$defs/" + SUPPORTED_ASSERTION})
-            props["text"] = {"anyOf": choices_for_text} if supported else choices_for_text[0]
+            # Explicit disjoint tags keep free prose and source literals from
+            # competing as overlapping alternatives of one string. Decode only
+            # the chosen value; the tag never grants source authority.
+            text_choices = []
+            for mode, value_definition in (("QUALITATIVE", QUALITATIVE_ASSERTION),
+                                           ("SOURCE", SUPPORTED_ASSERTION)):
+                if value_definition not in definitions:
+                    continue
+                definition = "Positioning" + mode.title() + "Text"
+                definitions[definition] = {"type": "object", "properties": {
+                    "mode": {"type": "string", "enum": [mode]},
+                    "value": {"$ref": "#/$defs/" + value_definition}},
+                    "required": ["mode", "value"], "additionalProperties": False}
+                text_choices.append({"$ref": "#/$defs/" + definition})
+            definitions[TEXT_SELECTION] = {"anyOf": text_choices}
+            props["text"] = {"$ref": "#/$defs/" + TEXT_SELECTION}
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
             keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
@@ -116,6 +127,7 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
         outputs = []
         for name in names:
             statement = result["outputs"][name]
+            statement["text"] = statement["text"]["value"]
             selected = {"evidence": set(), "parents": set()}
             primary = statement.pop("primary_support_key")
             for family, field in (("evidence", "evidence_support"), ("parents", "parent_support")):

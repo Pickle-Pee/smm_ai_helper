@@ -6,7 +6,7 @@ unique identities. The original response was preserved, not repaired, accepted
 or retried. Canonical duplicate-reference rejection remains in both modes.
 
 The default-off POSITIONING_SUPPORT_SELECTION_WIRE_ENABLED gate uses provider-only
-positioning.support_selection.v3: exact requested output keys, a mandatory
+positioning.support_selection.v4: exact requested output keys, a mandatory
 primary_support_key and closed boolean evidence_support/parent_support maps.
 Catalog aliases are complete deterministic bijections over the original scoped
 sources. Product outputs select primary local product_truth/existing_proof;
@@ -32,3 +32,7 @@ composition forwards a strict boolean, default false. Stored canonical payloads,
 old readers, DTOs and migrations remain unchanged. No historical artifact is
 retroactively certified. This change does not establish semantic truth of supplied
 facts; manual business quality review remains required.
+
+Text now uses explicit disjoint QUALITATIVE/SOURCE modes; see
+[positioning-tagged-text-wire.md](positioning-tagged-text-wire.md). Canonical stored
+strings and source-authority checks retain their existing contracts.

@@ -1,45 +1,27 @@
-"""Free provider text must not respell unsupported quantities as words."""
+"""Word quantities retain independent canonical validation and literal sources."""
 import pytest
 import asyncio
-import re
 from jsonschema import Draft202012Validator
-from tests.test_positioning_support_selection import fixture, output
+from tests.test_positioning_support_selection import fixture, output, qualitative, sourced, SelectionModel
 
 
 @pytest.mark.parametrize("text", ["Материалы и обжиг в одном занятии.",
     "A course lasting six weeks.", "A single introductory session."])
-def test_free_text_cannot_generate_word_quantities(text):
-    f=fixture(("points_of_difference",));value=output(f)
-    value["outputs"]["points_of_difference"]["text"]=text
-    assert not Draft202012Validator(f[1]).is_valid(value)
+def test_unsupported_word_quantities_pass_syntax_but_fail_actual_canonical_validation(text):
+    from app.module_execution.executors import PositioningExecutor, ExecutorOutputError
+    from tests.test_positioning_numeric_grounding import course_request
+    model = SelectionModel(lambda p,d: p['outputs']['offer'].update(text=qualitative(text)))
+    with pytest.raises(ExecutorOutputError):
+        asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(course_request('offer')))
+    assert len(model.calls)==1
+    assert Draft202012Validator(model.calls[0]['response_schema']).is_valid(model.last_payload)
 
 
-def test_complete_shared_cardinal_lexicon_is_excluded_as_whole_words():
-    from app.module_execution.executors.numeric_quantity import cardinal_words_for_provider, has_numeric_quantity
-    from app.module_execution.executors.positioning_assurance import qualitative_assurance_pattern, ALPHABET
-    words=cardinal_words_for_provider();rx=re.compile(qualitative_assurance_pattern())
-    assert isinstance(words,frozenset) and {"одном","one","six","single","двумя"} <= words
-    assert all(word and word==word.casefold() and set(word)<=ALPHABET for word in words)
-    for word in words:
-        assert not rx.fullmatch(word+'.') and not rx.fullmatch(word.upper()+'.')
-    # Canonical validation keeps its unit-aware semantics. The provider branch is
-    # deliberately conservative even when a cardinal is only an article.
-    assert not has_numeric_quantity("one should learn")
-    assert has_numeric_quantity("one short session")
-
-
-@pytest.mark.parametrize("text", ["Однако вывод требует проверки.", "Триггер записи стоит проверить.",
-    "Статья о процессе занятия.", "Consider oneself a beginner."])
-def test_cardinal_prefix_continuations_are_conservatively_excluded(text):
-    from app.module_execution.executors.positioning_assurance import qualitative_assurance_pattern
-    assert not re.fullmatch(qualitative_assurance_pattern(),text)
-
-
-@pytest.mark.parametrize("text", ["Предложить вводное занятие.",
-    "Acquire skills once comfortable.", "Attract first customers."])
-def test_unrelated_words_and_ordinals_remain_generatable(text):
-    from app.module_execution.executors.positioning_assurance import qualitative_assurance_pattern
-    assert re.fullmatch(qualitative_assurance_pattern(),text)
+@pytest.mark.parametrize("text", ["Однако вывод требует проверки.", "Стоимость неизвестна.",
+    "Статья о процессе занятия.", "Триггер записи требует проверки.", "Consider oneself a beginner."])
+def test_ordinary_words_are_not_excluded_by_a_cardinal_prefix(text):
+    f=fixture(('offer',));payload=output(f);payload['outputs']['offer']['text']=qualitative(text)
+    assert Draft202012Validator(f[1]).is_valid(payload)
 
 
 @pytest.mark.parametrize("truth", ["Стоимость неизвестна.", "Однако вывод требует проверки."])
@@ -48,7 +30,7 @@ def test_complete_source_assertion_preserves_conservatively_excluded_words(truth
     from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
     from app.module_execution.executors.schemas import PositioningOutput
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
-    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=truth
+    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=sourced(truth)
     assert Draft202012Validator(schema).is_valid(value)
 
 
@@ -61,18 +43,18 @@ def test_actual_supplied_word_or_digit_quantity_remains_an_exact_literal_choice(
     from app.module_execution.executors.positioning import PositioningExecutor
     facts=tuple(replace(f,value=truth) if f.label=='product_truth' else f
         for f in facts_for_module(ModuleId.POSITIONING))
-    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=truth))
+    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=sourced(truth)))
     result=asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
         request(ModuleId.POSITIONING,facts=facts,outputs=('offer',))))
     assert result.payload['outputs'][0]['text']==truth and len(model.calls)==1
 
 
-def test_cardinal_grammar_does_not_serialize_a_qualified_or_numbered_result_differently():
+def test_explicit_source_preserves_numbered_result_without_repair():
     import copy
     from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema,decode_support_selection_wire
     from app.module_execution.executors.schemas import PositioningOutput
     f=fixture(('offer',));f[3][0].value='one session'
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:]);value=output((f[0],schema,*f[2:]))
-    value['outputs']['offer']['text']='one session';before=copy.deepcopy(value)
+    value['outputs']['offer']['text']=sourced('one session');before=copy.deepcopy(value)
     decoded=decode_support_selection_wire(value,f[0],PositioningOutput,*f[2:])
     assert value==before and decoded['outputs'][0]['text']=='one session'

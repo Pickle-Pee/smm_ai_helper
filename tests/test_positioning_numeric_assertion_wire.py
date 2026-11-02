@@ -4,7 +4,7 @@ import asyncio
 import pytest
 from jsonschema import Draft202012Validator
 
-from tests.test_positioning_support_selection import fixture, output
+from tests.test_positioning_support_selection import fixture, output, qualitative, sourced
 from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
 from app.module_execution.executors.schemas import PositioningOutput
 from app.module_execution.executors import PositioningExecutor, ExecutorOutputError
@@ -15,7 +15,7 @@ from tests.test_positioning_numeric_grounding import course_request, COURSE_TRUT
 def test_provider_does_not_allow_paraphrased_digit_quantities():
     f = fixture(("offer",))
     value = output(f)
-    value["outputs"]["offer"]["text"] = "A course lasting 6 weeks."
+    value["outputs"]["offer"]["text"] = qualitative("A course lasting 6 weeks.")
     assert not Draft202012Validator(f[1]).is_valid(value)
 
 
@@ -26,7 +26,7 @@ def test_exact_supplied_numeric_assertion_has_an_explicit_generation_alternative
     before = copy.deepcopy(evidence[0].value)
     schema = support_selection_wire_schema(f[0], PositioningOutput, f[2], evidence, f[4])
     value = output((f[0], schema, f[2], evidence, f[4]))
-    value["outputs"]["offer"]["text"] = before
+    value["outputs"]["offer"]["text"] = sourced(before)
     assert Draft202012Validator(schema).is_valid(value)
     assert evidence[0].value == before
     # The supplied assertion must be represented, not merely admitted as free text.
@@ -34,17 +34,17 @@ def test_exact_supplied_numeric_assertion_has_an_explicit_generation_alternative
 
 
 def test_actual_executor_accepts_exact_course_duration_with_its_actual_source():
-    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=COURSE_TRUTH))
+    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=sourced(COURSE_TRUTH)))
     result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(course_request("offer")))
     assert result.payload["outputs"][0]["text"] == COURSE_TRUTH and len(model.calls) == 1
 
 
-@pytest.mark.parametrize("text,wire_allowed", [("Онлайн-курс длится шесть недель с обратной связью.",False),
+@pytest.mark.parametrize("text,wire_allowed", [("Онлайн-курс длится шесть недель с обратной связью.",True),
     ("A course lasting ٦ weeks.",True)])
 def test_word_generation_constraint_and_unicode_number_validation_remain_independent(text,wire_allowed):
     changed={}
     def mutate(payload,data):
-        payload["outputs"]["offer"].update(text=text)
+        payload["outputs"]["offer"].update(text=qualitative(text))
         changed.update(copy.deepcopy(payload))
     model = SelectionModel(mutate)
     with pytest.raises(ExecutorOutputError):
@@ -60,17 +60,18 @@ def test_global_numeric_enum_does_not_authorize_an_uncited_source():
     packet = replace(invocation.context_packet, known_facts=(*invocation.context_packet.known_facts,
         fact("message", "Budget 10 dollars.")))
     invocation = replace(invocation, context_packet=packet)
-    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text="Budget 10 dollars."))
+    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=sourced("Budget 10 dollars.")))
     with pytest.raises(ExecutorOutputError):
         asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(invocation))
     assert len(model.calls) == 1
+    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
 
 
 def test_parent_assertions_have_explicit_choices_without_becoming_implicit_citations():
     f = fixture(("category",), ("clm_parent",))
     schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:], parent_assertions=("A 6 week course.",))
     value = output((f[0], schema, *f[2:]))
-    value["outputs"]["category"]["text"] = "A 6 week course."
+    value["outputs"]["category"]["text"] = sourced("A 6 week course.")
     assert Draft202012Validator(schema).is_valid(value)
     from app.module_execution.executors.positioning_support_selection import decode_support_selection_wire
     decoded = decode_support_selection_wire(value, f[0], PositioningOutput, *f[2:], parent_assertions=("A 6 week course.",))

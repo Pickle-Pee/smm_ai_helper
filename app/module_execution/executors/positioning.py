@@ -143,10 +143,14 @@ product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
-Its word grammar excludes words beginning with finite cardinal tokens as well as
-digits, even stylistic determiners and ordinary continuations (стоимость, однако,
-триггер, oneself). Choose other qualitative wording or an exact supplied assertion;
-do not invent or respell counts.
+Every text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
+new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
+AllowedPositioningSupportedAssertion copied exactly. Never return a bare text
+string. SOURCE mode does not supply a citation or establish product authority.
+Its free-text pattern excludes ASCII digits. Keep prose unquantified and roles
+unqualified; do not invent or respell counts or add guarantees/qualifications.
+Any supplied numerical fact or qualification must use an ENTIRE exact source
+assertion and its actual cited source, never an invented or paraphrased fact.
 Do not add any qualification or guarantee in ANY section, including competitive
 frame or message hierarchy. For a supplied qualification, choose the ENTIRE
 AllowedPositioningSupportedAssertion and its actual local product truth/proof.
