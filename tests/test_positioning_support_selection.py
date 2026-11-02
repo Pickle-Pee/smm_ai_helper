@@ -26,13 +26,21 @@ def fixture(names=None, parents=(), count=3):
     return canonical, wire, tuple(names), evidence, tuple(parents)
 
 
+def qualitative(text):
+    return {"mode": "QUALITATIVE", "value": text}
+
+
+def sourced(text):
+    return {"mode": "SOURCE", "value": text}
+
+
 def output(f):
     canonical, wire, names, evidence, parents = f
     outputs = {}
     for name, ref in wire["properties"]["outputs"]["properties"].items():
         props = wire["$defs"][ref["$ref"].rsplit("/", 1)[-1]]["properties"]
         kind = props["kind"].get("const", props["kind"].get("enum", [None])[0])
-        outputs[name] = {"text": "Materials and firing included.", "kind": kind,
+        outputs[name] = {"text": qualitative("Materials and firing included."), "kind": kind,
             "confidence": "MEDIUM", "primary_support_key": "e000",
             "evidence_support": {f"e{i:03d}": False for i in range(len(evidence))},
             "parent_support": {f"p{i:03d}": False for i in range(len(parents))}}
@@ -170,17 +178,18 @@ class SelectionModel:
         for name, ref in schema["properties"]["outputs"]["properties"].items():
             props = schema["$defs"][ref["$ref"].rsplit("/", 1)[-1]]["properties"]
             kind = props["kind"].get("const", "HYPOTHESIS")
-            rows[name] = {"text": "A qualitative direction to validate.", "kind": kind,
+            rows[name] = {"text": qualitative("A qualitative direction to validate."), "kind": kind,
                 "confidence": "MEDIUM", "primary_support_key": primary,
                 "evidence_support": {key: key == primary for key in catalog["evidence"]},
                 "parent_support": {key: False for key in catalog["parents"]}}
             if name == "RTB":
                 value = product["value"]
-                rows[name]["text"] = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+                rows[name]["text"] = sourced(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
         payload = {"wire_contract_version": WIRE_VERSION, "outputs": rows, "assumptions": [], "limitations": []}
         assert Draft202012Validator(schema).is_valid(payload)
         if self.mutate:
             self.mutate(payload, data)
+        self.last_payload = copy.deepcopy(payload)
         return json.dumps(payload)
 
 
@@ -210,7 +219,7 @@ def test_selection_does_not_bypass_assurance_or_numeric_semantics(text):
     from app.module_execution.executors.positioning import PositioningExecutor
     from app.module_execution.executors import ExecutorOutputError
     from tests.test_module_executors import request
-    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=text))
+    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=qualitative(text)))
     with pytest.raises(ExecutorOutputError):
         asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(
             request(ModuleId.POSITIONING, outputs=("offer",))))

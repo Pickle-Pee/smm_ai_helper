@@ -5,7 +5,7 @@ import copy
 import random
 import re
 import pytest
-from tests.test_positioning_support_selection import fixture, output
+from tests.test_positioning_support_selection import fixture, output, qualitative, sourced
 from app.module_execution.executors.positioning_assurance import (
     ASSURANCE, STEMS, ALPHABET, qualitative_assurance_pattern,
 )
@@ -17,7 +17,7 @@ from app.module_execution.executors.numeric_quantity import cardinal_words_for_p
 def test_unsupported_assurance_is_not_generatable_as_free_text(text):
     f = fixture(("frame_of_reference",))
     payload = output(f)
-    payload["outputs"]["frame_of_reference"]["text"] = text
+    payload["outputs"]["frame_of_reference"]["text"] = qualitative(text)
     assert not Draft202012Validator(f[1]).is_valid(payload)
 
 
@@ -26,7 +26,7 @@ def test_unsupported_assurance_is_not_generatable_as_free_text(text):
     "Первая строка.\nСледующая строка."])
 def test_unqualified_reasoning_and_experience_nouns_remain_generatable(text):
     f = fixture(("frame_of_reference",));payload = output(f)
-    payload["outputs"]["frame_of_reference"]["text"] = text
+    payload["outputs"]["frame_of_reference"]["text"] = qualitative(text)
     assert Draft202012Validator(f[1]).is_valid(payload)
 
 
@@ -76,7 +76,7 @@ def test_supplied_qualification_without_final_punctuation_can_be_quoted_exactly(
     facts = tuple(replace(item,value=truth) if item.label=="product_truth" else item
         for item in facts_for_module(ModuleId.POSITIONING))
     invocation = request(ModuleId.POSITIONING, facts=facts, outputs=("offer", "RTB"))
-    model = SelectionModel(lambda p,d: p["outputs"]["offer"].update(text=truth))
+    model = SelectionModel(lambda p,d: p["outputs"]["offer"].update(text=sourced(truth)))
     result = asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(invocation))
     assert [row["text"] for row in result.payload["outputs"]] == [truth,truth]
     assert len(model.calls)==1
@@ -93,7 +93,7 @@ def test_full_source_enum_cannot_launder_other_category_as_product_qualification
     truth = "Занятия проводит опытный мастер."
     facts = (*facts_for_module(ModuleId.POSITIONING),fact("message",truth))
     def mutate(payload,data):
-        row=payload["outputs"]["offer"];row["text"]=truth
+        row=payload["outputs"]["offer"];row["text"]=sourced(truth)
         if cite_message:
             identity=next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"]=="message")
             alias=next(k for k,v in data["positioning_support_selection_catalog"]["evidence"].items() if v==identity)
@@ -103,6 +103,7 @@ def test_full_source_enum_cannot_launder_other_category_as_product_qualification
         asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
             request(ModuleId.POSITIONING,facts=facts,outputs=("offer",))))
     assert len(model.calls)==1
+    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
 
 
 def test_source_without_punctuation_is_not_repaired_by_the_decoder():
@@ -110,7 +111,7 @@ def test_source_without_punctuation_is_not_repaired_by_the_decoder():
     from app.module_execution.executors.schemas import PositioningOutput
     f=fixture(("offer",));f[3][0].value="An experienced instructor"
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
-    payload=output((f[0],schema,*f[2:]));payload["outputs"]["offer"]["text"]=f[3][0].value
+    payload=output((f[0],schema,*f[2:]));payload["outputs"]["offer"]["text"]=sourced(f[3][0].value)
     before=copy.deepcopy(payload)
     decoded=decode_support_selection_wire(payload,f[0],PositioningOutput,*f[2:])
     assert payload==before and decoded["outputs"][0]["text"]==f[3][0].value

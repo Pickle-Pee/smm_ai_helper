@@ -3,14 +3,14 @@ import pytest
 import asyncio
 import re
 from jsonschema import Draft202012Validator
-from tests.test_positioning_support_selection import fixture, output
+from tests.test_positioning_support_selection import fixture, output, qualitative, sourced
 
 
 @pytest.mark.parametrize("text", ["Материалы и обжиг в одном занятии.",
     "A course lasting six weeks.", "A single introductory session."])
 def test_free_text_cannot_generate_word_quantities(text):
     f=fixture(("points_of_difference",));value=output(f)
-    value["outputs"]["points_of_difference"]["text"]=text
+    value["outputs"]["points_of_difference"]["text"]=qualitative(text)
     assert not Draft202012Validator(f[1]).is_valid(value)
 
 
@@ -48,7 +48,7 @@ def test_complete_source_assertion_preserves_conservatively_excluded_words(truth
     from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
     from app.module_execution.executors.schemas import PositioningOutput
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
-    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=truth
+    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=sourced(truth)
     assert Draft202012Validator(schema).is_valid(value)
 
 
@@ -61,7 +61,7 @@ def test_actual_supplied_word_or_digit_quantity_remains_an_exact_literal_choice(
     from app.module_execution.executors.positioning import PositioningExecutor
     facts=tuple(replace(f,value=truth) if f.label=='product_truth' else f
         for f in facts_for_module(ModuleId.POSITIONING))
-    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=truth))
+    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=sourced(truth)))
     result=asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
         request(ModuleId.POSITIONING,facts=facts,outputs=('offer',))))
     assert result.payload['outputs'][0]['text']==truth and len(model.calls)==1
@@ -73,6 +73,6 @@ def test_cardinal_grammar_does_not_serialize_a_qualified_or_numbered_result_diff
     from app.module_execution.executors.schemas import PositioningOutput
     f=fixture(('offer',));f[3][0].value='one session'
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:]);value=output((f[0],schema,*f[2:]))
-    value['outputs']['offer']['text']='one session';before=copy.deepcopy(value)
+    value['outputs']['offer']['text']=sourced('one session');before=copy.deepcopy(value)
     decoded=decode_support_selection_wire(value,f[0],PositioningOutput,*f[2:])
     assert value==before and decoded['outputs'][0]['text']=='one session'

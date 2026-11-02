@@ -143,6 +143,10 @@ product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
+Every text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
+new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
+AllowedPositioningSupportedAssertion copied exactly. Never return a bare text
+string. SOURCE mode does not supply a citation or establish product authority.
 Its word grammar excludes words beginning with finite cardinal tokens as well as
 digits, even stylistic determiners and ordinary continuations (стоимость, однако,
 триггер, oneself). Choose other qualitative wording or an exact supplied assertion;
