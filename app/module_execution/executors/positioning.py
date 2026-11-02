@@ -143,6 +143,10 @@ product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
+Its word grammar excludes words beginning with finite cardinal tokens as well as
+digits, even stylistic determiners and ordinary continuations (стоимость, однако,
+триггер, oneself). Choose other qualitative wording or an exact supplied assertion;
+do not invent or respell counts.
 Do not add any qualification or guarantee in ANY section, including competitive
 frame or message hierarchy. For a supplied qualification, choose the ENTIRE
 AllowedPositioningSupportedAssertion and its actual local product truth/proof.
