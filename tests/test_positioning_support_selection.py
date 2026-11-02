@@ -40,7 +40,8 @@ def output(f):
     for name, ref in wire["properties"]["outputs"]["properties"].items():
         props = wire["$defs"][ref["$ref"].rsplit("/", 1)[-1]]["properties"]
         kind = props["kind"].get("const", props["kind"].get("enum", [None])[0])
-        outputs[name] = {"text": qualitative("Materials and firing included."), "kind": kind,
+        outputs[name] = {"text": sourced(evidence[0].value) if name == "RTB"
+            else qualitative("Materials and firing included."), "kind": kind,
             "confidence": "MEDIUM", "primary_support_key": "e000",
             "evidence_support": {f"e{i:03d}": False for i in range(len(evidence))},
             "parent_support": {f"p{i:03d}": False for i in range(len(parents))}}
