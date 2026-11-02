@@ -12,7 +12,7 @@ from .provider_schema import (
 )
 from .positioning_provider_schema import minimal_positioning_schema
 from .positioning_observation_schema import positioning_observation_schema
-from .positioning_assurance import ASSURANCE as _ASSURANCE
+from .positioning_assurance import ASSURANCE as _ASSURANCE, has_product_assurance
 from .intelligence_common import require_supported_numbers, supported_text
 from .claim_support import assertion_support
 from .schemas import (
@@ -289,7 +289,7 @@ every numerical statement still requires its actually selected cited source."""
             if not any(local[e].input_key in PRODUCT_CATEGORIES for e in statement.evidence_ids):
                 raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         require_supported_numbers(statement.text, supported_text(statement, local, parents))
-        if statement.output_name == "RTB" or _ASSURANCE.search(statement.text):
+        if statement.output_name == "RTB" or has_product_assurance(statement.text):
             proof = statement.model_copy(update={
                 "evidence_ids": [e for e in statement.evidence_ids if local[e].input_key in PRODUCT_CATEGORIES],
                 "parent_claim_ids": [],
