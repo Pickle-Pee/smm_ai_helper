@@ -19,6 +19,8 @@ MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParen
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
 QUALITATIVE_ASSERTION = "PositioningQualitativeAssertion"
 TEXT_SELECTION = "PositioningTextSelection"
+RTB_ASSERTION = "AllowedPositioningRTBAssertion"
+RTB_TEXT = "PositioningRTBSourceText"
 
 
 def _fail():
@@ -38,13 +40,25 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 or len(names) * sum(map(len, choices.values())) > MAX_REQUIRED_BOOLEAN_FLAGS):
             _fail()
         definitions = {}
-        assertions = tuple(e.value if isinstance(e.value, str) else json.dumps(plain(e.value), ensure_ascii=False)
-                           for e in evidence) + tuple(parent_assertions)
+        local_assertions = tuple((e, e.value if isinstance(e.value, str)
+            else json.dumps(plain(e.value), ensure_ascii=False)) for e in evidence)
+        assertions = tuple(value for _, value in local_assertions) + tuple(parent_assertions)
         if any(type(value) is not str for value in assertions):
             _fail()
         supported = sorted({value for value in assertions if 1 <= len(value) <= 4000})
         if supported:
             definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
+        if "RTB" in names:
+            rtb_values = sorted({value for e, value in local_assertions
+                if e.input_key in {"product_truth", "existing_proof"} and 1 <= len(value) <= 4000})
+            if not rtb_values:
+                _fail()
+            definitions[RTB_ASSERTION] = {"type": "string", "minLength": 1,
+                "maxLength": 4000, "enum": rtb_values}
+            definitions[RTB_TEXT] = {"type": "object", "properties": {
+                "mode": {"type": "string", "enum": ["SOURCE"]},
+                "value": {"$ref": "#/$defs/" + RTB_ASSERTION}},
+                "required": ["mode", "value"], "additionalProperties": False}
         for family, definition in MAPS.items():
             definitions[definition] = {"type": "object",
                 "properties": {key: {"type": "boolean"} for key in choices[family]},
@@ -88,7 +102,7 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                     "required": ["mode", "value"], "additionalProperties": False}
                 text_choices.append({"$ref": "#/$defs/" + definition})
             definitions[TEXT_SELECTION] = {"anyOf": text_choices}
-            props["text"] = {"$ref": "#/$defs/" + TEXT_SELECTION}
+            props["text"] = {"$ref": "#/$defs/" + (RTB_TEXT if name == "RTB" else TEXT_SELECTION)}
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
             keys = product_keys if name in PRODUCT_OUTPUTS else all_keys

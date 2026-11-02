@@ -158,7 +158,9 @@ Supplied assertions are literal alternatives; their existence alone is not evide
 duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
 select its actual source. Never paraphrase a numerical fact, respell digits in
 words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
-omit the quantity from that free-form statement. RTB still quotes actual proof;
+omit the quantity from that free-form statement. RTB MUST use SOURCE mode with
+an ENTIRE exact AllowedPositioningRTBAssertion from local product_truth/existing_proof
+and select its actual cited source. RTB cannot use QUALITATIVE mode or paraphrase proof;
 other positioning/offer text can stay useful without repeating its duration.
 The numeric enum is an explicit generation alternative, not independent evidence;
 every numerical statement still requires its actually selected cited source."""
