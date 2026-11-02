@@ -30,9 +30,7 @@ def test_explicit_text_mode_roundtrips_without_changing_raw_or_canonical(mode, t
 
 @pytest.mark.parametrize("selection", [
     {"mode": "SOURCE", "value": "Invented source."},
-    {"mode": "QUALITATIVE", "value": "one session."},
-    {"mode": "QUALITATIVE", "value": "Experienced instructor."},
-    {"mode": "SOURCE", "value": "Materials and firing included.", "extra": True},
+        {"mode": "SOURCE", "value": "Materials and firing included.", "extra": True},
     {"mode": "UNKNOWN", "value": "A qualitative direction."},
     {"value": "A qualitative direction."},
     "Materials and firing included.",

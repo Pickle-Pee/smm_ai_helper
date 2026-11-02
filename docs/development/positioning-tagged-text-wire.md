@@ -3,7 +3,7 @@
 The internal support-selection wire is now `positioning.support_selection.v4`.
 Each output's `text` is a disjoint tagged object with exactly `mode` and `value`:
 
-- `QUALITATIVE`: new prose satisfying the existing positive free-text grammar.
+- `QUALITATIVE`: new prose using the existing simple ASCII-digit-free assertion pattern.
 - `SOURCE`: an entire bounded assertion from the existing literal source enum.
 
 The decoder validates the complete v4 wire first, copies it, and assigns the
@@ -35,3 +35,17 @@ validation, literal numeric text without final punctuation, invalid/unknown mode
 missing/extra fields, legacy v3 rejection and absence of unavailable source mode.
 Existing source-authority and unrelated-category rejection tests use explicit
 SOURCE values, so wrapping cannot make them pass by accidentally failing syntax.
+
+The initial tagged/full-vocabulary candidate also stopped early. The final producer
+therefore retains explicit modes but removes finite-word grammar from provider
+syntax. In isolated diagnostic generation with the unchanged full canonical guard:
+course req_ad2ba253d59f4085a1bf9313ed7310e8 and workshop
+req_edb1e70cf83a4c42a82f1f4dfa6cb64d both completed and passed strict validation,
+Quality Gates and literal cited RTB. They are isolated proofs, not final Telegram
+acceptance. The exact final-image payloads must match these proofs before deployment.
+
+A regression also exposed an unrecognized introductory modifier in counted
+phrases. The shared finite modifier list now includes introductory and вводный
+inflections; its algorithm, units, source-authority and word-gap bounds are
+preserved. Previously successful saved responses must be revalidated with this
+stronger guard before their proofs are reused.

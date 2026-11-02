@@ -1,41 +1,32 @@
-# POSITIONING cardinal words during generation
+# POSITIONING word quantities remain a canonical acceptance condition
 
-The exact restored workshop probe on1921e53 completed but failed numerical
-validation at points_of_difference. A network-none inventory of all16statements
-found only the unsupported cardinal word «одном»; there were no remaining
-assurance violations. The response was not repaired, accepted, retried or
-persisted. Candidate19 was not deployed; production remained105ffcb.
+The existing unit-aware has_numeric_quantity algorithm and cardinal vocabulary
+are preserved. Its bounded modifier list now also recognizes introductory and
+Russian вводный inflections: single introductory session must not hide a count.
+The same at-most-two listed modifiers and punctuation boundaries still apply. Unsupported word quantities (including one/single and Russian
+inflections) still fail actual executor validation, even when syntax is valid.
+Supplied numeric assertions remain available as full exact SOURCE values and
+require their actually cited source; an enum entry never adds a citation.
 
-The positive free-text grammar now reuses the exact immutable cardinal vocabulary
-from the existing unit-aware has_numeric_quantity guard. The first exact-word grammar on3a55247 passed local checks but its one
-workshop probe stopped after651 output tokens against a16000 cap. This is
-recorded as provider incomplete, not real budget exhaustion; no retry or deploy.
-The revised grammar prunes complete cardinal subtrees, just like assurance
-prefixes. Ordinary continuations are conservatively excluded too (одна -> однако,
-три -> триггер, сто -> стоимость, one -> oneself). This limits free wording and
-requires manual quality review; exact whole supplied assertions remain available.
-The pattern shrinks from28938 to15665 UTF-8 bytes. A minimal no-business API
-compatibility test completed with local schema validation (req_67b63efe1e464028b6c2c3121debb6a5);
-that result does not establish full-workflow acceptance. The shared trie uses positive regular alternatives, mandatory
-word separators and no lookaround; the resulting pattern is shared once in $defs.
-Digits and cardinal words require a complete supplied assertion alternative.
+Generation uses the existing simple ASCII-digit-free assertion pattern and explicit
+QUALITATIVE/SOURCE modes. Instructions prohibit invented or respelled counts,
+including stylistic singulars, and require complete source assertions for actual
+supplied durations. There is no finite-word blacklist in provider syntax. Ordinary
+words such as стоимость, однако, триггер and oneself remain available. The former
+provider-only vocabulary accessor and trie implementation are removed; no duplicate
+editable lexicon, word normalization, response repair or retry remains.
 
-The provider branch deliberately excludes cardinal articles even without counted
-units, and cardinal-prefix continuations that are not numbers. The original canonical guard remains unit-aware and unchanged; ordinals,
-word quantities, Unicode digits and actual source authority keep their existing
-semantics. The lexicon accessor returns a frozenset, not a second editable table.
-Supplied complete assertions preserve word/digit quantities and original text,
-but never add an implicit citation. No parsing, respelling, number calculation,
-source/response normalization, filtering, hidden retry or budget increase.
+The exact-cardinal, prefix-pruned and tagged/full-vocabulary variants stopped early
+in full restored synthetic requests despite passing minimal compatibility cases.
+A targeted singular grammar passed the workshop but stopped on the course. Those
+variants were held outside production. This history does not establish a provider
+internal mechanism. The simple producer variant completed both restored contexts
+and passed unchanged strict validation, cited literal RTB and Quality Gates; exact
+payload equivalence in the final immutable image and full CI remain deployment gates.
 
-The explicit RU/EN alphabet and finite lexicon are conservative, not a general
-number parser. Other Unicode spellings and language constructions remain subject
-to canonical validation and manual quality review. Long sources are not truncated;
-schema bounds still refuse excessive catalogs. Canonical storage, DTOs, flags,
-historic readers, QG and migrations are unchanged.
-
-Three regressions failed on the former provider schema. Coverage includes the
-entire shared lexicon in both cases, conservative prefix exclusions and unaffected noncardinal words/ordinals,
-exact sourced word/digit assertions, no decoder repair, 5000 reference comparisons
-and independent Unicode validation. Full CI and both live business contexts remain
-deployment gates; failed probes never count as final Telegram acceptance.
+Regression tests explicitly prove that word-number and Unicode-number responses
+are admitted by provider syntax and independently rejected by the real canonical
+validator when unsupported. Tests also cover complete sourced word/digit quantities,
+ordinary words, unmodified decode values and uncited source rejection. Canonical
+validation retains its existing finite language/unit limits, not general NLP
+entailment. Public DTOs, storage, migrations, model and budgets are unchanged.

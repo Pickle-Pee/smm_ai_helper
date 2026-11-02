@@ -39,7 +39,7 @@ def test_actual_executor_accepts_exact_course_duration_with_its_actual_source():
     assert result.payload["outputs"][0]["text"] == COURSE_TRUTH and len(model.calls) == 1
 
 
-@pytest.mark.parametrize("text,wire_allowed", [("Онлайн-курс длится шесть недель с обратной связью.",False),
+@pytest.mark.parametrize("text,wire_allowed", [("Онлайн-курс длится шесть недель с обратной связью.",True),
     ("A course lasting ٦ weeks.",True)])
 def test_word_generation_constraint_and_unicode_number_validation_remain_independent(text,wire_allowed):
     changed={}

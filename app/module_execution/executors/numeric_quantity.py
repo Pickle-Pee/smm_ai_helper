@@ -64,7 +64,8 @@ ruble rubles rouble roubles dollar dollars euro euros percent percentage points
 евро процент процента процентов проценту процентам процентом процентами проценте процентах проценты
 """.split())
 _MODIFIERS = frozenset("""
-short brief additional new paid initial simple quick small full complete
+short brief additional new paid initial introductory simple quick small full complete
+вводный вводная вводное вводные вводного вводной вводных вводному вводным вводную вводными вводном
 короткий короткая короткое короткие короткого короткой коротких короткому коротким короткую короткими коротком
 краткий краткая краткое краткие краткого краткой кратких краткому кратким краткую краткими кратком
 дополнительный дополнительная дополнительное дополнительные дополнительного дополнительной дополнительных дополнительному дополнительным дополнительную дополнительными дополнительном
@@ -104,8 +105,3 @@ def has_numeric_quantity(text: str) -> bool:
                 break
             previous = following
     return False
-
-
-def cardinal_words_for_provider() -> frozenset[str]:
-    """Share the immutable finite lexicon without changing unit-aware validation."""
-    return _CARDINALS

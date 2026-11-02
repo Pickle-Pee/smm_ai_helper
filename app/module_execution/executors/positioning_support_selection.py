@@ -10,7 +10,6 @@ from .experiments_support_selection import support_selection_catalog, MAX_REQUIR
 from .product_support import PRODUCT_OUTPUTS, product_support_ids
 from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
-from .positioning_assurance import qualitative_assurance_pattern
 from .common import plain
 
 WIRE_VERSION = "positioning.support_selection.v4"
@@ -71,7 +70,6 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             text_schema = assertion_text_schema(props["text"], bool(supported),
                 limit=4000, enum_definition=SUPPORTED_ASSERTION)
             qualitative = text_schema["anyOf"][0] if supported else text_schema
-            qualitative["pattern"] = qualitative_assurance_pattern()
             if QUALITATIVE_ASSERTION in definitions and definitions[QUALITATIVE_ASSERTION] != qualitative:
                 _fail()
             definitions[QUALITATIVE_ASSERTION] = qualitative
