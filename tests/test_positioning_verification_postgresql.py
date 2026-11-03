@@ -108,3 +108,62 @@ def test_checkpoint_replays_paid_response_without_reposting(mvp_database, monkey
             await cleanup(db, run_id, owner)
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("assessment", ["APPROVE", "REJECT"])
+def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, assessment):
+    import json
+
+    from tests.test_module_executors import FakeModel
+
+    model = FakeModel(use_parents=True)
+    calls = []
+
+    async def respond(request):
+        payload = json.loads(request.content)
+        schema = payload["text"]["format"]["schema"]
+        data = json.loads(payload["input"][1]["content"])
+        if "assessment" not in schema["properties"]:
+            calls.append("draft")
+            output = await model(text=payload["input"][1]["content"], response_schema=schema)
+        else:
+            calls.append("review")
+            reviews = []
+            for row in data["outputs"]:
+                rtb = row["output_name"] == "RTB"
+                support = [
+                    {"evidence_id": identity, "quote": source["text"]}
+                    for identity, source in data["evidence"].items()
+                    if rtb and source["role"] in {"product_truth", "demonstration"} and source["text"] == row["text"]
+                    and identity in row["evidence_ids"]
+                ]
+                reviews.append({"output_name": row["output_name"], "claims": [{
+                    "span": row["text"], "category": "product" if rtb else "strategy",
+                    "kind": "fact" if rtb else "hypothesis", "status": "SUPPORTED" if rtb else "HYPOTHESIS",
+                    "support": support, "asserts_no_follow_up": False,
+                }]})
+            output = json.dumps({"assessment": assessment, "reviews": reviews})
+        return httpx.Response(200, json={"status": "completed", "output_text": output})
+
+    install_transport(monkeypatch, respond)
+
+    async def exercise():
+        db = mvp_database
+        service, _, run_id, owner = await setup(db, model=production_model_call,
+            responses_governance=True, positioning_verifier=production_model_call)
+        try:
+            worker = ModuleGraphWorker(service)
+            assert await worker.once()
+            assert await worker.once()
+            run, jobs, artifacts = await state(db, run_id)
+            position = next(job for job in jobs if job.workflow_step == "positioning")
+            async with db() as session:
+                checkpoint = await session.get(PositioningVerification, position.job_id)
+                assert checkpoint.state == ("verified" if assessment == "APPROVE" else "rejected"), checkpoint.checkpoint.get("decision")
+            assert calls == ["draft", "draft", "review"]
+            assert any(row.step == "positioning" for row in artifacts) == (assessment == "APPROVE")
+            assert run.status.startswith("completed") == (assessment == "APPROVE")
+        finally:
+            await cleanup(db, run_id, owner)
+
+    asyncio.run(exercise())

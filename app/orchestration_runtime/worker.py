@@ -86,7 +86,8 @@ class ModuleGraphWorker:
                             decision = await review_positioning(verifier, result, evidence)
                     await self.service.record_verification(item, decision)
                     if decision["status"] != "verified":
-                        await self.service.fail(item, code="positioning_verification_" + decision["status"])
+                        code = "quality_rejected" if decision["status"] == "rejected" else "execution_invalid"
+                        await self.service.fail(item, code=code)
                         return True
             quality = evaluate_result(item.job_id, result, request.upstream_results)
             if not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):

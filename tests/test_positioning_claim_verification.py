@@ -142,3 +142,29 @@ def test_workflow_budget_separates_operations_without_allowing_repeat():
     policy = complete(policy, {**verification, "outcome": "success", "outcome_unknown": False})
     with pytest.raises(RetryGovernanceError, match="previous_outcome"):
         reserve(policy, {**verification, "provider_call_id": "after_success"})
+
+
+def test_independent_approval_does_not_override_deterministic_findings():
+    import asyncio
+    import json
+    from types import MappingProxyType, SimpleNamespace
+
+    from app.orchestration_runtime.claim_verification import review_positioning
+
+    text = "Personal feedback is included."
+    source = "Written feedback is included."
+    result = SimpleNamespace(payload=MappingProxyType({"outputs": (MappingProxyType({
+        "output_name": "offer", "text": text, "evidence_ids": ("evd_product",),
+    }),)}))
+
+    async def auditor(**kwargs):
+        assert json.loads(kwargs["text"])["outputs"][0]["text"] == text
+        return json.dumps({"assessment": "APPROVE", "reviews": [
+            OutputReview(output_name="offer", claims=[review(text, quote=source)]).model_dump(),
+        ]})
+
+    decision = asyncio.run(review_positioning(auditor, result, {
+        "evd_product": {"text": source, "role": "product_truth"},
+    }))
+    assert decision["status"] == "rejected"
+    assert decision["findings"][0]["reason"] == "no_exact_eligible_assertion"

@@ -170,7 +170,9 @@ async def review_positioning(model_call, result, evidence):
 
     from app.module_execution.executors.claim_support import unique_object
 
-    rows = result.payload["outputs"]
+    from .serialization import bounded
+
+    rows = bounded(result.payload["outputs"])
     draft = {row["output_name"]: DraftStatement(row["text"], frozenset(row["evidence_ids"])) for row in rows}
     output_schema = OutputReview.model_json_schema()
     definitions = output_schema.pop("$defs")
