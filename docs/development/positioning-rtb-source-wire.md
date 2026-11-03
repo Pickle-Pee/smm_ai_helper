@@ -95,3 +95,27 @@ in qualitative language. A second live verification call inside the same
 graph node would violate Responses retry governance after a successful
 receipt. Production verification would need an explicitly budgeted durable
 stage with its own recovery and provider-call identity.
+
+## Durable verification rollout
+
+Enable POSITIONING_DURABLE_VERIFICATION_ENABLED with
+RESPONSES_WORKFLOW_GOVERNANCE_ENABLED only after migration 20261103_0014.
+New runs record the verifier contract at creation. Existing runs keep their
+original contract. Every POSITIONING completion in a marked run requires a
+verified checkpoint matching the canonical result.
+
+Private positioning_verifications rows belong to a Job and are outside
+MarketingArtifact. The Responses reservation remains on the run. The completed
+receipt and bounded response text commit together under the run, lease and Job
+fence. Replacement workers recompute the request fingerprint before replaying
+the response, and repeat deterministic decoding. A saved canonical draft and
+its evidence are fingerprinted before the independent verification call.
+Verification uses a distinct operation in the same workflow budget with a
+single reservation. A reserved or unknown request with no saved response
+blocks replay. The worker records the verification decision before Quality
+Gates. Only normal artifact finalization releases graph dependencies.
+
+A verifier can miss an implicit assertion. Independent approval and the
+deterministic contract are both required, and this release still requires
+manual quality acceptance. Unstructured legacy product evidence does not
+provide a typed follow-up constraint. No automated remediation is enabled.

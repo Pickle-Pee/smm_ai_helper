@@ -23,7 +23,8 @@ def reserve(policy, fields):
     if policy.get("version") != 1:
         raise RetryGovernanceError("unsupported_retry_policy")
     calls = policy["calls"]
-    node_calls = [c for c in calls if c["node_id"] == fields["node_id"]]
+    node_calls = [c for c in calls if c["node_id"] == fields["node_id"]
+                  and c.get("operation") == fields.get("operation")]
     # A completed receipt is not an accepted/persisted module artifact. Repeating
     # it after a crash is also unsafe; accepted artifacts bypass model execution.
     if any(not (
@@ -32,7 +33,8 @@ def reserve(policy, fields):
             or c["outcome"] == "rejected" and c.get("failure_reason") == "incomplete_empty_max_output_tokens")
     ) for c in node_calls):
         raise RetryGovernanceError("previous_outcome_requires_owner_decision")
-    if (len(calls) >= policy["max_calls"] or len(node_calls) >= policy["max_node_calls"]
+    operation_limit = 1 if fields.get("operation") == "positioning_verification.v1" else policy["max_node_calls"]
+    if (len(calls) >= policy["max_calls"] or len(node_calls) >= operation_limit
             or sum(c["max_output_tokens"] for c in calls) + fields["max_output_tokens"] > policy["max_output_tokens"]):
         raise RetryGovernanceError("responses_budget_exhausted")
     calls.append({**fields, "outcome": "reserved"})
@@ -42,7 +44,9 @@ def reserve(policy, fields):
 def complete(policy, receipt):
     policy = deepcopy(policy)
     call = next((c for c in policy["calls"] if c["provider_call_id"] == receipt["provider_call_id"]), None)
-    if call is None or call["outcome"] != "reserved":
+    if (call is None or call["outcome"] != "reserved"
+            or call.get("operation") != receipt.get("operation")
+            or call.get("node_id") != receipt.get("node_id")):
         raise RetryGovernanceError("invalid_provider_receipt")
     call.update(receipt)
     call["outcome"] = "unknown" if receipt["outcome_unknown"] else receipt["outcome"]

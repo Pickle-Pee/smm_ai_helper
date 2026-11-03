@@ -12,7 +12,8 @@ from app.module_execution import ModuleExecutorDispatcher
 from app.module_execution.acceptance import fully_accepted
 from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.common import ExecutorOutputError
-from app.module_registry import ModuleResultStatus
+from app.module_registry import ModuleId, ModuleResultStatus
+from .claim_verification import review_positioning, verification_inputs
 from .errors import RuntimeContractError
 from .service import evaluate_result
 
@@ -73,6 +74,20 @@ class ModuleGraphWorker:
             if result.normalized_result.module_status is ModuleResultStatus.BLOCKED:
                 await self.service.fail(item, code="module_blocked", blocking_reasons=result.normalized_result.blocking_reasons)
                 return True
+            if request.module_id is ModuleId.POSITIONING and hasattr(self.service, "verification_draft"):
+                evidence = verification_inputs(request)
+                if await self.service.verification_draft(item, result, evidence):
+                    verifier = self.service.positioning_verifier
+                    if verifier is None:
+                        raise RuntimeContractError("POSITIONING verifier unavailable")
+                    hooks = await self.service.provider_hooks(item, verification=True)
+                    async with asyncio.timeout_at(timeout.when()) as verification_timeout:
+                        with graph_call_context(item, request, verification_timeout, hooks):
+                            decision = await review_positioning(verifier, result, evidence)
+                    await self.service.record_verification(item, decision)
+                    if decision["status"] != "verified":
+                        await self.service.fail(item, code="positioning_verification_" + decision["status"])
+                        return True
             quality = evaluate_result(item.job_id, result, request.upstream_results)
             if not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):
                 await self.service.fail(item, code="quality_rejected")

@@ -14,14 +14,14 @@ from sqlalchemy import exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import AsyncSessionLocal
-from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, User
+from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, PositioningVerification, User
 from app.services.job_persistence_service import JobPersistenceService
 from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.module_execution import ModuleExecutionRequest, UpstreamExecutionResult
 from app.module_execution.acceptance import fully_accepted
 from app.marketing_orchestrator.quality_gates import QualityGateEvaluator
 from app.marketing_orchestrator.quality_gates.contracts import EvaluationBatch
-from app.module_registry import ModuleResultStatus
+from app.module_registry import ModuleId, ModuleResultStatus
 from .compiler import validate_compiled_plan
 from .contracts import ARTIFACT_SCHEMA, JOB_KIND, WORKFLOW_TYPE, GraphWorkItem, artifact_key, module_job_id, validate_identity, optional, hard_predecessors, CompiledExecutionPlanV2
 from .errors import RuntimeContractError, StartIdentityConflict
@@ -29,6 +29,7 @@ from .retry_policy import RetryGovernanceError, new_policy, reserve, complete, d
 from .serialization import bounded, fingerprint, plan_from_json, plan_to_json, result_from_json, result_to_json
 
 log = logging.getLogger(__name__)
+VERIFICATION_OPERATION = "positioning_verification.v1"
 TERMINAL = {"completed", "completed_with_limitations", "blocked", "failed"}
 
 
@@ -68,7 +69,7 @@ def evaluate_result(job_id, result, upstream):
 
 class GraphExecutionService:
     def __init__(self, sessions=AsyncSessionLocal, *, executors, queue=None, clock=utcnow,
-                 lease_seconds=330, max_attempts=3, responses_governance=False, responses_output_budget=192000):
+                 lease_seconds=330, max_attempts=3, responses_governance=False, responses_output_budget=192000, positioning_verifier=None):
         if lease_seconds <= 0 or not 1 <= max_attempts <= 10:
             raise ValueError("invalid execution policy")
         self.sessions, self.executors, self.queue, self.clock = sessions, executors, queue, clock
@@ -76,6 +77,9 @@ class GraphExecutionService:
         self.jobs = JobPersistenceService(clock)
         if type(responses_output_budget) is not int or not 1 <= responses_output_budget <= 1000000:
             raise ValueError("invalid Responses output budget")
+        if positioning_verifier is not None and not responses_governance:
+            raise ValueError("POSITIONING verification requires Responses governance")
+        self.positioning_verifier = positioning_verifier
         self.responses_governance = responses_governance
         self.responses_output_budget = responses_output_budget
 
@@ -123,6 +127,8 @@ class GraphExecutionService:
                 run_id=run_id, user_id=owner_id, workflow_type=WORKFLOW_TYPE, status="queued",
                 input_json={
                     "history_title": history_title(plan),
+                    **({"positioning_verification": VERIFICATION_OPERATION}
+                       if self.positioning_verifier is not None else {}),
                     **({"responses_retry": new_policy(len(plan.nodes), self.responses_output_budget)}
                        if self.responses_governance else {}),
                 }, state_json={},
@@ -183,6 +189,12 @@ class GraphExecutionService:
             quality = evaluate_result(job.job_id, result, upstream)
             if raw["quality"] != quality or not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"]):
                 raise RuntimeContractError("artifact quality acceptance mismatch")
+            run = await session.get(MarketingRun, run_id) if node.module_id is ModuleId.POSITIONING else None
+            if run is not None and self._verification_required(run, job):
+                checkpoint = await session.get(PositioningVerification, job.job_id)
+                if (checkpoint is None or checkpoint.state != "verified"
+                        or checkpoint.checkpoint.get("draft", {}).get("result") != raw["execution_result"]):
+                    raise RuntimeContractError("POSITIONING artifact lacks verification")
             accepted[node.node_id] = result
         if by_key:
             raise RuntimeContractError("unknown artifact identity")
@@ -307,22 +319,51 @@ class GraphExecutionService:
     async def release_attempt(self, item):
         await release_attempt(self.sessions, item.job_id, item.claim_token)
 
-    async def provider_hooks(self, item):
+    @staticmethod
+    def _verification_required(run, job):
+        return (run.input_json.get("positioning_verification") == VERIFICATION_OPERATION
+                and job.payload_json.get("module_id") == ModuleId.POSITIONING.value)
+
+    async def provider_hooks(self, item, *, verification=False):
         async with self.sessions() as session, session.begin():
             active = await self._active(session, item)
             if active is None:
                 raise RetryGovernanceError("inactive_graph_attempt")
-            if "responses_retry" not in active[0].input_json:
+            run, job, _ = active
+            checkpointed = self._verification_required(run, job)
+            if "responses_retry" not in run.input_json:
                 return None
-        async def before(fields):
-            await self._provider_receipt(item, fields, finished=False)
-        async def after(fields):
-            await self._provider_receipt(item, fields, finished=True)
-        return before, after
+        if verification and not checkpointed:
+            raise RetryGovernanceError("verification_not_enabled")
+        operation = VERIFICATION_OPERATION if verification else None
 
-    async def _provider_receipt(self, item, fields, *, finished):
-        # Existing run -> lease -> Job locks serialize budget across graph nodes.
-        # Commit reservation before network I/O, never hold locks across a POST.
+        async def before(fields):
+            await self._provider_receipt(item, fields, finished=False, operation=operation)
+
+        async def after(fields, text=None, payload=None):
+            await self._provider_receipt(item, fields, finished=True, operation=operation,
+                                         response_text=text, payload=payload)
+
+        if not checkpointed:
+            return before, after
+
+        async def replay(payload):
+            async with self.sessions() as session, session.begin():
+                if await self._active(session, item) is None:
+                    raise RetryGovernanceError("inactive_graph_attempt")
+                row = await session.get(PositioningVerification, item.job_id)
+                saved = row.checkpoint.get("verification" if verification else "generation") if row else None
+                if saved is None:
+                    return None
+                if saved["request_fingerprint"] != fingerprint(payload):
+                    raise RetryGovernanceError("checkpoint_request_mismatch")
+                return saved["text"]
+
+        return before, after, replay
+
+    async def _provider_receipt(self, item, fields, *, finished, operation=None,
+                                response_text=None, payload=None):
+        # Lock run -> lease -> Job before reserving or storing private state.
         names = ("provider_call_id", "graph_attempt_id", "graph_attempt", "module_execution_id",
                  "node_id", "model", "schema_fingerprint", "max_output_tokens", "retry_owner", "retry_decision")
         if finished:
@@ -334,10 +375,66 @@ class GraphExecutionService:
             active = await self._active(session, item)
             if active is None:
                 raise RetryGovernanceError("inactive_graph_attempt")
-            run = active[0]
+            run, job, _ = active
+            checkpointed = self._verification_required(run, job)
+            row = await session.get(PositioningVerification, item.job_id) if checkpointed else None
+            if operation is not None:
+                if operation != VERIFICATION_OPERATION or row is None or row.state != "verifying":
+                    raise RetryGovernanceError("verification_checkpoint_not_ready")
+                receipt["operation"] = operation
             policy = run.input_json["responses_retry"]
             updated = complete(policy, receipt) if finished else reserve(policy, receipt)
+            if checkpointed and finished and receipt["outcome"] == "success":
+                if type(response_text) is not str or not 0 < len(response_text) <= 131072 or payload is None:
+                    raise RetryGovernanceError("invalid_checkpoint_response")
+                if row is None:
+                    row = PositioningVerification(job_id=item.job_id, state="draft_persisted",
+                                                  checkpoint={}, updated_at=self.clock())
+                    session.add(row)
+                key = "verification" if operation else "generation"
+                row.checkpoint = bounded({**row.checkpoint, key: {
+                    "request_fingerprint": fingerprint(payload), "text": response_text,
+                    "receipt": receipt, "plan_revision": item.plan_revision,
+                }})
+                row.updated_at = self.clock()
             run.input_json = {**run.input_json, "responses_retry": updated}
+
+    async def verification_draft(self, item, result, evidence):
+        async with self.sessions() as session, session.begin():
+            active = await self._active(session, item)
+            if active is None:
+                raise RuntimeContractError("inactive_graph_attempt")
+            run, job, _ = active
+            if not self._verification_required(run, job):
+                return False
+            row = await session.get(PositioningVerification, item.job_id)
+            if row is None or row.state not in {"draft_persisted", "verifying", "verified"}:
+                raise RuntimeContractError("verification draft unavailable")
+            draft = bounded({"result": result_to_json(result), "evidence": evidence,
+                             "contract": VERIFICATION_OPERATION})
+            digest = fingerprint(draft)
+            if "draft_fingerprint" in row.checkpoint and row.checkpoint["draft_fingerprint"] != digest:
+                raise RuntimeContractError("verification draft mismatch")
+            if row.state != "verified":
+                row.state = "verifying"
+                row.checkpoint = bounded({**row.checkpoint, "draft": draft, "draft_fingerprint": digest})
+                row.updated_at = self.clock()
+            return True
+
+    async def record_verification(self, item, decision):
+        async with self.sessions() as session, session.begin():
+            if await self._active(session, item) is None:
+                raise RuntimeContractError("inactive_graph_attempt")
+            row = await session.get(PositioningVerification, item.job_id)
+            if (row is None or row.state not in {"verifying", "verified"}
+                    or "verification" not in row.checkpoint
+                    or decision.get("status") not in {"verified", "rejected", "blocked"}):
+                raise RuntimeContractError("invalid verification decision")
+            if row.state == "verified" and row.checkpoint["decision"] != decision:
+                raise RuntimeContractError("verified decision changed")
+            row.state = decision["status"]
+            row.checkpoint = bounded({**row.checkpoint, "decision": decision})
+            row.updated_at = self.clock()
 
     async def retry_decision(self, item, exc, legacy_retryable):
         async with self.sessions() as session, session.begin():
@@ -412,6 +509,11 @@ class GraphExecutionService:
                     or not fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
                     or result.normalized_result.module_status is ModuleResultStatus.BLOCKED):
                 raise RuntimeContractError("result is not accepted")
+            if self._verification_required(run, job):
+                row = await session.get(PositioningVerification, item.job_id)
+                if (row is None or row.state != "verified"
+                        or row.checkpoint["draft"]["result"] != result_to_json(result)):
+                    raise RuntimeContractError("POSITIONING has no verified draft")
             raw = bounded({"schema_version": ARTIFACT_SCHEMA, "run_id": item.run_id, "plan_revision": revision,
                 "node_id": node.node_id, "module_id": node.module_id.value,
                 "execution_result": result_to_json(result), "quality": quality})
@@ -427,6 +529,15 @@ class GraphExecutionService:
         return True
 
     async def _terminal(self, session, run, job, lease, code, *, blocked=False, reasons=()):
+        if self._verification_required(run, job):
+            checkpoint = await session.get(PositioningVerification, job.job_id)
+            if checkpoint is None:
+                session.add(PositioningVerification(job_id=job.job_id, state="blocked",
+                    checkpoint={"reason": code}, updated_at=self.clock()))
+            elif checkpoint.state not in {"rejected", "blocked"}:
+                checkpoint.state = "blocked"
+                checkpoint.checkpoint = {**checkpoint.checkpoint, "reason": code}
+                checkpoint.updated_at = self.clock()
         await self.jobs.transition_job(session, job.job_id, job.version, JobStatus.FAILED, error=code)
         lease.claim_token = lease.lease_until = None
         try:
