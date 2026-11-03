@@ -1,5 +1,6 @@
 """Simple provider text retains independent canonical assurance validation."""
 from jsonschema import Draft202012Validator
+from app.module_execution.executors.positioning_support_selection import product_source_catalog
 import asyncio
 import copy
 import pytest
@@ -36,7 +37,9 @@ def test_supplied_qualification_without_final_punctuation_can_be_quoted_exactly(
     facts = tuple(replace(item,value=truth) if item.label=="product_truth" else item
         for item in facts_for_module(ModuleId.POSITIONING))
     invocation = request(ModuleId.POSITIONING, facts=facts, outputs=("offer", "RTB"))
-    model = SelectionModel(lambda p,d: p["outputs"]["offer"].update(text=sourced(truth)))
+    model = SelectionModel(lambda p,d: p["outputs"]["offer"].update(text=sourced(next(
+        key for key, source in d["positioning_product_sources"].items()
+        if source["text"] == truth))))
     result = asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(invocation))
     assert [row["text"] for row in result.payload["outputs"]] == [truth,truth]
     assert len(model.calls)==1
@@ -71,7 +74,7 @@ def test_source_without_punctuation_is_not_repaired_by_the_decoder():
     from app.module_execution.executors.schemas import PositioningOutput
     f=fixture(("offer",));f[3][0].value="An experienced instructor"
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
-    payload=output((f[0],schema,*f[2:]));payload["outputs"]["offer"]["text"]=sourced(f[3][0].value)
+    payload=output((f[0],schema,*f[2:]));payload["outputs"]["offer"]["text"]=sourced(next(iter(product_source_catalog(f[3]))))
     before=copy.deepcopy(payload)
     decoded=decode_support_selection_wire(payload,f[0],PositioningOutput,*f[2:])
     assert payload==before and decoded["outputs"][0]["text"]==f[3][0].value
