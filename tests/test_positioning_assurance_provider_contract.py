@@ -39,7 +39,7 @@ def test_supplied_qualification_without_final_punctuation_can_be_quoted_exactly(
     invocation = request(ModuleId.POSITIONING, facts=facts, outputs=("offer", "RTB"))
     model = SelectionModel(lambda p,d: p["outputs"]["offer"].update(text=sourced(next(
         key for key, source in d["positioning_product_sources"].items()
-        if source["text"] == truth))))
+        if source["category"] == "product_truth"))))
     result = asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(invocation))
     assert [row["text"] for row in result.payload["outputs"]] == [truth,truth]
     assert len(model.calls)==1
@@ -66,7 +66,7 @@ def test_full_source_enum_cannot_launder_other_category_as_product_qualification
         asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
             request(ModuleId.POSITIONING,facts=facts,outputs=("offer",))))
     assert len(model.calls)==1
-    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
+    assert not Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
 
 
 def test_source_without_punctuation_is_not_repaired_by_the_decoder():

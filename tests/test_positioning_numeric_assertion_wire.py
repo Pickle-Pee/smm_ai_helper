@@ -31,12 +31,12 @@ def test_exact_supplied_numeric_assertion_has_an_explicit_generation_alternative
     assert Draft202012Validator(schema).is_valid(value)
     assert evidence[0].value == before
     # The supplied assertion must be represented, not merely admitted as free text.
-    assert any(key in definition.get("enum", []) for definition in schema["$defs"].values())
+    assert key in schema["$defs"]["PositioningConditionSourceText"]["properties"]["value"]["enum"]
 
 
 def test_actual_executor_accepts_exact_course_duration_with_its_actual_source():
     model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=sourced(next(key for key, source in
-        d["positioning_product_sources"].items() if source["text"] == COURSE_TRUTH))))
+        d["positioning_product_sources"].items() if source["category"] == "product_truth"))))
     result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(course_request("offer")))
     assert result.payload["outputs"][0]["text"] == COURSE_TRUTH and len(model.calls) == 1
 
@@ -66,7 +66,7 @@ def test_global_numeric_enum_does_not_authorize_an_uncited_source():
     with pytest.raises(ExecutorOutputError):
         asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(invocation))
     assert len(model.calls) == 1
-    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
+    assert not Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.last_payload)
 
 
 def test_parent_assertions_have_explicit_choices_without_becoming_implicit_citations():

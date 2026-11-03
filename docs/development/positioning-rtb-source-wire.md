@@ -54,3 +54,25 @@ decoder rejected the response. In v7 the target SOURCE alternative lists
 only complete supplied audience assertions. It is absent when the request
 has no eligible audience assertion. QUALITATIVE remains available for
 audience hypotheses and neutral strategic text.
+
+## Claim plan in support selection v8
+
+The executor builds a request-local plan from complete supplied product
+conditions and supporting material. Each entry retains its exact text on the
+server, its evidence identity, source category, authority and allowed outputs.
+Supporting material can substantiate RTB and cannot become an offer or a
+product condition. Strategic sections such as differentiation select their
+own text and support separately.
+
+The provider receives only the metadata of product plan entries. Product
+detail values are removed from both copies of the direct evidence in the
+generation input. The model can choose eligible keys and draft useful
+strategy from the product description, audience and other authorized
+context in one request. Decoding a selected key resolves its exact text and
+evidence before canonical and semantic validation. The strategy can still
+contain unsupported assertions inferred from other context, so live semantic
+and human review remain necessary. Keys with identical metadata cannot be
+ranked by textual relevance by the model.
+
+Persisted canonical results keep the same schema. Raw v7 replies require
+the v7 revision for replay.

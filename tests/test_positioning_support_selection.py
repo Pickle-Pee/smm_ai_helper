@@ -407,3 +407,48 @@ def test_target_and_qualified_offer_use_separate_modes_and_sources():
     expected["RTB"] = expected["offer"]
     assert {row["output_name"]: (row["text"], row["evidence_ids"])
             for row in result.payload["outputs"]} == expected
+
+
+@pytest.mark.parametrize(("product", "condition", "example"), [
+    ("Photography course", "The course lasts 6 weeks and includes written feedback.",
+     "A demonstration compares two photographs."),
+    ("Ceramics workshop", "Materials and firing are included; collection is later.",
+     "A sample bowl demonstrates glazing."),
+])
+def test_claim_plan_exposes_scoped_choices_without_leaking_product_details(product, condition, example):
+    import asyncio
+    import json
+
+    from app.module_execution.executors.positioning import PositioningExecutor
+    from tests.test_module_executors import fact, request
+
+    invocation = request(ModuleId.POSITIONING, outputs=("offer", "RTB", "points_of_difference"),
+                         facts=(fact("product", product),
+                                fact("target_or_target_hypothesis", "Interested beginners"),
+                                fact("product_truth", condition), fact("existing_proof", example)))
+
+    def choose(payload, data):
+        catalog = data["positioning_product_sources"]
+        truth_key = next(k for k, v in catalog.items() if v["category"] == "product_truth")
+        proof_key = next(k for k, v in catalog.items() if v["category"] == "existing_proof")
+        assert catalog[proof_key]["allowed_outputs"] == ["RTB"]
+        assert catalog[truth_key]["authority"] == "SUPPLIED_NOT_INDEPENDENTLY_VERIFIED"
+        serialized = json.dumps(data)
+        assert condition not in serialized and example not in serialized
+        payload["outputs"]["offer"]["text"] = sourced(truth_key)
+        payload["outputs"]["RTB"]["text"] = sourced(proof_key)
+
+    model = SelectionModel(choose)
+    result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(invocation))
+    by_name = {row["output_name"]: row for row in result.payload["outputs"]}
+    assert by_name["offer"]["text"] == condition
+    assert by_name["RTB"]["text"] == example
+    assert by_name["points_of_difference"]["text"] == "A qualitative direction to validate."
+
+    schema = model.calls[0]["response_schema"]
+    valid = model.last_payload
+    assert Draft202012Validator(schema).is_valid(valid)
+    for output_name, source_name in (("offer", "RTB"), ("points_of_difference", "offer")):
+        invalid = copy.deepcopy(valid)
+        invalid["outputs"][output_name]["text"] = valid["outputs"][source_name]["text"]
+        assert not Draft202012Validator(schema).is_valid(invalid)

@@ -13,7 +13,7 @@ from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v7"
+WIRE_VERSION = "positioning.support_selection.v8"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
@@ -54,7 +54,11 @@ def product_source_catalog(evidence):
         key = "rtb_" + digest
         if key in catalog:
             _fail()
-        catalog[key] = source
+        catalog[key] = {
+            **source,
+            "authority": "SUPPLIED_NOT_INDEPENDENTLY_VERIFIED",
+            "allowed_outputs": sorted(PRODUCT_OUTPUTS if item.input_key == "product_truth" else {"RTB"}),
+        }
     return catalog
 
 
@@ -89,9 +93,8 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         if product_sources.keys() & set(assertions):
             _fail()
         supported = sorted(
-            set(product_sources)
-            | {alias_by_value.get(value, value) for value in assertions
-               if 1 <= len(value) <= 4000 and value not in product_literals}
+            {alias_by_value.get(value, value) for value in assertions
+             if 1 <= len(value) <= 4000 and value not in product_literals}
         )
         if supported:
             definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
@@ -146,6 +149,24 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 text_choices.append({"$ref": "#/$defs/" + definition})
             definitions[TEXT_SELECTION] = {"anyOf": text_choices}
             text_definition = RTB_TEXT if name == "RTB" else TEXT_SELECTION
+            if name in PRODUCT_OUTPUTS and name != "RTB":
+                condition_keys = sorted(key for key, source in product_sources.items()
+                                        if name in source["allowed_outputs"])
+                if condition_keys:
+                    definitions["PositioningConditionSourceText"] = {
+                        "type": "object", "properties": {
+                            "mode": {"type": "string", "enum": ["SOURCE"]},
+                            "value": {"type": "string", "enum": condition_keys},
+                        },
+                        "required": ["mode", "value"], "additionalProperties": False,
+                    }
+                    text_definition = "PositioningProductTextSelection"
+                    definitions[text_definition] = {"anyOf": [
+                        {"$ref": "#/$defs/PositioningQualitativeText"},
+                        {"$ref": "#/$defs/PositioningConditionSourceText"},
+                    ]}
+                else:
+                    text_definition = "PositioningQualitativeText"
             if name == "target":
                 audience = sorted({
                     alias_by_value.get(value, value)
@@ -221,9 +242,9 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
             else:
                 if selected_text["mode"] == "SOURCE":
                     if value in product_sources:
-                        if name == "target":
-                            _fail()
                         source = product_sources[value]
+                        if name not in source["allowed_outputs"]:
+                            _fail()
                         value = source["text"]
                         selected["evidence"].add(source["evidence_id"])
                     else:

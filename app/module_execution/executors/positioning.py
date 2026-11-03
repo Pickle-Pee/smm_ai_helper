@@ -163,8 +163,14 @@ Free text must stay qualitative, use unqualified roles and end with punctuation.
 For outputs other than RTB, text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
 new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
 AllowedPositioningSupportedAssertion. For a product fact, select its key from
-positioning_product_sources. This selects the exact assertion and its citation
-together. Never return a bare text string. Other SOURCE values still require
+positioning_product_sources, using only keys whose allowed_outputs lists that
+output. The server renders the entire supplied assertion with its evidence.
+Product condition text is intentionally omitted from generation context.
+existing_proof keys are RTB material only; never infer product conditions from
+them. In QUALITATIVE, use the product category and audience to draft a marketing
+angle or test. Treat delivery format, assignment details, feedback arrangements,
+equipment, instructor qualifications and outcomes as unknown unless rendered
+by a product source key. Describe unknowns as questions to verify. Never return a bare text string. Other SOURCE values still require
 explicit support selection.
 The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
@@ -197,11 +203,24 @@ every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
         if self._support_selection_wire:
-            data = {**data, "positioning_support_selection_catalog": support_selection_catalog(
+            context = data["context"]
+            data = {**data, "context": {
+                **context, "known_facts": [
+                    fact for fact in context["known_facts"]
+                    if (fact.get("input_key") or fact.get("label")) not in PRODUCT_CATEGORIES
+                ],
+            }, "local_evidence": [
+                {key: value for key, value in row.items() if key != "value"}
+                if row["input_key"] in PRODUCT_CATEGORIES else row
+                for row in data["local_evidence"]
+            ], "positioning_support_selection_catalog": support_selection_catalog(
                 (e.record.evidence_id for e in evidence), parents)}
             product_sources = product_source_catalog(evidence)
             if product_sources:
-                data["positioning_product_sources"] = product_sources
+                data["positioning_product_sources"] = {
+                    key: {field: value for field, value in source.items() if field != "text"}
+                    for key, source in product_sources.items()
+                }
             aliases = source_assertion_aliases(evidence, (
                 text for claim in parents.values() for text in assertion_support(claim.value)))
             product_literals = {source["text"] for source in product_sources.values()}

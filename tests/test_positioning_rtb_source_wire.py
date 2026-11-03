@@ -133,7 +133,7 @@ def test_rtb_key_is_rejected_when_its_source_changes():
         decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
 
 @pytest.mark.parametrize("name", [
-    "value_proposition", "points_of_difference", "positioning_statement", "message_hierarchy",
+    "value_proposition", "offer", "positioning_statement",
 ])
 def test_product_source_binds_exact_text_and_evidence_beyond_rtb(name):
     f = fixture((name,))

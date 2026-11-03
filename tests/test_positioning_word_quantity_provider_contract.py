@@ -46,7 +46,7 @@ def test_actual_supplied_word_or_digit_quantity_remains_an_exact_literal_choice(
         for f in facts_for_module(ModuleId.POSITIONING))
     model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=sourced(next(
         key for key, source in d["positioning_product_sources"].items()
-        if source["text"] == truth))))
+        if source["category"] == "product_truth"))))
     result=asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
         request(ModuleId.POSITIONING,facts=facts,outputs=('offer',))))
     assert result.payload['outputs'][0]['text']==truth and len(model.calls)==1
