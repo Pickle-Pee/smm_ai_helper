@@ -76,3 +76,22 @@ ranked by textual relevance by the model.
 
 Persisted canonical results keep the same schema. Raw v7 replies require
 the v7 revision for replay.
+
+## Role-separated strategic drafting in v9
+
+The product truth text is present once in the claim plan. Its evidence
+identity and supplied authority are unchanged. Supporting material stays
+opaque to the drafter and can only be selected for RTB.
+
+The provider schema reserves product quotation for offer and RTB.
+Value proposition, positioning statement and message hierarchy require
+qualitative hypotheses or recommendations. Each can use the factual basis
+through its selected support. The decoder still verifies the closed
+source keys and the existing canonical and semantic checks still run.
+
+This boundary prevents replacing a strategic section with a product quote.
+Review of the complete draft remains necessary for unsupported assertions
+in qualitative language. A second live verification call inside the same
+graph node would violate Responses retry governance after a successful
+receipt. Production verification would need an explicitly budgeted durable
+stage with its own recovery and provider-call identity.

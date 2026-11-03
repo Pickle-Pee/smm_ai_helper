@@ -13,7 +13,7 @@ from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v8"
+WIRE_VERSION = "positioning.support_selection.v9"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
@@ -57,7 +57,7 @@ def product_source_catalog(evidence):
         catalog[key] = {
             **source,
             "authority": "SUPPLIED_NOT_INDEPENDENTLY_VERIFIED",
-            "allowed_outputs": sorted(PRODUCT_OUTPUTS if item.input_key == "product_truth" else {"RTB"}),
+            "allowed_outputs": sorted({"offer", "RTB"} if item.input_key == "product_truth" else {"RTB"}),
         }
     return catalog
 
@@ -149,7 +149,10 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 text_choices.append({"$ref": "#/$defs/" + definition})
             definitions[TEXT_SELECTION] = {"anyOf": text_choices}
             text_definition = RTB_TEXT if name == "RTB" else TEXT_SELECTION
-            if name in PRODUCT_OUTPUTS and name != "RTB":
+            if name in {"value_proposition", "positioning_statement", "message_hierarchy"}:
+                text_definition = "PositioningQualitativeText"
+                props["kind"] = {"type": "string", "enum": ["HYPOTHESIS", "RECOMMENDATION"]}
+            if name == "offer":
                 condition_keys = sorted(key for key, source in product_sources.items()
                                         if name in source["allowed_outputs"])
                 if condition_keys:

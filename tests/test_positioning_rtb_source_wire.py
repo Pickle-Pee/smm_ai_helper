@@ -132,10 +132,8 @@ def test_rtb_key_is_rejected_when_its_source_changes():
     with pytest.raises(ModuleExecutionContractError):
         decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
 
-@pytest.mark.parametrize("name", [
-    "value_proposition", "offer", "positioning_statement",
-])
-def test_product_source_binds_exact_text_and_evidence_beyond_rtb(name):
+def test_product_source_binds_exact_text_and_evidence_beyond_rtb():
+    name = "offer"
     f = fixture((name,))
     f[3][0].value = "No professional equipment is required."
     f[3][1].value = f[3][0].value
@@ -181,3 +179,20 @@ def test_target_source_enum_only_contains_supplied_audience_assertions():
 
     row["text"] = sourced(f[3][2].value)
     assert not Draft202012Validator(schema).is_valid(payload)
+
+
+@pytest.mark.parametrize("name", ["value_proposition", "positioning_statement", "message_hierarchy"])
+def test_strategic_outputs_require_explicit_interpretation_instead_of_repeated_product_quote(name):
+    f = fixture((name, "offer", "RTB"))
+    payload = output(f)
+    key = next(iter(rtb_source_catalog(f[3])))
+    row = payload["outputs"][name]
+    row.update(kind="HYPOTHESIS", text=qualitative("Test whether a low barrier to entry appeals to beginners."))
+    payload["outputs"]["offer"]["text"] = sourced(key)
+    assert Draft202012Validator(f[1]).is_valid(payload)
+
+    copied = copy.deepcopy(payload)
+    copied["outputs"][name]["text"] = sourced(key)
+    assert not Draft202012Validator(f[1]).is_valid(copied)
+    row["kind"] = "INFERENCE"
+    assert not Draft202012Validator(f[1]).is_valid(payload)

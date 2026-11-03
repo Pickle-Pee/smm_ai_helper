@@ -415,7 +415,7 @@ def test_target_and_qualified_offer_use_separate_modes_and_sources():
     ("Ceramics workshop", "Materials and firing are included; collection is later.",
      "A sample bowl demonstrates glazing."),
 ])
-def test_claim_plan_exposes_scoped_choices_without_leaking_product_details(product, condition, example):
+def test_claim_plan_exposes_product_conditions_and_keeps_proof_opaque(product, condition, example):
     import asyncio
     import json
 
@@ -434,7 +434,10 @@ def test_claim_plan_exposes_scoped_choices_without_leaking_product_details(produ
         assert catalog[proof_key]["allowed_outputs"] == ["RTB"]
         assert catalog[truth_key]["authority"] == "SUPPLIED_NOT_INDEPENDENTLY_VERIFIED"
         serialized = json.dumps(data)
-        assert condition not in serialized and example not in serialized
+        assert catalog[truth_key]["text"] == condition
+        assert condition not in json.dumps(data["context"])
+        assert condition not in json.dumps(data["local_evidence"])
+        assert example not in serialized
         payload["outputs"]["offer"]["text"] = sourced(truth_key)
         payload["outputs"]["RTB"]["text"] = sourced(proof_key)
 

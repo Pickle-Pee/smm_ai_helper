@@ -165,12 +165,16 @@ new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
 AllowedPositioningSupportedAssertion. For a product fact, select its key from
 positioning_product_sources, using only keys whose allowed_outputs lists that
 output. The server renders the entire supplied assertion with its evidence.
-Product condition text is intentionally omitted from generation context.
+The product_truth catalog supplies verbatim context for strategic reasoning.
 existing_proof keys are RTB material only; never infer product conditions from
-them. In QUALITATIVE, use the product category and audience to draft a marketing
-angle or test. Treat delivery format, assignment details, feedback arrangements,
-equipment, instructor qualifications and outcomes as unknown unless rendered
-by a product source key. Describe unknowns as questions to verify. Never return a bare text string. Other SOURCE values still require
+them. Use a product key in offer and RTB for the exact factual terms. In
+value_proposition, positioning_statement and message_hierarchy, write a benefit
+hypothesis, positioning recommendation and message angle respectively, each
+with a distinct purpose. Ground the angle in the source without repeating the
+offer. Express it as something to test or communicate. Treat delivery format,
+assignment details, feedback arrangements, equipment, instructor qualifications
+and outcomes as unknown unless explicitly supported. Preserve all limits and
+conditions of any source you use. Describe unknowns as questions to verify. Never return a bare text string. Other SOURCE values still require
 explicit support selection.
 The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
@@ -218,7 +222,8 @@ every numerical statement still requires its actually selected cited source."""
             product_sources = product_source_catalog(evidence)
             if product_sources:
                 data["positioning_product_sources"] = {
-                    key: {field: value for field, value in source.items() if field != "text"}
+                    key: {field: value for field, value in source.items()
+                          if field != "text" or source["category"] == "product_truth"}
                     for key, source in product_sources.items()
                 }
             aliases = source_assertion_aliases(evidence, (
