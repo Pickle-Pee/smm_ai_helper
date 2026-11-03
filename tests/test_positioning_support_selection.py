@@ -299,3 +299,58 @@ def test_old_stored_canonical_payload_remains_readable():
         "confidence": "MEDIUM", "evidence_ids": ["evd_old"], "parent_claim_ids": []}],
         "assumptions": [], "limitations": []}
     assert PositioningOutput.model_validate(old).model_dump() == old
+
+
+@pytest.mark.parametrize("text,select_product,truth,expected_rule", [
+    ("Начинающие, которым нужен доступный формат занятий.", False,
+     "Для занятий не требуется профессиональное оборудование.", None),
+    ("Начинающие могут заниматься без необходимости покупать профессиональное оборудование.", True,
+     "Для занятий не требуется профессиональное оборудование.", None),
+    ("Начинающие могут заниматься без необходимости покупать профессиональное оборудование.", False,
+     "Для занятий не требуется профессиональное оборудование.", "product_claim_requires_truth"),
+    ("Начинающие могут заниматься без необходимости покупать профессиональное оборудование.", True,
+     "Для занятий требуется профессиональное оборудование.", "product_claim_requires_truth"),
+    ("Начинающим гарантирован результат.", True,
+     "Для занятий не требуется профессиональное оборудование.", "product_assurance_support_required"),
+])
+def test_target_v5_requires_explicit_support_for_product_conditions(
+    text, select_product, truth, expected_rule, caplog,
+):
+    import asyncio
+    from app.module_execution.executors import ExecutorOutputError
+    from app.module_execution.executors.positioning import PositioningExecutor
+    from tests.test_module_executors import fact, request
+
+    audience = "Начинающие, которым нужен доступный формат занятий."
+    invocation = request(ModuleId.POSITIONING, outputs=("target",), facts=(
+        fact("product", "Курс"),
+        fact("target_or_target_hypothesis", audience),
+        fact("product_truth", truth),
+    ))
+    selected_ids = []
+
+    def select_sources(payload, data):
+        ids = {source["input_key"]: source["evidence_id"] for source in data["local_evidence"]}
+        aliases = {identity: key for key, identity in
+                   data["positioning_support_selection_catalog"]["evidence"].items()}
+        target = payload["outputs"]["target"]
+        target.update(text=qualitative(text),
+                      primary_support_key=aliases[ids["target_or_target_hypothesis"]])
+        target["evidence_support"][aliases[ids["product_truth"]]] = select_product
+        selected_ids.append(ids["target_or_target_hypothesis"])
+        if select_product:
+            selected_ids.append(ids["product_truth"])
+
+    model = SelectionModel(select_sources)
+    executor = PositioningExecutor(model_call=model, support_selection_wire=True)
+    if expected_rule:
+        with pytest.raises(ExecutorOutputError) as caught:
+            asyncio.run(executor.execute(invocation))
+        assert caught.value.stage.value == "statement_semantics_invalid"
+        assert f"rule={expected_rule}" in caplog.text
+    else:
+        result = asyncio.run(executor.execute(invocation))
+        statement, = result.payload["outputs"]
+        assert statement["text"] == text
+        assert set(statement["evidence_ids"]) == set(selected_ids)
+    assert len(model.calls) == 1

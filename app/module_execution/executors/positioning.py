@@ -53,7 +53,16 @@ class PositioningExecutor(BaseExecutor):
     instruction = """Develop the requested positioning outputs: category/frame, target/customer job,
 value proposition, differentiation, RTB, positioning, USP directions, offer and
 message hierarchy as requested. Ground product promises and RTB in supplied product
-truth/proof; a positioning statement is not a slogan. Never invent uniqueness or
+truth/proof; a positioning statement is not a slogan.
+Use target for the audience, its characteristics and needs. Describe product
+features, eligibility, usage and fulfillment conditions primarily in
+value_proposition, offer or another relevant requested output. Include a product
+condition in target only if essential to defining the audience. Cite supplied
+local product_truth or existing_proof that directly supports that condition,
+and cite the audience source if used. An audience need, hypothesis, or parent
+claim cannot substantiate a product condition. If no supplied product source
+supports the condition, omit it. Keep uncertainty about the audience explicit.
+Never invent uniqueness or
 customer quotes. For differentiation, points_of_difference and USP_directions,
 kind must always be HYPOTHESIS, including when based on supplied product truth.
 For RTB, value_proposition, positioning_statement and offer, evidence_ids must
@@ -144,6 +153,11 @@ aliases: select primary_support_key for each output except RTB and set every clo
 boolean evidence_support/parent_support flag explicitly. True means the source
 is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
+For an audience-only target, select the audience source as primary when used.
+If target includes an essential product condition, explicitly select its
+supporting local product truth/proof as primary or set its evidence_support flag
+to true. Select the audience source separately when it supports another part
+of the statement. Verify that each part is supported by its selected source.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
