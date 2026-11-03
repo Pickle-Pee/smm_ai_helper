@@ -8,19 +8,18 @@ from jsonschema.exceptions import SchemaError
 
 from app.module_execution.errors import ModuleExecutionContractError
 from .experiments_support_selection import support_selection_catalog, MAX_REQUIRED_BOOLEAN_FLAGS
-from .product_support import PRODUCT_OUTPUTS, product_support_ids
+from .product_support import PRODUCT_CATEGORIES, PRODUCT_OUTPUTS, product_support_ids
 from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v4"
+WIRE_VERSION = "positioning.support_selection.v5"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
-SELECTION_FIELDS = {"primary_support_key", "evidence_support", "parent_support"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
 QUALITATIVE_ASSERTION = "PositioningQualitativeAssertion"
 TEXT_SELECTION = "PositioningTextSelection"
-RTB_ASSERTION = "AllowedPositioningRTBAssertion"
+RTB_ASSERTION = "AllowedPositioningRTBSourceKey"
 RTB_TEXT = "PositioningRTBSourceText"
 
 
@@ -41,6 +40,24 @@ def source_assertion_aliases(evidence, parent_assertions):
     if aliases.keys() & values or len(aliases) != len(quoted):
         _fail()
     return dict(sorted(aliases.items()))
+
+
+def rtb_source_catalog(evidence):
+    """Bind each eligible literal to one request-local source."""
+    catalog = {}
+    for item, value in _local_assertions(evidence):
+        if item.input_key not in PRODUCT_CATEGORIES or not 1 <= len(value) <= 4000:
+            continue
+        source = {"text": value, "evidence_id": item.record.evidence_id,
+                  "category": item.input_key}
+        digest = sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()
+        key = "rtb_" + digest
+        if key in catalog:
+            _fail()
+        catalog[key] = source
+    if not catalog:
+        _fail()
+    return catalog
 
 
 def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
@@ -67,12 +84,8 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         if supported:
             definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
         if "RTB" in names:
-            rtb_values = sorted({alias_by_value.get(value, value) for e, value in local_assertions
-                if e.input_key in {"product_truth", "existing_proof"} and 1 <= len(value) <= 4000})
-            if not rtb_values:
-                _fail()
-            definitions[RTB_ASSERTION] = {"type": "string", "minLength": 1,
-                "maxLength": 4000, "enum": rtb_values}
+            definitions[RTB_ASSERTION] = {"type": "string",
+                "enum": sorted(rtb_source_catalog(evidence))}
             definitions[RTB_TEXT] = {"type": "object", "properties": {
                 "mode": {"type": "string", "enum": ["SOURCE"]},
                 "value": {"$ref": "#/$defs/" + RTB_ASSERTION}},
@@ -123,10 +136,11 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             props["text"] = {"$ref": "#/$defs/" + (RTB_TEXT if name == "RTB" else TEXT_SELECTION)}
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
-            keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
-            if not keys:
-                _fail()
-            props["primary_support_key"] = {"type": "string", "enum": keys}
+            if name != "RTB":
+                keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
+                if not keys:
+                    _fail()
+                props["primary_support_key"] = {"type": "string", "enum": keys}
             props["evidence_support"] = {"$ref": "#/$defs/" + MAPS["evidence"]}
             props["parent_support"] = {"$ref": "#/$defs/" + MAPS["parents"]}
             statement["required"] = sorted(props)
@@ -162,9 +176,15 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
             statement = result["outputs"][name]
             selected_text = statement["text"]
             value = selected_text["value"]
-            statement["text"] = aliases.get(value, value) if selected_text["mode"] == "SOURCE" else value
             selected = {"evidence": set(), "parents": set()}
-            primary = statement.pop("primary_support_key")
+            if name == "RTB":
+                source = rtb_source_catalog(evidence)[value]
+                statement["text"] = source["text"]
+                selected["evidence"].add(source["evidence_id"])
+                primary = None
+            else:
+                statement["text"] = aliases.get(value, value) if selected_text["mode"] == "SOURCE" else value
+                primary = statement.pop("primary_support_key")
             for family, field in (("evidence", "evidence_support"), ("parents", "parent_support")):
                 flags = statement.pop(field)
                 if set(flags) != set(choices[family]) or any(type(value) is not bool for value in flags.values()):

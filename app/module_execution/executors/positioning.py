@@ -21,7 +21,7 @@ from .schemas import (
 )
 from .positioning_support_selection import (
     support_selection_wire_schema, decode_support_selection_wire, support_selection_catalog,
-    source_assertion_aliases,
+    rtb_source_catalog, source_assertion_aliases,
     WIRE_VERSION as SELECTION_WIRE_VERSION,
 )
 from .support_schema import support_response_schema
@@ -137,18 +137,18 @@ available for materially used accepted parents. No inferred or fabricated IDs.""
             self.instruction += f"\nUse wire_contract_version {SELECTION_WIRE_VERSION}." + """
 Return outputs as an object keyed by exactly the requested output names. Do not
 emit evidence_ids/parent_claim_ids arrays. Use positioning_support_selection_catalog
-aliases: select primary_support_key from the schema enum and set every closed
+aliases: select primary_support_key for each output except RTB and set every closed
 boolean evidence_support/parent_support flag explicitly. True means the source
 is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
-Every text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
+For outputs other than RTB, text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
 new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
 AllowedPositioningSupportedAssertion copied exactly. Never return a bare text
 string. SOURCE mode does not supply a citation or establish product authority.
-Its free-text pattern excludes ASCII digits. Keep prose unquantified and roles
+The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
 Any supplied numerical fact or qualification must use an ENTIRE exact source
 assertion and its actual cited source, never an invented or paraphrased fact.
@@ -159,9 +159,11 @@ Supplied assertions are literal alternatives; their existence alone is not evide
 duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
 select its actual source. Never paraphrase a numerical fact, respell digits in
 words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
-omit the quantity from that free-form statement. RTB MUST use SOURCE mode with
-an ENTIRE exact AllowedPositioningRTBAssertion from local product_truth/existing_proof
-and select its actual cited source. RTB cannot use QUALITATIVE mode or paraphrase proof;
+omit the quantity from that free-form statement. For RTB, use SOURCE mode and set
+text.value to a key from positioning_rtb_sources and the AllowedPositioningRTBSourceKey
+enum. That key supplies the entire verbatim text and its required citation together.
+Use the support flags only for additional sources that materially support the RTB.
+RTB cannot use QUALITATIVE mode or paraphrase proof;
 other positioning/offer text can stay useful without repeating its duration.
 The numeric enum is an explicit generation alternative, not independent evidence;
 every numerical statement still requires its actually selected cited source."""
@@ -170,6 +172,8 @@ every numerical statement still requires its actually selected cited source."""
         if self._support_selection_wire:
             data = {**data, "positioning_support_selection_catalog": support_selection_catalog(
                 (e.record.evidence_id for e in evidence), parents)}
+            if "RTB" in request.expected_outputs:
+                data["positioning_rtb_sources"] = rtb_source_catalog(evidence)
             aliases = source_assertion_aliases(evidence, (
                 text for claim in parents.values() for text in assertion_support(claim.value)))
             if aliases:

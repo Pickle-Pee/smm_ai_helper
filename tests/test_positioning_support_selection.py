@@ -40,11 +40,13 @@ def output(f):
     for name, ref in wire["properties"]["outputs"]["properties"].items():
         props = wire["$defs"][ref["$ref"].rsplit("/", 1)[-1]]["properties"]
         kind = props["kind"].get("const", props["kind"].get("enum", [None])[0])
-        outputs[name] = {"text": sourced(evidence[0].value) if name == "RTB"
-            else qualitative("Materials and firing included."), "kind": kind,
+        outputs[name] = {"text": qualitative("Materials and firing included."), "kind": kind,
             "confidence": "MEDIUM", "primary_support_key": "e000",
             "evidence_support": {f"e{i:03d}": False for i in range(len(evidence))},
             "parent_support": {f"p{i:03d}": False for i in range(len(parents))}}
+        if name == "RTB":
+            outputs[name].pop("primary_support_key")
+            outputs[name]["text"] = sourced(wire["$defs"]["AllowedPositioningRTBSourceKey"]["enum"][0])
     return {"wire_contract_version": WIRE_VERSION, "outputs": outputs, "assumptions": [], "limitations": []}
 
 
@@ -184,8 +186,11 @@ class SelectionModel:
                 "evidence_support": {key: key == primary for key in catalog["evidence"]},
                 "parent_support": {key: False for key in catalog["parents"]}}
             if name == "RTB":
-                value = product["value"]
-                rows[name]["text"] = sourced(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
+                rows[name].pop("primary_support_key")
+                sources = data["positioning_rtb_sources"]
+                key = next(key for key, source in sources.items()
+                           if source["evidence_id"] == product["evidence_id"])
+                rows[name]["text"] = sourced(key)
         payload = {"wire_contract_version": WIRE_VERSION, "outputs": rows, "assumptions": [], "limitations": []}
         assert Draft202012Validator(schema).is_valid(payload)
         if self.mutate:
