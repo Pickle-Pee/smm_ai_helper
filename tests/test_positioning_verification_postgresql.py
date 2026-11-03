@@ -3,6 +3,7 @@ import asyncio
 
 import httpx
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.llm.telemetry import graph_call_context
 from app.models import PositioningVerification
@@ -15,9 +16,10 @@ from app.orchestration_runtime.worker import ModuleGraphWorker
 from tests.postgresql_support import mvp_database
 from tests.test_graph_model_adapter import install_transport
 from tests.test_graph_postgresql import cleanup, setup, state
+from tests.test_responses_governance_postgresql import fault
 
 
-@pytest.mark.parametrize("crash_after", ["generation", "verification"])
+@pytest.mark.parametrize("crash_after", ["generation", "verification", "verification_before_receipt"])
 def test_checkpoint_replays_paid_response_without_reposting(mvp_database, monkeypatch, crash_after):
     posts = []
 
@@ -68,6 +70,23 @@ def test_checkpoint_replays_paid_response_without_reposting(mvp_database, monkey
                 await service.finish(item, result, quality)
             _, _, artifacts = await state(db, run_id)
             assert all(artifact.step != item.node_id for artifact in artifacts)
+            if crash_after == "verification_before_receipt":
+                async with fault(db, run_id, "receipt"):
+                    with pytest.raises(SQLAlchemyError):
+                        await provider(service, item, request, verification=True)
+                service, item = await restart(item)
+                assert await service.verification_draft(item, result, {})
+                with pytest.raises(RetryGovernanceError, match="previous_outcome"):
+                    await provider(service, item, request, verification=True)
+                assert len(posts) == 2
+                await service.fail(item, code="execution_invalid")
+                _, _, artifacts = await state(db, run_id)
+                assert all(artifact.step != item.node_id for artifact in artifacts)
+                async with db() as session:
+                    checkpoint = await session.get(PositioningVerification, item.job_id)
+                    assert checkpoint.state == "blocked"
+                    assert "verification" not in checkpoint.checkpoint
+                return
             assert await provider(service, item, request, verification=True) == "{}"
             if crash_after == "verification":
                 service, item = await restart(item)
