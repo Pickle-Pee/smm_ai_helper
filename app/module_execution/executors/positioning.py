@@ -54,14 +54,15 @@ class PositioningExecutor(BaseExecutor):
 value proposition, differentiation, RTB, positioning, USP directions, offer and
 message hierarchy as requested. Ground product promises and RTB in supplied product
 truth/proof; a positioning statement is not a slogan.
-Use target for the audience, its characteristics and needs. Describe product
-features, eligibility, usage and fulfillment conditions primarily in
-value_proposition, offer or another relevant requested output. Include a product
-condition in target only if essential to defining the audience. Cite supplied
-local product_truth or existing_proof that directly supports that condition,
-and cite the audience source if used. An audience need, hypothesis, or parent
-claim cannot substantiate a product condition. If no supplied product source
-supports the condition, omit it. Keep uncertainty about the audience explicit.
+Use target only for who the audience is and what it wants to achieve. Describe
+audience characteristics and needs using audience evidence, and keep uncertainty
+explicit. Keep all product conditions out of target, including equipment
+requirements or exemptions, delivery format, included items, eligibility and
+terms of use. This applies even when the condition is sourced or phrased as
+something the audience wants. Put supported product conditions in a requested
+product output such as value_proposition or offer. If no suitable product output
+was requested, omit the condition. Do not infer product features or terms from
+the audience profile or product name.
 Never invent uniqueness or
 customer quotes. For differentiation, points_of_difference and USP_directions,
 kind must always be HYPOTHESIS, including when based on supplied product truth.
@@ -153,11 +154,9 @@ aliases: select primary_support_key for each output except RTB and set every clo
 boolean evidence_support/parent_support flag explicitly. True means the source
 is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
-For an audience-only target, select the audience source as primary when used.
-If target includes an essential product condition, explicitly select its
-supporting local product truth/proof as primary or set its evidence_support flag
-to true. Select the audience source separately when it supports another part
-of the statement. Verify that each part is supported by its selected source.
+For target, use the audience source as primary when used. Write audience-only
+QUALITATIVE prose, or use SOURCE for an exact audience-only assertion. Do not
+select or quote a product condition for target in either mode.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
@@ -169,9 +168,15 @@ The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
 Any supplied numerical fact or qualification must use an ENTIRE exact source
 assertion and its actual cited source, never an invented or paraphrased fact.
-Do not add any qualification or guarantee in ANY section, including competitive
-frame or message hierarchy. For a supplied qualification, choose the ENTIRE
-AllowedPositioningSupportedAssertion and its actual local product truth/proof.
+Use QUALITATIVE for neutral prose only. If a product output needs a supplied
+condition expressed with qualification wording (including negated equipment
+requirements), use SOURCE with the ENTIRE AllowedPositioningSupportedAssertion
+and explicitly select its actual local product truth/proof. Keep mixed summaries
+neutral and leave the qualified condition in the separate sourced output. If
+there is no suitable exact assertion or requested slot, omit the qualified claim.
+For claim_risks, describe the uncertainty neutrally, for example
+"Уточнить, что именно получает участник после курса." Avoid quoting or negating
+qualification terms in free-text risk descriptions.
 Supplied assertions are literal alternatives; their existence alone is not evidence. If ANY quantity is needed, including a supplied
 duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
 select its actual source. Never paraphrase a numerical fact, respell digits in

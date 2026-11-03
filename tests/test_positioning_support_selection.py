@@ -360,3 +360,46 @@ def test_target_v5_requires_explicit_support_for_product_conditions(
         assert statement["text"] == text
         assert set(statement["evidence_ids"]) == set(selected_ids)
     assert len(model.calls) == 1
+
+
+def test_target_and_qualified_offer_use_separate_modes_and_sources():
+    import asyncio
+
+    from app.module_execution.executors.positioning import PositioningExecutor
+    from tests.test_module_executors import fact, request
+
+    audience = "Начинающие взрослые хотят улучшить свои снимки."
+    offer = "Занятия ведёт профессиональный фотограф."
+    invocation = request(ModuleId.POSITIONING, outputs=("target", "offer", "RTB"), facts=(
+        fact("product", "Курс фотографии"),
+        fact("target_or_target_hypothesis", audience),
+        fact("product_truth", offer),
+    ))
+    expected = {}
+
+    def separate_outputs(payload, data):
+        ids = {row["input_key"]: row["evidence_id"] for row in data["local_evidence"]}
+        aliases = {identity: key for key, identity in
+                   data["positioning_support_selection_catalog"]["evidence"].items()}
+        for name, text, source in (
+            ("target", qualitative(audience), "target_or_target_hypothesis"),
+            ("offer", sourced(offer), "product_truth"),
+        ):
+            expected[name] = (text["value"], (ids[source],))
+            row = payload["outputs"][name]
+            row.update(text=text, primary_support_key=aliases[ids[source]],
+                       evidence_support=dict.fromkeys(row["evidence_support"], False))
+
+    model = SelectionModel(separate_outputs)
+    executor = PositioningExecutor(model_call=model, support_selection_wire=True,
+                                   provider_schema_projection=True)
+    result = asyncio.run(executor.execute(invocation))
+    instruction = model.calls[0]["instruction"]
+    assert "Keep all product conditions out of target" in instruction
+    assert "This applies even when the condition is sourced" in instruction
+    assert "Do not\nselect or quote a product condition for target in either mode" in instruction
+    assert "use SOURCE with the ENTIRE AllowedPositioningSupportedAssertion" in instruction
+    assert "essential product condition" not in instruction
+    expected["RTB"] = expected["offer"]
+    assert {row["output_name"]: (row["text"], row["evidence_ids"])
+            for row in result.payload["outputs"]} == expected
