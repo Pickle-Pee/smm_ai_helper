@@ -159,5 +159,25 @@ def test_target_cannot_select_a_bound_product_source():
     f = fixture(("target",))
     payload = output(f)
     payload["outputs"]["target"]["text"] = sourced(next(iter(rtb_source_catalog(f[3]))))
+    assert not Draft202012Validator(f[1]).is_valid(payload)
     with pytest.raises(ModuleExecutionContractError):
         decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+
+
+def test_target_source_enum_only_contains_supplied_audience_assertions():
+    f = fixture(("target",))
+    audience = "Adults who want to improve their photos."
+    f[3][1].input_key = "target_or_target_hypothesis"
+    f[3][1].value = audience
+    f[3][2].value = "An unrelated marketing message."
+    schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
+    payload = output((f[0], schema, *f[2:]))
+    row = payload["outputs"]["target"]
+    row["text"] = sourced(audience)
+    row["primary_support_key"] = "e001"
+    result = decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+    assert result["outputs"][0]["text"] == audience
+    assert result["outputs"][0]["evidence_ids"] == ["evd_001"]
+
+    row["text"] = sourced(f[3][2].value)
+    assert not Draft202012Validator(schema).is_valid(payload)

@@ -45,3 +45,12 @@ unsupported product details and competitive conclusions in free prose.
 The change is limited to the existing support selection rollout path.
 Persisted canonical results use the same schema. Replay of raw v5 responses
 requires the v5 revision.
+
+## Audience selection in support selection v7
+
+A live v6 response selected a demonstration task for target because the
+provider schema shared the general SOURCE enum with other outputs. The
+decoder rejected the response. In v7 the target SOURCE alternative lists
+only complete supplied audience assertions. It is absent when the request
+has no eligible audience assertion. QUALITATIVE remains available for
+audience hypotheses and neutral strategic text.

@@ -13,7 +13,7 @@ from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v6"
+WIRE_VERSION = "positioning.support_selection.v7"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
@@ -145,7 +145,29 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                     "required": ["mode", "value"], "additionalProperties": False}
                 text_choices.append({"$ref": "#/$defs/" + definition})
             definitions[TEXT_SELECTION] = {"anyOf": text_choices}
-            props["text"] = {"$ref": "#/$defs/" + (RTB_TEXT if name == "RTB" else TEXT_SELECTION)}
+            text_definition = RTB_TEXT if name == "RTB" else TEXT_SELECTION
+            if name == "target":
+                audience = sorted({
+                    alias_by_value.get(value, value)
+                    for item, value in local_assertions
+                    if item.input_key == "target_or_target_hypothesis"
+                    and 1 <= len(value) <= 4000 and value not in product_literals
+                })
+                text_definition = "PositioningQualitativeText"
+                if audience:
+                    definitions["PositioningAudienceSourceText"] = {
+                        **definitions["PositioningSourceText"],
+                        "properties": {
+                            **definitions["PositioningSourceText"]["properties"],
+                            "value": {"type": "string", "enum": audience},
+                        },
+                    }
+                    text_definition = "PositioningTargetTextSelection"
+                    definitions[text_definition] = {"anyOf": [
+                        {"$ref": "#/$defs/PositioningQualitativeText"},
+                        {"$ref": "#/$defs/PositioningAudienceSourceText"},
+                    ]}
+            props["text"] = {"$ref": "#/$defs/" + text_definition}
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
             if name != "RTB":
