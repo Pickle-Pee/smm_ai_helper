@@ -16,14 +16,19 @@ _EXPERIENTIAL_SESSION = re.compile(
 
 
 _NO_PROFESSIONAL_EQUIPMENT = re.compile(
-    r"\bбез\s+(?P<qualification>профессионального)\s+оборудования\b", re.IGNORECASE
+    r"\b(?:без\s+профессионального\s+оборудования"
+    r"|не\s+требуется\s+(?:профессиональное\s+оборудование"
+    r"|профессионального\s+оборудования))\b",
+    re.IGNORECASE,
 )
 
 
 def has_product_assurance(text: str) -> bool:
     """Recognize assurances, excluding specific descriptions of the product format."""
     equipment_modifiers = {
-        match.start("qualification") for match in _NO_PROFESSIONAL_EQUIPMENT.finditer(text)
+        qualification.start()
+        for phrase in _NO_PROFESSIONAL_EQUIPMENT.finditer(text)
+        for qualification in ASSURANCE.finditer(text, phrase.start(), phrase.end())
     }
     return any(
         match.start() not in equipment_modifiers
