@@ -329,7 +329,7 @@ every numerical statement still requires its actually selected cited source."""
                         else SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED)
                 raise StatementSemanticsError(rule)
         if statement.output_name != "RTB" and NO_EQUIPMENT_PURCHASE.search(statement.text) and not any(
-            local[e].input_key == "product_truth" and isinstance(local[e].value, str)
+            local[e].input_key in PRODUCT_CATEGORIES and isinstance(local[e].value, str)
             and (statement.text in local[e].value or supports_no_equipment_purchase(local[e].value))
             for e in statement.evidence_ids
         ):

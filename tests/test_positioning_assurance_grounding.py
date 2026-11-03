@@ -76,10 +76,18 @@ def test_entire_statement_not_just_matching_qualification_must_be_supported():
             statement("An experienced master ensures a finished product without further actions."), local, {})
 
 
+def test_target_can_describe_audience_needs_using_audience_evidence():
+    text = "Новички хотят освоить основы фотографии."
+    local = {"audience": SimpleNamespace(input_key="target_or_target_hypothesis", value=text)}
+    PositioningExecutor(model_call=None).validate_statement(
+        statement(text, output="target", refs=("audience",)), local, {})
+
+
 NO_PURCHASE = "без необходимости покупать профессиональное оборудование"
 EQUIPMENT_TRUTH = "Для занятий не требуется профессиональное оборудование."
 
 
+@pytest.mark.parametrize("category", ["product_truth", "existing_proof"])
 @pytest.mark.parametrize("text", [
     f"Курс для начинающих {NO_PURCHASE}.",
     "Курс без необходимости купить профессиональное оборудование.",
@@ -90,22 +98,23 @@ EQUIPMENT_TRUTH = "Для занятий не требуется професс�
     "Для курса не требуется покупать профессиональное оборудование.",
     "Для курса нет необходимости приобрести профессиональное оборудование.",
 ])
-def test_no_equipment_purchase_paraphrase_with_cited_product_truth(text):
-    local = {"product": SimpleNamespace(input_key="product_truth", value=EQUIPMENT_TRUTH)}
+def test_no_equipment_purchase_paraphrase_with_cited_product_evidence(text, category):
+    local = {"product": SimpleNamespace(input_key=category, value=EQUIPMENT_TRUTH)}
     assert not has_product_assurance(text)
     PositioningExecutor(model_call=None).validate_statement(statement(text, output="target"), local, {})
 
 
+@pytest.mark.parametrize("category", ["product_truth", "existing_proof"])
 @pytest.mark.parametrize("refs,product", [
     (("audience",), EQUIPMENT_TRUTH),
     (("audience", "product"), "Курс для начинающих."),
     (("audience", "product"), "Для занятий требуется профессиональное оборудование."),
     (("audience", "product"), "Правда ли, что для занятий не требуется профессиональное оборудование?"),
 ])
-def test_no_equipment_purchase_requires_support_from_cited_product_truth(refs, product):
+def test_no_equipment_purchase_requires_support_from_cited_product_evidence(refs, product, category):
     text = f"Курс для начинающих {NO_PURCHASE}."
     local = {
-        "product": SimpleNamespace(input_key="product_truth", value=product),
+        "product": SimpleNamespace(input_key=category, value=product),
         "audience": SimpleNamespace(input_key="target_or_target_hypothesis", value=EQUIPMENT_TRUTH),
     }
     with pytest.raises(StatementSemanticsError) as caught:
