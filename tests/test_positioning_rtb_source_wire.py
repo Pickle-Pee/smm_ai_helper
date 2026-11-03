@@ -67,7 +67,8 @@ def test_quoted_product_and_external_source_use_closed_keys_without_losing_text(
     schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
     keys = {text: key for key, text in source_assertion_aliases(f[3], ()).items()}
     values = schema["$defs"]["AllowedPositioningSupportedAssertion"]["enum"]
-    assert set(keys.values()) <= set(values)
+    assert keys[external] in values
+    assert keys[product] not in values
     assert all('"' not in value for value in values)
     rtb_keys = schema["$defs"]["AllowedPositioningRTBSourceKey"]["enum"]
     assert rtb_keys == list(rtb_source_catalog(f[3]))
@@ -128,5 +129,35 @@ def test_rtb_key_is_rejected_when_its_source_changes():
     f = fixture(("RTB",))
     payload = output(f)
     f[3][0].value = "A course of 10 weeks"
+    with pytest.raises(ModuleExecutionContractError):
+        decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+
+@pytest.mark.parametrize("name", [
+    "value_proposition", "points_of_difference", "positioning_statement", "message_hierarchy",
+])
+def test_product_source_binds_exact_text_and_evidence_beyond_rtb(name):
+    f = fixture((name,))
+    f[3][0].value = "No professional equipment is required."
+    f[3][1].value = f[3][0].value
+    schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
+    payload = output((f[0], schema, *f[2:]))
+    row = payload["outputs"][name]
+    row["text"] = sourced(next(iter(rtb_source_catalog(f[3]))))
+    row["evidence_support"] = dict.fromkeys(row["evidence_support"], False)
+    before = copy.deepcopy(payload)
+    result = decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+    assert payload == before
+    assert result["outputs"][0]["text"] == f[3][0].value
+    assert result["outputs"][0]["evidence_ids"] == ["evd_000"]
+    for unbound in (sourced(f[3][0].value), qualitative(f[3][0].value)):
+        row["text"] = unbound
+        with pytest.raises(ModuleExecutionContractError):
+            decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+
+
+def test_target_cannot_select_a_bound_product_source():
+    f = fixture(("target",))
+    payload = output(f)
+    payload["outputs"]["target"]["text"] = sourced(next(iter(rtb_source_catalog(f[3]))))
     with pytest.raises(ModuleExecutionContractError):
         decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])

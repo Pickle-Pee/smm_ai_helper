@@ -24,7 +24,7 @@ from .schemas import (
 )
 from .positioning_support_selection import (
     support_selection_wire_schema, decode_support_selection_wire, support_selection_catalog,
-    rtb_source_catalog, source_assertion_aliases,
+    product_source_catalog, source_assertion_aliases,
     WIRE_VERSION as SELECTION_WIRE_VERSION,
 )
 from .support_schema import support_response_schema
@@ -162,27 +162,32 @@ source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
 For outputs other than RTB, text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
 new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
-AllowedPositioningSupportedAssertion copied exactly. Never return a bare text
-string. SOURCE mode does not supply a citation or establish product authority.
+AllowedPositioningSupportedAssertion. For a product fact, select its key from
+positioning_product_sources. This selects the exact assertion and its citation
+together. Never return a bare text string. Other SOURCE values still require
+explicit support selection.
 The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
 Any supplied numerical fact or qualification must use an ENTIRE exact source
 assertion and its actual cited source, never an invented or paraphrased fact.
 Use QUALITATIVE for neutral prose only. If a product output needs a supplied
 condition expressed with qualification wording (including negated equipment
-requirements), use SOURCE with the ENTIRE AllowedPositioningSupportedAssertion
-and explicitly select its actual local product truth/proof. Keep mixed summaries
+requirements), use SOURCE with the corresponding positioning_product_sources
+key. Use the same mechanism for factual product attributes such as the delivery
+format, assignments and feedback. Do not infer a recurring practice from an
+example, a homework requirement from a task, or personal feedback from written
+feedback. Treat unverified competitive differences as hypotheses to validate. Keep mixed summaries
 neutral and leave the qualified condition in the separate sourced output. If
 there is no suitable exact assertion or requested slot, omit the qualified claim.
 For claim_risks, describe the uncertainty neutrally, for example
 "Уточнить, что именно получает участник после курса." Avoid quoting or negating
 qualification terms in free-text risk descriptions.
 Supplied assertions are literal alternatives; their existence alone is not evidence. If ANY quantity is needed, including a supplied
-duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
-select its actual source. Never paraphrase a numerical fact, respell digits in
+duration, use its product source key or an ENTIRE exact non-product source
+assertion with its actual citation. Never paraphrase a numerical fact, respell digits in
 words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
 omit the quantity from that free-form statement. For RTB, use SOURCE mode and set
-text.value to a key from positioning_rtb_sources and the AllowedPositioningRTBSourceKey
+text.value to a key from positioning_product_sources and the AllowedPositioningRTBSourceKey
 enum. That key supplies the entire verbatim text and its required citation together.
 Use the support flags only for additional sources that materially support the RTB.
 RTB cannot use QUALITATIVE mode or paraphrase proof;
@@ -194,10 +199,13 @@ every numerical statement still requires its actually selected cited source."""
         if self._support_selection_wire:
             data = {**data, "positioning_support_selection_catalog": support_selection_catalog(
                 (e.record.evidence_id for e in evidence), parents)}
-            if "RTB" in request.expected_outputs:
-                data["positioning_rtb_sources"] = rtb_source_catalog(evidence)
+            product_sources = product_source_catalog(evidence)
+            if product_sources:
+                data["positioning_product_sources"] = product_sources
             aliases = source_assertion_aliases(evidence, (
                 text for claim in parents.values() for text in assertion_support(claim.value)))
+            product_literals = {source["text"] for source in product_sources.values()}
+            aliases = {key: value for key, value in aliases.items() if value not in product_literals}
             if aliases:
                 data["positioning_source_assertions"] = {
                     "usage": "For a quoted SOURCE assertion, select its key from the schema enum. "

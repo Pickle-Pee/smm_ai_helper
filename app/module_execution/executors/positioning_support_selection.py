@@ -13,7 +13,7 @@ from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
-WIRE_VERSION = "positioning.support_selection.v5"
+WIRE_VERSION = "positioning.support_selection.v6"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
@@ -42,7 +42,7 @@ def source_assertion_aliases(evidence, parent_assertions):
     return dict(sorted(aliases.items()))
 
 
-def rtb_source_catalog(evidence):
+def product_source_catalog(evidence):
     """Bind each eligible literal to one request-local source."""
     catalog = {}
     for item, value in _local_assertions(evidence):
@@ -55,6 +55,11 @@ def rtb_source_catalog(evidence):
         if key in catalog:
             _fail()
         catalog[key] = source
+    return catalog
+
+
+def rtb_source_catalog(evidence):
+    catalog = product_source_catalog(evidence)
     if not catalog:
         _fail()
     return catalog
@@ -79,8 +84,15 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             _fail()
         alias_by_value = {value: alias for alias, value in source_assertion_aliases(
             evidence, parent_assertions).items()}
-        supported = sorted({alias_by_value.get(value, value)
-                            for value in assertions if 1 <= len(value) <= 4000})
+        product_sources = product_source_catalog(evidence)
+        product_literals = {source["text"] for source in product_sources.values()}
+        if product_sources.keys() & set(assertions):
+            _fail()
+        supported = sorted(
+            set(product_sources)
+            | {alias_by_value.get(value, value) for value in assertions
+               if 1 <= len(value) <= 4000 and value not in product_literals}
+        )
         if supported:
             definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
         if "RTB" in names:
@@ -171,6 +183,8 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
         result = deepcopy(payload)
         result.pop("wire_contract_version")
         aliases = source_assertion_aliases(evidence, parent_assertions)
+        product_sources = product_source_catalog(evidence)
+        product_literals = {source["text"] for source in product_sources.values()}
         outputs = []
         for name in names:
             statement = result["outputs"][name]
@@ -178,12 +192,23 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
             value = selected_text["value"]
             selected = {"evidence": set(), "parents": set()}
             if name == "RTB":
-                source = rtb_source_catalog(evidence)[value]
+                source = product_sources[value]
                 statement["text"] = source["text"]
                 selected["evidence"].add(source["evidence_id"])
                 primary = None
             else:
-                statement["text"] = aliases.get(value, value) if selected_text["mode"] == "SOURCE" else value
+                if selected_text["mode"] == "SOURCE":
+                    if value in product_sources:
+                        if name == "target":
+                            _fail()
+                        source = product_sources[value]
+                        value = source["text"]
+                        selected["evidence"].add(source["evidence_id"])
+                    else:
+                        value = aliases.get(value, value)
+                elif value in product_literals:
+                    _fail()
+                statement["text"] = value
                 primary = statement.pop("primary_support_key")
             for family, field in (("evidence", "evidence_support"), ("parents", "parent_support")):
                 flags = statement.pop(field)

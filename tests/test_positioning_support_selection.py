@@ -40,7 +40,7 @@ def output(f):
     for name, ref in wire["properties"]["outputs"]["properties"].items():
         props = wire["$defs"][ref["$ref"].rsplit("/", 1)[-1]]["properties"]
         kind = props["kind"].get("const", props["kind"].get("enum", [None])[0])
-        outputs[name] = {"text": qualitative("Materials and firing included."), "kind": kind,
+        outputs[name] = {"text": qualitative("A direction to validate."), "kind": kind,
             "confidence": "MEDIUM", "primary_support_key": "e000",
             "evidence_support": {f"e{i:03d}": False for i in range(len(evidence))},
             "parent_support": {f"p{i:03d}": False for i in range(len(parents))}}
@@ -61,7 +61,10 @@ def test_roundtrip_all_outputs_partial_and_parents(names, parents):
     assert Draft202012Validator(f[0]).is_valid(decoded)
     assert [s["output_name"] for s in decoded["outputs"]] == list(f[2])
     assert all(s["evidence_ids"] == ["evd_000"] for s in decoded["outputs"])
-    assert all(s["text"] == "Materials and firing included." for s in decoded["outputs"])
+    assert [s["text"] for s in decoded["outputs"]] == [
+        "Materials and firing included." if name == "RTB" else "A direction to validate."
+        for name in f[2]
+    ]
     PositioningOutput.model_validate(decoded)
 
 
@@ -187,7 +190,7 @@ class SelectionModel:
                 "parent_support": {key: False for key in catalog["parents"]}}
             if name == "RTB":
                 rows[name].pop("primary_support_key")
-                sources = data["positioning_rtb_sources"]
+                sources = data["positioning_product_sources"]
                 key = next(key for key, source in sources.items()
                            if source["evidence_id"] == product["evidence_id"])
                 rows[name]["text"] = sourced(key)
@@ -381,11 +384,12 @@ def test_target_and_qualified_offer_use_separate_modes_and_sources():
         ids = {row["input_key"]: row["evidence_id"] for row in data["local_evidence"]}
         aliases = {identity: key for key, identity in
                    data["positioning_support_selection_catalog"]["evidence"].items()}
+        product_key = next(iter(data["positioning_product_sources"]))
         for name, text, source in (
             ("target", qualitative(audience), "target_or_target_hypothesis"),
-            ("offer", sourced(offer), "product_truth"),
+            ("offer", sourced(product_key), "product_truth"),
         ):
-            expected[name] = (text["value"], (ids[source],))
+            expected[name] = (offer if name == "offer" else text["value"], (ids[source],))
             row = payload["outputs"][name]
             row.update(text=text, primary_support_key=aliases[ids[source]],
                        evidence_support=dict.fromkeys(row["evidence_support"], False))
@@ -398,7 +402,7 @@ def test_target_and_qualified_offer_use_separate_modes_and_sources():
     assert "Keep all product conditions out of target" in instruction
     assert "This applies even when the condition is sourced" in instruction
     assert "Do not\nselect or quote a product condition for target in either mode" in instruction
-    assert "use SOURCE with the ENTIRE AllowedPositioningSupportedAssertion" in instruction
+    assert "use SOURCE with the corresponding positioning_product_sources" in instruction
     assert "essential product condition" not in instruction
     expected["RTB"] = expected["offer"]
     assert {row["output_name"]: (row["text"], row["evidence_ids"])

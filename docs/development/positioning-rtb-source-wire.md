@@ -26,3 +26,22 @@ Four new regressions fail on the old wire; six new cases cover excluded free mod
 other-category/parent sources, exact product/proof quotes, raw immutability and
 missing/oversize refusal. Full CI and both live restored-context probes remain
 mandatory deployment gates; fresh final Telegram acceptance restarts after fix.
+
+## Product facts beyond RTB in support selection v6
+
+The provider receives the request's bounded product_truth and existing_proof
+assertions as a catalog. A SOURCE choice of a product key selects its whole
+assertion and evidence identity together. Identical wording in two eligible
+sources has two keys. A raw literal or a legacy quote alias cannot substitute
+for a product key. RTB remains restricted to this catalog. The target output
+rejects a product key.
+
+QUALITATIVE remains available for strategy and uncertainty. The decoder
+rejects an exact product assertion submitted as free prose. Canonical
+validation, semantic validation and Quality Gates still run on the decoded
+result. Semantic checks and human review remain necessary for paraphrases,
+unsupported product details and competitive conclusions in free prose.
+
+The change is limited to the existing support selection rollout path.
+Persisted canonical results use the same schema. Replay of raw v5 responses
+requires the v5 revision.

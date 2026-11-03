@@ -5,7 +5,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from tests.test_positioning_support_selection import fixture, output, qualitative, sourced
-from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
+from app.module_execution.executors.positioning_support_selection import product_source_catalog, support_selection_wire_schema
 from app.module_execution.executors.schemas import PositioningOutput
 from app.module_execution.executors import PositioningExecutor, ExecutorOutputError
 from tests.test_positioning_support_selection import SelectionModel
@@ -26,15 +26,17 @@ def test_exact_supplied_numeric_assertion_has_an_explicit_generation_alternative
     before = copy.deepcopy(evidence[0].value)
     schema = support_selection_wire_schema(f[0], PositioningOutput, f[2], evidence, f[4])
     value = output((f[0], schema, f[2], evidence, f[4]))
-    value["outputs"]["offer"]["text"] = sourced(before)
+    key = next(iter(product_source_catalog(evidence)))
+    value["outputs"]["offer"]["text"] = sourced(key)
     assert Draft202012Validator(schema).is_valid(value)
     assert evidence[0].value == before
     # The supplied assertion must be represented, not merely admitted as free text.
-    assert any(before in definition.get("enum", []) for definition in schema["$defs"].values())
+    assert any(key in definition.get("enum", []) for definition in schema["$defs"].values())
 
 
 def test_actual_executor_accepts_exact_course_duration_with_its_actual_source():
-    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=sourced(COURSE_TRUTH)))
+    model = SelectionModel(lambda p, d: p["outputs"]["offer"].update(text=sourced(next(key for key, source in
+        d["positioning_product_sources"].items() if source["text"] == COURSE_TRUTH))))
     result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True).execute(course_request("offer")))
     assert result.payload["outputs"][0]["text"] == COURSE_TRUTH and len(model.calls) == 1
 
