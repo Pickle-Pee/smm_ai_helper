@@ -314,10 +314,11 @@ def test_old_stored_canonical_payload_remains_readable():
      "Для занятий не требуется профессиональное оборудование.", "product_assurance_support_required"),
 ])
 def test_target_v5_requires_explicit_support_for_product_conditions(
-    text, select_product, truth, expected_rule, caplog,
+    text, select_product, truth, expected_rule, monkeypatch,
 ):
     import asyncio
-    from app.module_execution.executors import ExecutorOutputError
+    from unittest.mock import Mock
+    from app.module_execution.executors import ExecutorOutputError, common
     from app.module_execution.executors.positioning import PositioningExecutor
     from tests.test_module_executors import fact, request
 
@@ -344,10 +345,15 @@ def test_target_v5_requires_explicit_support_for_product_conditions(
     model = SelectionModel(select_sources)
     executor = PositioningExecutor(model_call=model, support_selection_wire=True)
     if expected_rule:
+        warning = Mock()
+        monkeypatch.setattr(common.log, "warning", warning)
         with pytest.raises(ExecutorOutputError) as caught:
             asyncio.run(executor.execute(invocation))
         assert caught.value.stage.value == "statement_semantics_invalid"
-        assert f"rule={expected_rule}" in caplog.text
+        warning.assert_called_once_with(
+            "Module output rejected module=%s stage=%s rule=%s",
+            "POSITIONING", "statement_semantics_invalid", expected_rule,
+        )
     else:
         result = asyncio.run(executor.execute(invocation))
         statement, = result.payload["outputs"]
