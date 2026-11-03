@@ -6,7 +6,7 @@ from jsonschema import Draft202012Validator
 
 from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.positioning_support_selection import (
-    support_selection_wire_schema, decode_support_selection_wire,
+    support_selection_wire_schema, decode_support_selection_wire, source_assertion_aliases,
 )
 from app.module_execution.executors.schemas import PositioningOutput
 from tests.test_positioning_support_selection import fixture, output, qualitative, sourced
@@ -56,3 +56,30 @@ def test_missing_bounded_rtb_assertion_fails_before_generation_without_truncatio
     with pytest.raises(ModuleExecutionContractError):
         support_selection_wire_schema(f[0],PositioningOutput,("RTB",),f[3],f[4])
     assert f[3][0].value == before
+
+
+def test_quoted_product_and_external_source_use_closed_keys_without_losing_text():
+    f = fixture(("RTB", "category"))
+    product = 'Клуб "Маяк" проводит занятия.'
+    external = 'Карточка сообщает: "группа выходного дня".'
+    f[3][0].value = product
+    f[3][1].value = external
+    schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
+    keys = {text: key for key, text in source_assertion_aliases(f[3], ()).items()}
+    values = schema["$defs"]["AllowedPositioningSupportedAssertion"]["enum"]
+    assert set(keys.values()) <= set(values)
+    assert all('"' not in value for value in values)
+    assert schema["$defs"]["AllowedPositioningRTBAssertion"]["enum"] == [keys[product]]
+
+    payload = output((f[0], schema, *f[2:]))
+    payload["outputs"]["category"]["text"] = sourced(keys[external])
+    payload["outputs"]["RTB"]["text"] = sourced(keys[product])
+    before = copy.deepcopy(payload)
+    decoded = decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
+    assert payload == before
+    assert [row["text"] for row in decoded["outputs"]] == [product, external]
+    assert decoded["outputs"][1]["evidence_ids"] == ["evd_000"]
+    for rejected in (keys[external], product, "source_unknown"):
+        payload["outputs"]["RTB"]["text"] = sourced(rejected)
+        with pytest.raises(ModuleExecutionContractError):
+            decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])

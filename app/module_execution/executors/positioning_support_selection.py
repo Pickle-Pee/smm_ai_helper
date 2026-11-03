@@ -1,5 +1,6 @@
 """Explicit keyed POSITIONING source sets; canonical storage remains v1."""
 from copy import deepcopy
+from hashlib import sha256
 import json
 
 from jsonschema import Draft202012Validator
@@ -27,6 +28,21 @@ def _fail():
     raise ModuleExecutionContractError("Invalid POSITIONING support selection wire") from None
 
 
+def _local_assertions(evidence):
+    return tuple((e, e.value if isinstance(e.value, str)
+        else json.dumps(plain(e.value), ensure_ascii=False)) for e in evidence)
+
+
+def source_assertion_aliases(evidence, parent_assertions):
+    """Use closed wire keys for source literals containing provider-forbidden quotes."""
+    values = {value for _, value in _local_assertions(evidence)} | set(parent_assertions)
+    quoted = {value for value in values if 1 <= len(value) <= 4000 and '"' in value}
+    aliases = {"source_0_" + sha256(value.encode()).hexdigest(): value for value in quoted}
+    if aliases.keys() & values or len(aliases) != len(quoted):
+        _fail()
+    return dict(sorted(aliases.items()))
+
+
 def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
     """Transform only the exact server-built contract, never unknown constraints."""
     try:
@@ -40,16 +56,18 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 or len(names) * sum(map(len, choices.values())) > MAX_REQUIRED_BOOLEAN_FLAGS):
             _fail()
         definitions = {}
-        local_assertions = tuple((e, e.value if isinstance(e.value, str)
-            else json.dumps(plain(e.value), ensure_ascii=False)) for e in evidence)
+        local_assertions = _local_assertions(evidence)
         assertions = tuple(value for _, value in local_assertions) + tuple(parent_assertions)
         if any(type(value) is not str for value in assertions):
             _fail()
-        supported = sorted({value for value in assertions if 1 <= len(value) <= 4000})
+        alias_by_value = {value: alias for alias, value in source_assertion_aliases(
+            evidence, parent_assertions).items()}
+        supported = sorted({alias_by_value.get(value, value)
+                            for value in assertions if 1 <= len(value) <= 4000})
         if supported:
             definitions[SUPPORTED_ASSERTION] = {"type": "string", "minLength": 1, "maxLength": 4000, "enum": supported}
         if "RTB" in names:
-            rtb_values = sorted({value for e, value in local_assertions
+            rtb_values = sorted({alias_by_value.get(value, value) for e, value in local_assertions
                 if e.input_key in {"product_truth", "existing_proof"} and 1 <= len(value) <= 4000})
             if not rtb_values:
                 _fail()
@@ -138,10 +156,13 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
             _fail()
         result = deepcopy(payload)
         result.pop("wire_contract_version")
+        aliases = source_assertion_aliases(evidence, parent_assertions)
         outputs = []
         for name in names:
             statement = result["outputs"][name]
-            statement["text"] = statement["text"]["value"]
+            selected_text = statement["text"]
+            value = selected_text["value"]
+            statement["text"] = aliases.get(value, value) if selected_text["mode"] == "SOURCE" else value
             selected = {"evidence": set(), "parents": set()}
             primary = statement.pop("primary_support_key")
             for family, field in (("evidence", "evidence_support"), ("parents", "parent_support")):

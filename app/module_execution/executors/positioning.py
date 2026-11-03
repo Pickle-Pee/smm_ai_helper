@@ -21,6 +21,7 @@ from .schemas import (
 )
 from .positioning_support_selection import (
     support_selection_wire_schema, decode_support_selection_wire, support_selection_catalog,
+    source_assertion_aliases,
     WIRE_VERSION as SELECTION_WIRE_VERSION,
 )
 from .support_schema import support_response_schema
@@ -167,8 +168,16 @@ every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
         if self._support_selection_wire:
-            return {**data, "positioning_support_selection_catalog": support_selection_catalog(
+            data = {**data, "positioning_support_selection_catalog": support_selection_catalog(
                 (e.record.evidence_id for e in evidence), parents)}
+            aliases = source_assertion_aliases(evidence, (
+                text for claim in parents.values() for text in assertion_support(claim.value)))
+            if aliases:
+                data["positioning_source_assertions"] = {
+                    "usage": "For a quoted SOURCE assertion, select its key from the schema enum. "
+                             "The key represents the entire mapped text and requires its actual citation.",
+                    "values": aliases,
+                }
         return data
 
     def wire_schema_for(self, request, validation_schema, evidence):

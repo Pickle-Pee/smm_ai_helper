@@ -29,3 +29,26 @@ previous live responses and the unchanged newly recovered response through the
 actual executor and Quality Gates. That saved-response follow-up is not a fresh
 Telegram graph and adds no POST. Failed historical runs are not rewritten or
 retroactively marked successful; final acceptance must use new Telegram runs.
+
+## Equipment requirement wording
+
+The course run `73cc6083…` exposed a second false positive. The phrase
+`без профессионального оборудования` describes the equipment requirement
+for the learner. The assurance check excludes the adjective in that specific
+phrase. Affirmative equipment claims, staff qualifications, other assurances
+in the same statement and the RTB proof rule keep their existing checks.
+
+## Quoted source values in POSITIONING
+
+The Maps acceptance run reached POSITIONING after reading the card and
+accepting user-supplied context. The provider rejected the request with
+`invalid_json_schema`. A diagnostic replay isolated double quotes in string
+enum literals as the cause.
+
+For bounded source values that contain a double quote, POSITIONING puts
+a request-scoped key in the enum and supplies the original string in the
+input catalog. SOURCE mode decodes only a key accepted by its field schema.
+The decoded value preserves every character. RTB keys remain restricted to
+local product truth or proof, and selecting a key supplies no citation.
+The canonical output, provenance checks and Quality Gates use the original
+text. Requests with no quoted source values keep their prior contract.
