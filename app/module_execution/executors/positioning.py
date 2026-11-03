@@ -12,7 +12,10 @@ from .provider_schema import (
 )
 from .positioning_provider_schema import minimal_positioning_schema
 from .positioning_observation_schema import positioning_observation_schema
-from .positioning_assurance import ASSURANCE as _ASSURANCE, has_product_assurance
+from .positioning_assurance import (
+    ASSURANCE as _ASSURANCE, NO_EQUIPMENT_PURCHASE, has_product_assurance,
+    supports_no_equipment_purchase,
+)
 from .intelligence_common import require_supported_numbers, supported_text
 from .claim_support import assertion_support
 from .schemas import (
@@ -311,6 +314,12 @@ every numerical statement still requires its actually selected cited source."""
                 rule = (SemanticRule.RTB_QUOTE_REQUIRED if statement.output_name == "RTB"
                         else SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED)
                 raise StatementSemanticsError(rule)
+        if statement.output_name != "RTB" and NO_EQUIPMENT_PURCHASE.search(statement.text) and not any(
+            local[e].input_key == "product_truth" and isinstance(local[e].value, str)
+            and (statement.text in local[e].value or supports_no_equipment_purchase(local[e].value))
+            for e in statement.evidence_ids
+        ):
+            raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         if statement.kind == "OBSERVATION":
             # Preserve numeric authority separately: only factual parents can
             # authorize an observation, and only their assertion channel counts.
