@@ -126,23 +126,33 @@ def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, 
         if "assessment" not in schema["properties"]:
             calls.append("draft")
             output = await model(text=payload["input"][1]["content"], response_schema=schema)
+            if "RTB" in data["expected_outputs"]:
+                from app.module_execution.executors.positioning_strategy import STRATEGY_OPTIONS
+
+                parsed = json.loads(output)
+                for row in parsed["outputs"]:
+                    if row["output_name"] not in {"RTB", "offer"}:
+                        row["text"] = data["positioning_strategy_choices"][row["output_name"]][0]["text"]
+                    elif row["output_name"] == "offer":
+                        row["text"] = next(item["value"] for item in data["local_evidence"]
+                                           if item["input_key"] == "product_truth")
+                output = json.dumps(parsed)
         else:
             calls.append("review")
-            reviews = []
-            for row in data["outputs"]:
-                rtb = row["output_name"] == "RTB"
+            reviews = {}
+            for name, row in data["outputs"].items():
+                rtb = name in {"RTB", "offer"}
+                text = "".join(token["text"] for token in row["tokens"])
                 support = [
-                    {"evidence_id": identity, "quote": source["text"]}
-                    for identity, source in data["evidence"].items()
-                    if rtb and source["role"] in {"product_truth", "demonstration"} and source["text"] == row["text"]
-                    and identity in row["evidence_ids"]
+                    identity for identity, source in row["evidence"].items()
+                    if rtb and source["role"] in {"product_truth", "demonstration"} and source["text"] == text
                 ]
-                reviews.append({"output_name": row["output_name"], "claims": [{
-                    "span": row["text"], "category": "product" if rtb else "strategy",
+                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
+                    "start_token": 0, "end_token": len(row["tokens"]), "category": "product" if rtb else "strategy",
                     "kind": "fact" if rtb else "hypothesis", "status": "SUPPORTED" if rtb else "HYPOTHESIS",
-                    "support": support, "asserts_no_follow_up": False,
-                }]})
-            output = json.dumps({"assessment": assessment, "reviews": reviews})
+                    "support_ids": support,
+                }]}
+            output = json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": assessment, "reviews": reviews})
         return httpx.Response(200, json={"status": "completed", "output_text": output})
 
     install_transport(monkeypatch, respond)

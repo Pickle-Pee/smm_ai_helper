@@ -189,6 +189,37 @@ example, a homework requirement from a task, or personal feedback from written
 feedback. Treat unverified competitive differences as hypotheses to validate. Keep mixed summaries
 neutral and leave the qualified condition in the separate sourced output. If
 there is no suitable exact assertion or requested slot, omit the qualified claim.
+Before writing demand_context, value_proposition, differentiation and
+positioning_statement, separate the proposed marketing angle from factual product
+terms. demand_context describes a need to investigate, not a product exemption.
+value_proposition proposes a benefit to test, not a promise that the course gives
+skills. differentiation proposes a comparison to validate, not a claim that a
+product is fully usable under particular conditions. positioning_statement
+recommends an angle, not a summary that strengthens the product's commitments.
+Use explicit test language such as "Проверить интерес к практике фотографии."
+or "Тестировать акцент на применении навыков." Only include a factual premise
+when its actual cited source establishes it; HYPOTHESIS and RECOMMENDATION do
+not authorize new product properties or audience facts.
+The server supplies positioning_strategy_options for each output. For QUALITATIVE
+strategy choose one entire option for that output verbatim. These are prospective
+research/marketing decisions, not established facts. Do not append product
+properties, combine options, or rewrite an option. Independent verification
+blocks prose outside this positive strategy contract. Preserve exact sourced
+facts through the existing SOURCE mechanism, with their actual citations.
+When positioning_strategy_choices is supplied, cite ALL required_source_ids of
+your chosen option using the actual primary/additional support flags. The options
+are request-scoped: their exact audience, product identity and proposed angle
+belong together. Empty options require an exact eligible SOURCE (offer and RTB).
+Keep equipment conditions in the exact SOURCE offer or RTB, preserving the
+entire source and its citation. Do not paraphrase them in QUALITATIVE text as
+"без желания или возможности приобретать профессиональное оборудование",
+"не требуя профессионального оборудования", "без необходимости профессиональной
+техники" or "без покупки профессионального оборудования". These phrases are
+not neutral strategic reasoning. Do not substitute another equipment synonym.
+If the strategic output cannot use SOURCE, omit the equipment clause and keep
+its distinct marketing question or testable angle. A source saying practical
+tasks does not establish homework, and written feedback does not establish
+personal feedback. An unsupplied audience preference remains a question to test.
 For claim_risks, describe the uncertainty neutrally, for example
 "Уточнить, что именно получает участник после курса." Avoid quoting or negating
 qualification terms in free-text risk descriptions.
@@ -206,6 +237,23 @@ The numeric enum is an explicit generation alternative, not independent evidence
 every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
+        from .positioning_strategy import STRATEGY_OPTIONS, build_strategy_choices, STRATEGY_SOURCE_ROLES
+
+        data["positioning_strategy_options"] = {
+            name: list(STRATEGY_OPTIONS[name]) for name in request.expected_outputs
+        }
+        strategy_evidence = {item.record.evidence_id: {
+            "role": STRATEGY_SOURCE_ROLES[item.input_key], "text": item.value,
+        } for item in evidence if item.input_key in STRATEGY_SOURCE_ROLES and isinstance(item.value, str)}
+        choices = (build_strategy_choices(strategy_evidence)
+                   if any(row["role"] == "product_identity" for row in strategy_evidence.values()) else {})
+        if choices:
+            data["positioning_strategy_choices"] = {
+                name: list(choices.get(name, ())) for name in request.expected_outputs
+            }
+            data["positioning_strategy_options"] = {
+                name: [choice["text"] for choice in choices.get(name, ())] for name in request.expected_outputs
+            }
         if self._support_selection_wire:
             context = data["context"]
             data = {**data, "context": {

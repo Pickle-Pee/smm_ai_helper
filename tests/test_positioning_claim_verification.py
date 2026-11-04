@@ -158,10 +158,13 @@ def test_independent_approval_does_not_override_deterministic_findings():
     }),)}))
 
     async def auditor(**kwargs):
-        assert json.loads(kwargs["text"])["outputs"][0]["text"] == text
-        return json.dumps({"assessment": "APPROVE", "reviews": [
-            OutputReview(output_name="offer", claims=[review(text, quote=source)]).model_dump(),
-        ]})
+        data = json.loads(kwargs["text"])
+        assert "".join(token["text"] for token in data["outputs"]["offer"]["tokens"]) == text
+        return json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE", "reviews": {
+            "offer": {"atoms_complete": True, "output_fulfilled": True, "claims": [{"start_token": 0,
+                "end_token": len(data["outputs"]["offer"]["tokens"]), "category": "product",
+                "kind": "fact", "status": "SUPPORTED", "support_ids": ["evd_product"]}]},
+        }})
 
     decision = asyncio.run(review_positioning(auditor, result, {
         "evd_product": {"text": source, "role": "product_truth"},

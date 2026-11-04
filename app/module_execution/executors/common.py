@@ -222,6 +222,20 @@ def parent_claims(request):
     return parents
 
 
+def factual_competitor_parents(request):
+    """Resolve evidence-backed factual competitors without promoting hypotheses."""
+    backed = {
+        claim.claim_id for upstream in request.upstream_results
+        if upstream.module_id.value in {"COMPETITOR_ANALYSIS", "MARKET_ANALYSIS"}
+        for claim in upstream.result.normalized_result.claims
+        if claim.evidence_ids
+        and set(claim.evidence_ids) <= {record.evidence_id for record in upstream.result.normalized_result.evidence}
+    }
+    return {identity: claim for identity, claim in parent_claims(request).items()
+            if identity in backed and claim.claim_type in {ClaimType.FACT, ClaimType.OBSERVATION}
+            and isinstance(claim.value, str)}
+
+
 @dataclass(frozen=True)
 class LocalEvidence:
     record: EvidenceRecord
