@@ -195,7 +195,7 @@ def test_profiles_replace_generic_research_filler_with_distinct_grounded_outputs
     assert rows["USP_directions"]["text"].count(";") == 2
     assert "Главное сообщение" in rows["message_hierarchy"]["text"]
     assert "Следующий шаг" in rows["message_hierarchy"]["text"]
-    assert rows["claim_risks"]["text"].startswith("Риск сообщения")
+    assert rows["claim_risks"]["text"].startswith("Рекомендация перед публикацией — проверить, не")
     assert "В беседах проверить" in rows["validation_plan."]["text"]
 
 
@@ -222,8 +222,8 @@ def test_ceramics_profile_preserves_later_collection_and_does_not_invent_techniq
     assert "вписать последующее получение" in rows["demand_context"]
     for name in ("value_proposition", "positioning_statement", "USP_directions", "message_hierarchy", "validation_plan."):
         assert "друг" in rows[name]
-    assert "Риск сообщения — создать ожидание выдачи изделия в день занятия" in rows["claim_risks"]
-    assert "технику" in rows["claim_risks"] and "уточнить у владельца" in rows["claim_risks"]
+    assert "не создаёт ли сообщение ожидание выдачи изделия в день занятия" in rows["claim_risks"]
+    assert "технику" in rows["claim_risks"] and "уточнить" in rows["claim_risks"] and "у владельца" in rows["claim_risks"]
     rendered = "\n".join(rows.values())
     for unsupported in ("гончарный круг", "ручная пластика", "инструктаж", "расслабление", "не потребуется", "не придётся"):
         assert unsupported not in rendered

@@ -238,6 +238,10 @@ when inseparable). Cover every part of the output through selected anchors but d
 not confuse character coverage with semantic completeness. Set atoms_complete
 false if any factual premise cannot be separately assessed. Assess the complete draft as
 APPROVE only after checking factual premises and preservation of conditions.
+Do not bundle distinct source predicates into one atomic fact: doing practical
+tasks, receiving written feedback and not needing equipment are separate facts,
+even if a whole source quotation is true. Use clause/sentence anchors or reuse
+an anchor for separate predicates. A source paragraph is not an atomic claim.
 Set output_fulfilled true only if this text actually fulfills its named output:
 category must propose a category, target must identify an audience, value
 proposition must propose value, differentiation a tentative distinction, and
@@ -250,6 +254,11 @@ anchor, with kind hypothesis or recommendation. They are one proposed strategic
 decision with exact server-bound source slots. Their category label does not
 grant or remove source authority; they do not assert a product
 feature. Factual premises within other text still need their own factual atoms.
+An explicit instruction to check that copy does NOT invent homework or personal
+feedback is a recommendation, not an assertion that these features exist. Clear
+counterfactual risk warnings and owner-confirmation questions are not evidence
+of current product properties. In contrast, testing whether OUR personal
+feedback attracts an audience presupposes that feature and needs product proof.
 Use REJECT for any unsupported or contradictory claim and UNCERTAIN when
 the evidence or the scope is ambiguous. Never modify the draft.
 """

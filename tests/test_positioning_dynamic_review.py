@@ -105,6 +105,27 @@ def test_several_recommendations_inside_a_complete_bound_message_plan_are_review
     assert len(decision["reviews"][0]["claims"]) > 1
 
 
+@pytest.mark.parametrize("case", CASES)
+def test_counterfactual_risk_check_is_reviewable_but_negative_audit_still_blocks(case):
+    evidence = verification_inputs(invocation(case))
+    choice = dynamic_choice(evidence, "claim_risks")
+    row = output(choice["text"], choice["required_source_ids"], name="claim_risks")
+    assert "проверить, не" in choice["text"]
+
+    def recommendation(report, data):
+        report["reviews"]["claim_risks"]["claims"][0].update(kind="recommendation", status="RECOMMENDATION")
+
+    decision, _ = run_review([row], evidence, recommendation)
+    assert decision["status"] == "verified"
+
+    def uncertain(report, data):
+        report["reviews"]["claim_risks"]["claims"][0].update(kind="interpretation", status="UNVERIFIABLE")
+
+    decision, _ = run_review([row], evidence, uncertain)
+    assert decision["assessment"] == "APPROVE"
+    assert decision["status"] == "rejected"
+
+
 @pytest.mark.parametrize("category", ["product", "audience", "competitor", "fulfillment"])
 def test_exact_dynamic_proposal_does_not_depend_on_auditor_category_label(category):
     evidence = verification_inputs(invocation("course"))
