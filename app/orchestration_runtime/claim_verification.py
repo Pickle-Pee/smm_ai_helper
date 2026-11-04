@@ -176,8 +176,11 @@ def verify_claim_review(
                 for source, quote in sources
             )
             strategy_supported = (any(
-                claim.span.strip() == choice["text"]
-                and set(choice["required_source_ids"]) <= row.evidence_ids
+                set(choice["required_source_ids"]) <= row.evidence_ids
+                and (claim.span.strip() == choice["text"]
+                     or choice["text"] in row.text
+                     and (choice_start := row.text.find(choice["text"])) <= span_start
+                     and span_end <= choice_start + len(choice["text"]))
                 for choice in choices.get(review.output_name, ())
             ) if choices else safe_strategy_statement(claim.span))
             reason = "review_rejected"
@@ -207,6 +210,12 @@ def verify_claim_review(
                 if not any(f.output_name == review.output_name for f in findings):
                     findings.append(Finding(review.output_name, 0, ClaimStatus.UNVERIFIABLE, "unverified_factual_premise"))
                 break
+        if (review.output_name != "RTB"
+                and any(evidence[identity].role == "demonstration"
+                        for identity in row.evidence_ids if identity in evidence)
+                and not any(f.output_name == review.output_name for f in findings)):
+            findings.append(Finding(review.output_name, 0, ClaimStatus.UNVERIFIABLE,
+                                    "irrelevant_demonstration_citation"))
     return tuple(findings)
 
 VERIFIER_INSTRUCTION = """

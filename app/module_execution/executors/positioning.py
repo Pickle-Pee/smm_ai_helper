@@ -210,6 +210,10 @@ When positioning_strategy_choices is supplied, cite ALL required_source_ids of
 your chosen option using the actual primary/additional support flags. The options
 are request-scoped: their exact audience, product identity and proposed angle
 belong together. Empty options require an exact eligible SOURCE (offer and RTB).
+Only RTB may cite existing_proof/demonstration. For strategic choices choose a
+required source as primary (product_truth where the output requires it, audience
+for target) and set true support flags only for required_source_ids. Do not add
+an unrelated demonstration just to fill a primary or extra citation slot.
 Keep equipment conditions in the exact SOURCE offer or RTB, preserving the
 entire source and its citation. Do not paraphrase them in QUALITATIVE text as
 "без желания или возможности приобретать профессиональное оборудование",

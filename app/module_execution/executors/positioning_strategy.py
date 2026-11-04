@@ -144,6 +144,50 @@ _COURSE_TRUTH = re.compile(
 _CERAMICS_TRUTH = (
     "Материалы и обжиг включены. Участники забирают изделия после обжига в другой день."
 )
+_PHOTOGRAPHY_IDENTITY = re.compile(r"Курс (?:мобильной )?фотографии(?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
+_CERAMICS_IDENTITY = re.compile(r"Мастер-класс (?:по )?керамик[еи](?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
+
+
+def _profile_statements(profile: str, product: str, audience: str) -> dict[str, str]:
+    """Propose distinct output roles; do not assert researched demand or superiority.
+
+    These profiles are available only after complete identity and owner-truth
+    checks below. Domain proposals stay tentative; operational statements use
+    only the supplied terms. Offer and RTB are rendered by the exact-source wire.
+    """
+    if profile == "photography":
+        return {
+            "category": "Предлагаем категорию «обучение фотографии через практику с письменной обратной связью».",
+            "frame_of_reference": "Предлагаем сравнивать курс фотографии с самостоятельным изучением приёмов съёмки; рамка выбора — сочетание практических заданий и письменной обратной связи.",
+            "target": f"Предлагаем ориентировать сообщение курса фотографии на аудиторию «{audience}».",
+            "demand_context": "Гипотеза ситуации спроса — человек пробует фотографировать и ищет ориентир для дальнейшей практики вместо накопления разрозненных советов.",
+            "JTBD_frame": "Гипотеза задачи аудитории — понять, что пробовать менять в своих фотографиях после практики, опираясь на письменную обратную связь.",
+            "value_proposition": "Предлагаем проверить ценность ориентира для дальнейшей фотопрактики через сочетание практических заданий и письменной обратной связи; важность этого акцента нужно выяснить у аудитории.",
+            "differentiation": "Гипотеза отличия — сделать сочетание практических заданий и письменной обратной связи центральной темой сравнения курсов фотографии; заметность этого акцента ещё нужно проверить.",
+            "points_of_parity": "Гипотеза базовых ожиданий от обучения фотографии — возможность практиковаться и понимать условия получения обратной связи; проверить эти критерии у аудитории.",
+            "points_of_difference": "Предлагаем проверить различимость темы «практические задания и письменный отклик» в описании курса фотографии, не приписывая другим курсам отсутствие обратной связи.",
+            "positioning_statement": f"Для аудитории «{audience}» предлагаем позиционирование «{product}» в категории «обучение фотографии через практику» с акцентом на сочетании практических заданий и письменной обратной связи как ориентире дальнейшей практики; ценность акцента требует проверки.",
+            "USP_directions": "Направления сообщения для проверки: практика фотографии вместо накопления советов; письменная обратная связь как ориентир; осмысленный выбор следующего упражнения.",
+            "message_hierarchy": "Главное сообщение для теста — курс фотографии с практическими заданиями и письменной обратной связью. Поддерживающий акцент — поиск направления дальнейшей практики. Условия участия — привести полный текст владельца. Следующий шаг — уточнить содержание заданий и порядок обратной связи.",
+            "claim_risks": "Риск сообщения — подменить практические задания домашними, а письменную обратную связь персональным разбором; темы курса и темп освоения нужно уточнить у владельца.",
+            "validation_plan.": "В беседах проверить, что аудитория понимает под письменной обратной связью и практическими заданиями, отличает их от домашних заданий и связывает предложенный акцент с задачей своей фотопрактики; спорные формулировки сверить с владельцем.",
+        }
+    return {
+        "category": "Предлагаем категорию «знакомство с керамикой с заранее понятными условиями получения изделия».",
+        "frame_of_reference": "Предлагаем сравнивать мастер-класс по керамике с самостоятельным знакомством с ремеслом и другими творческими занятиями; рамка выбора — ясность условий участия и получения изделия.",
+        "target": f"Предлагаем ориентировать сообщение мастер-класса по керамике на аудиторию «{audience}».",
+        "demand_context": "Гипотеза ситуации спроса — человек выбирает творческое занятие и хочет заранее понять, как вписать последующее получение изделия в свои планы.",
+        "JTBD_frame": "Гипотеза задачи аудитории — познакомиться с керамикой и заранее согласовать ожидания по получению изделия после обжига.",
+        "value_proposition": "Предлагаем проверить ценность понятного планирования участия: материалы и обжиг включены, а получение изделия относится к другому дню; акцент сообщения — понимать путь участия до записи.",
+        "differentiation": "Гипотеза отличия сообщения — сделать последующее получение изделия заметной частью выбора мастер-класса по керамике; сравнение с другими предложениями ещё предстоит проверить.",
+        "points_of_parity": "Гипотеза базовых ожиданий от творческого мастер-класса — понятные условия материалов, обжига и получения изделия; проверить важность этих критериев у аудитории.",
+        "points_of_difference": "Предлагаем проверить, выделяет ли описание мастер-класса по керамике открытое обозначение получения изделия в другой день, не утверждая, что остальные скрывают свои условия.",
+        "positioning_statement": f"Для аудитории «{audience}» предлагаем позиционирование «{product}» в категории «знакомство с керамикой» с акцентом на ясных условиях материалов, обжига и получения изделия в другой день; ценность такого акцента требует проверки.",
+        "USP_directions": "Направления сообщения для проверки: знакомство с керамикой; включённые материалы и обжиг; заранее понятное получение изделия в другой день.",
+        "message_hierarchy": "Главное сообщение для теста — мастер-класс по керамике с ясными условиями получения изделия. Поддержка — материалы и обжиг включены. Условие — забрать изделие после обжига в другой день. Следующий шаг — уточнить порядок получения до записи.",
+        "claim_risks": "Риск сообщения — создать ожидание выдачи изделия в день занятия или приписать конкретную технику работы с глиной и помощь мастера; сохранять условие другого дня, а содержание занятия уточнить у владельца.",
+        "validation_plan.": "В беседах проверить понимание получения изделия в другой день, влияние этого условия на выбор занятия и оставшиеся вопросы о работе с глиной; порядок получения и содержание занятия сверить с владельцем.",
+    }
 
 
 def build_strategy_choices(evidence: dict[str, dict]) -> dict[str, tuple[dict, ...]]:
@@ -157,13 +201,14 @@ def build_strategy_choices(evidence: dict[str, dict]) -> dict[str, tuple[dict, .
     Offer and RTB remain exact-source outputs and have no generated alternatives.
     """
     choices: dict[str, list[dict]] = {name: [] for name in STRATEGY_OPTIONS}
+    identity_dependencies = ()
 
     def add(name, text, identities=()):
         # Existing executor numeric provenance rules still apply. Avoid creating
         # a known-invalid mixed strategic sentence from numbered product names.
         if len(text) > 4000 or any(char.isdigit() for char in text):
             return
-        item = {"text": text, "required_source_ids": sorted(set(identities))}
+        item = {"text": text, "required_source_ids": sorted(set((*identity_dependencies, *identities)))}
         if item not in choices[name]:
             choices[name].append(item)
 
@@ -173,6 +218,20 @@ def build_strategy_choices(evidence: dict[str, dict]) -> dict[str, tuple[dict, .
         return rows[0] if len(rows) == 1 else None
 
     product, audience = single("product_identity"), single("audience")
+    if product:
+        identity_dependencies = (product[0],)
+    truth = single("product_truth")
+    profile = None
+    if product and audience and truth:
+        if _PHOTOGRAPHY_IDENTITY.fullmatch(product[1]) and _COURSE_TRUTH.fullmatch(truth[1]):
+            profile = "photography"
+        elif _CERAMICS_IDENTITY.fullmatch(product[1]) and truth[1] == _CERAMICS_TRUTH:
+            profile = "ceramics"
+    if profile:
+        required = (product[0], audience[0], truth[0])
+        for name, text in _profile_statements(profile, product[1], audience[1]).items():
+            add(name, text, required)
+        return {name: tuple(options) for name, options in choices.items()}
     # A source-specific angle is deliberately gated by the WHOLE owner text.
     # A quotation, hypothetical example or conditional prefix cannot enable it.
     angles = []

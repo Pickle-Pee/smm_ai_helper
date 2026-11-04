@@ -73,11 +73,36 @@ def run_review(rows, evidence, mutate=None):
 def test_dynamic_choice_with_all_dependencies_is_reviewable(case):
     evidence = verification_inputs(invocation(case))
     choice = dynamic_choice(evidence)
-    assert len(choice["required_source_ids"]) == 2
+    assert len(choice["required_source_ids"]) == 3
     decision, captured = run_review([output(choice["text"], choice["required_source_ids"])], evidence)
     assert decision["status"] == "verified"
     assert choice in captured["data"]["outputs"]["value_proposition"]["strategy_choices"]
     assert set(choice["required_source_ids"]) <= captured["data"]["outputs"]["value_proposition"]["evidence"].keys()
+
+
+def test_demonstration_cannot_be_an_unrelated_strategic_citation():
+    evidence = verification_inputs(invocation("course"))
+    evidence["evd_unused_demo"] = {"role": "demonstration", "text": "An example compares photographs."}
+    choice = dynamic_choice(evidence)
+    decision, _ = run_review([output(choice["text"], (*choice["required_source_ids"], "evd_unused_demo"))], evidence)
+    assert decision["status"] == "rejected"
+    assert decision["findings"][0]["reason"] == "irrelevant_demonstration_citation"
+
+
+def test_several_recommendations_inside_a_complete_bound_message_plan_are_reviewable():
+    evidence = verification_inputs(invocation("course"))
+    choice = dynamic_choice(evidence, "message_hierarchy")
+
+    def separate(report, data):
+        report["reviews"]["message_hierarchy"]["claims"] = [
+            {"span_id": identity, "category": "strategy", "kind": "recommendation",
+             "status": "RECOMMENDATION", "support_ids": []}
+            for identity in data["outputs"]["message_hierarchy"]["spans"] if identity.startswith("sentence_")
+        ]
+
+    decision, _ = run_review([output(choice["text"], choice["required_source_ids"], name="message_hierarchy")], evidence, separate)
+    assert decision["status"] == "verified"
+    assert len(decision["reviews"][0]["claims"]) > 1
 
 
 @pytest.mark.parametrize("category", ["product", "audience", "competitor", "fulfillment"])

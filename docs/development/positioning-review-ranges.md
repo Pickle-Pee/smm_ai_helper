@@ -34,6 +34,16 @@ feature. Offer/RTB still carry complete exact source conditions. The
 source-role taxonomy is extended with product identity, which is not proof of
 product properties. Source roles are enforced by output independently of labels.
 
+Explicit photography-course and ceramics-masterclass identities, a single
+audience and matching complete owner truth enable purpose-specific profiles.
+These supply actual category/comparison/value/message/risk proposals rather
+than generic research tasks. Each profile proposal binds all three source IDs;
+the course preserves practical tasks/written feedback, while ceramics preserves
+materials/firing and collection on another day. A complete authorized proposal
+can contain several separately reviewed recommendations. Partial anchors cannot
+remove its qualifiers. Demonstration citations outside RTB are rejected even
+when the auditor ignores their lack of relevance.
+
 This restriction can reject useful strategy. Relevance, section purpose and
 usefulness remain independent acceptance criteria; template membership is not
 proof of production quality. `output_fulfilled` must be true for every output in

@@ -97,7 +97,7 @@ def test_request_scoped_choices_form_a_positioning_proposal_with_exact_identity_
     assert "в категории «освоение новой практики»" in proposed["text"]
     assert "письменная обратная связь как ориентир для практики" in proposed["text"]
     assert proposed["required_source_ids"] == ["evd_audience", "evd_identity", "evd_truth"]
-    assert choices["target"][0]["required_source_ids"] == ["evd_audience"]
+    assert choices["target"][0]["required_source_ids"] == ["evd_audience", "evd_identity"]
 
 
 def test_course_and_ceramics_have_distinct_source_bound_value_and_difference_hypotheses():
@@ -163,3 +163,113 @@ def test_unknown_sources_cannot_introduce_new_features_via_keyword_matching():
     choices = build_strategy_choices(choice_evidence("Онлайн-курс включает вебинары, сертификат и гарантирует результат."))
     rendered = "\n".join(row["text"] for rows in choices.values() for row in rows)
     assert "вебинар" not in rendered and "сертификат" not in rendered and "гарантирует" not in rendered
+
+
+PROFILE_CASES = {
+    "photography": choice_evidence(COURSE_TRUTH, "Курс мобильной фотографии ФотоСтарт", "Начинающие взрослые"),
+    "ceramics": choice_evidence(CERAMICS_TRUTH, "Мастер-класс по керамике Тёплая глина", "Взрослые без опыта лепки"),
+}
+
+
+@pytest.mark.parametrize("profile", PROFILE_CASES)
+def test_profiles_replace_generic_research_filler_with_distinct_grounded_outputs(profile):
+    from app.module_execution.executors.positioning_assurance import has_product_assurance
+
+    evidence = PROFILE_CASES[profile]
+    choices = build_strategy_choices(evidence)
+    strategic_names = set(STRATEGY_OPTIONS) - {"offer", "RTB"}
+    assert set(choices) == set(STRATEGY_OPTIONS)
+    assert choices["offer"] == choices["RTB"] == ()
+    assert len(strategic_names) == 14
+    assert all(len(choices[name]) == 1 for name in strategic_names)
+    rows = {name: choices[name][0] for name in strategic_names}
+    assert len({row["text"] for row in rows.values()}) == 14
+    assert all(row["required_source_ids"] == sorted(evidence) for row in rows.values())
+    assert all(0 < len(row["text"]) <= 4000 and not has_product_assurance(row["text"])
+               and not any(char.isdigit() for char in row["text"]) for row in rows.values())
+    assert "освоение новой практики" not in rows["category"]["text"]
+    assert "«" + evidence["evd_identity"]["text"] + "»" in rows["positioning_statement"]["text"]
+    assert "«" + evidence["evd_audience"]["text"] + "»" in rows["positioning_statement"]["text"]
+    assert "ещё" in rows["differentiation"]["text"]
+    assert rows["points_of_parity"]["text"].startswith("Гипотеза")
+    assert rows["USP_directions"]["text"].count(";") == 2
+    assert "Главное сообщение" in rows["message_hierarchy"]["text"]
+    assert "Следующий шаг" in rows["message_hierarchy"]["text"]
+    assert rows["claim_risks"]["text"].startswith("Риск сообщения")
+    assert "В беседах проверить" in rows["validation_plan."]["text"]
+
+
+def test_photography_profile_keeps_roles_useful_without_strengthening_source_terms():
+    choices = build_strategy_choices(PROFILE_CASES["photography"])
+    rows = {name: options[0]["text"] for name, options in choices.items() if options}
+    assert "обучение фотографии" in rows["category"]
+    assert "самостоятельным изучением" in rows["frame_of_reference"]
+    assert "пробует фотографировать" in rows["demand_context"]
+    assert "что пробовать менять в своих фотографиях" in rows["JTBD_frame"]
+    assert "письменной обратной связи" in rows["value_proposition"]
+    assert "домашними" in rows["claim_risks"] and "персональным" in rows["claim_risks"]
+    assert "сверить с владельцем" in rows["validation_plan."]
+    assertions = "\n".join(text for name, text in rows.items() if name not in {"claim_risks", "validation_plan."})
+    for unsupported in ("домашние задания", "персональная обратная связь", "онлайн", "композиции", "освещения", "быстро", "сертификат"):
+        assert unsupported not in assertions
+
+
+def test_ceramics_profile_preserves_later_collection_and_does_not_invent_technique():
+    choices = build_strategy_choices(PROFILE_CASES["ceramics"])
+    rows = {name: options[0]["text"] for name, options in choices.items() if options}
+    assert "знакомство с керамикой" in rows["category"]
+    assert "самостоятельным знакомством" in rows["frame_of_reference"]
+    assert "вписать последующее получение" in rows["demand_context"]
+    for name in ("value_proposition", "positioning_statement", "USP_directions", "message_hierarchy", "validation_plan."):
+        assert "друг" in rows[name]
+    assert "Риск сообщения — создать ожидание выдачи изделия в день занятия" in rows["claim_risks"]
+    assert "технику" in rows["claim_risks"] and "уточнить у владельца" in rows["claim_risks"]
+    rendered = "\n".join(rows.values())
+    for unsupported in ("гончарный круг", "ручная пластика", "инструктаж", "расслабление", "не потребуется", "не придётся"):
+        assert unsupported not in rendered
+
+
+@pytest.mark.parametrize("product,truth", [
+    ("ФотоСтарт", COURSE_TRUTH),
+    ("Бренд Курс фотографии ФотоСтарт", COURSE_TRUTH),
+    ("Название с фотографией", COURSE_TRUTH),
+    ("Курс кулинарии ФотоСтарт", COURSE_TRUTH),
+    ("Мастер-класс керамики Тёплая глина", COURSE_TRUTH),
+    ("Курс фотографии ФотоСтарт", CERAMICS_TRUTH),
+    ("Тёплая глина", CERAMICS_TRUTH),
+    ("Изделия после обжига", CERAMICS_TRUTH),
+])
+def test_domain_profile_requires_explicit_matching_product_identity_and_complete_truth(product, truth):
+    choices = build_strategy_choices(choice_evidence(truth, product))
+    assert choices["category"][0]["text"] == "Предлагаем проверить категорию «освоение новой практики»."
+    assert all("evd_identity" in row["required_source_ids"] for options in choices.values() for row in options)
+
+
+@pytest.mark.parametrize("profile", PROFILE_CASES)
+@pytest.mark.parametrize("invalid", ["demo", "conditional", "another_truth", "missing_audience"])
+def test_profiles_do_not_select_unconfirmed_or_ambiguous_context(profile, invalid):
+    from copy import deepcopy
+
+    evidence = deepcopy(PROFILE_CASES[profile])
+    if invalid == "demo":
+        evidence["evd_truth"]["role"] = "demonstration"
+    elif invalid == "conditional":
+        evidence["evd_truth"]["text"] = "Возможно, " + evidence["evd_truth"]["text"]
+    elif invalid == "another_truth":
+        evidence["evd_another_truth"] = {"role": "product_truth", "text": "Условия нужно уточнить."}
+    else:
+        del evidence["evd_audience"]
+    choices = build_strategy_choices(evidence)
+    assert choices["category"][0]["text"] == "Предлагаем проверить категорию «освоение новой практики»."
+
+
+@pytest.mark.parametrize("product,profile", [
+    ("Курс фотографии ФотоСтарт", "photography"),
+    ("Курс мобильной фотографии ФотоСтарт", "photography"),
+    ("Мастер-класс керамики Тёплая глина", "ceramics"),
+    ("Мастер-класс по керамике Тёплая глина", "ceramics"),
+])
+def test_explicit_domain_prefix_variants_enable_the_correct_profile(product, profile):
+    truth = COURSE_TRUTH if profile == "photography" else CERAMICS_TRUTH
+    choices = build_strategy_choices(choice_evidence(truth, product))
+    assert "освоение новой практики" not in choices["category"][0]["text"]

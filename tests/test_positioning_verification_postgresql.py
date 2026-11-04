@@ -131,12 +131,18 @@ def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, 
                 from app.module_execution.executors.positioning_strategy import STRATEGY_OPTIONS
 
                 parsed = json.loads(output)
+                truth = next(item for item in data["local_evidence"] if item["input_key"] == "product_truth")
                 for row in parsed["outputs"]:
                     if row["output_name"] not in {"RTB", "offer"}:
-                        row["text"] = data["positioning_strategy_choices"][row["output_name"]][0]["text"]
+                        choice = data["positioning_strategy_choices"][row["output_name"]][0]
+                        row["text"] = choice["text"]
+                        row["evidence_ids"] = list(dict.fromkeys((*choice["required_source_ids"], truth["evidence_id"])))
                     elif row["output_name"] == "offer":
-                        row["text"] = next(item["value"] for item in data["local_evidence"]
-                                           if item["input_key"] == "product_truth")
+                        row["text"] = truth["value"]
+                        row["evidence_ids"] = [truth["evidence_id"]]
+                    else:
+                        row["text"] = truth["value"]
+                        row["evidence_ids"] = [truth["evidence_id"]]
                 output = json.dumps(parsed)
         else:
             calls.append("review")
