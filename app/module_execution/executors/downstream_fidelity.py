@@ -6,8 +6,7 @@ intelligence executors, including their structured leaf text.
 """
 import re
 
-from app.marketing_orchestrator.quality_gates.contracts import EvidenceSourceClass
-from .common import SemanticRule, StatementSemanticsError, factual_competitor_parents
+from .common import EvidenceSourceClass, SemanticRule, StatementSemanticsError, factual_competitor_parents
 
 FIDELITY_INSTRUCTION = """
 Preserve the epistemic status of upstream positioning. A possible audience goal
