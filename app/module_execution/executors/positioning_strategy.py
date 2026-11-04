@@ -208,7 +208,7 @@ def source_fact_units(text: str) -> tuple[dict, ...]:
         unit("written_feedback", "Письменная обратная связь", feedback_start, feedback_start + len(feedback)),
     ))
     if text.endswith(equipment):
-        units.append(unit("no_equipment", "Отсутствие требования к оборудованию", len(text) - len(equipment), len(text)))
+        units.append(unit("no_equipment", "Отсутствие требования к профессиональному оборудованию", len(text) - len(equipment), len(text)))
     return tuple(units)
 
 
