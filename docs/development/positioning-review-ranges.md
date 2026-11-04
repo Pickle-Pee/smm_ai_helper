@@ -123,3 +123,39 @@ For new acceptance runs, process-local HTTP timeout 120s is valid with the
 existing graph wall deadline 300s and lease 330s. Both generation and verification
 share the graph's absolute deadline. HTTP timeouts cover transport inactivity,
 not a guaranteed 120s wall allocation. Defaults and rollout flags stay unchanged.
+
+## Downstream fidelity boundary
+
+Full strategy acceptance exposed two defects after a verified POSITIONING:
+EXPERIMENTS converted a tentative next-practice value into customer copy saying
+"получите понятное направление", and CMO described an existing demonstration
+without selecting its evidence. QG acceptance alone did not establish semantic
+fidelity. The saved full course remains a semantic FAIL, not a repaired PASS.
+
+`downstream_fidelity.py` is a shared, bounded canonical check for CMO and
+EXPERIMENTS. It visits statement text, every CMO item, every nested design string,
+assumptions and limitations before result/artifact persistence. Recognized direct
+customer-outcome copy requires a complete verbatim selected request-local
+product_truth/confirmed_business_fact as that leaf (with only closed quotation
+wrappers). Appending a valid source elsewhere cannot authorize a new outcome.
+Demonstrations, audience sources and generic accepted HYPOTHESIS parents never
+become owner proof. Exact attributed evidence-backed competitor facts remain
+foreign quotations, never proof of our product. Control/treatment also reject
+recognized third-person product outcome copy without that owner witness.
+
+An assertion about what an existing demo shows must reproduce the complete
+selected existing_proof in its own leaf. Keep tentative interpretation or planned
+use in another item. New material preparation without an existing-proof assertion
+is allowed; assertive demo-relative clauses have only closed comparison/question
+exceptions. A generic 'create/check/hypothesis' prefix cannot hide a current fact.
+
+Explicit customer learning goals, bounded operator research-result statements
+and whole counterfactual warnings remain allowed. These lexical Ru/En guards are
+not a general NLP entailment/extraction system. Unrecognized arbitrary prose is
+not thereby proven safe; supported paraphrases outside the closed copy contract
+can reject. Independent actual-content acceptance remains separate. Existing
+number guards and source-role limits are not weakened.
+
+No persisted schema or migration changes. Historical accepted artifacts retain
+their historical semantics, including saved diagnostic failures. New generation
+is stricter; a post-response semantic failure does not authorize another POST.

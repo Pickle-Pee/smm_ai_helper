@@ -27,6 +27,7 @@ from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
 from .claim_support import assertion_support
+from .downstream_fidelity import FIDELITY_INSTRUCTION
 
 
 def strategic_parents(request):
@@ -69,7 +70,7 @@ quotes are attributed context, never numerical support for outputs or design fie
 Use HYPOTHESIS or RECOMMENDATION kinds. Formal AB designs without baseline,
 measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
-learning_record explicit in requested canonical outputs. At most three experiments."""
+learning_record explicit in requested canonical outputs. At most three experiments.""" + FIDELITY_INSTRUCTION
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
@@ -191,6 +192,24 @@ citation. Keep all original grounding, design and exact constraint requirements.
         return await self.generate(request, evidence)
 
     def build_result(self, request, output, evidence, parents):
+        from .downstream_fidelity import comparison_quotes, selected_sources, text_leaves, validate_leaf
+
+        local = {item.record.evidence_id: item for item in evidence}
+        for statement in output.outputs:
+            owner, demo = selected_sources(statement, local)
+            validate_leaf(statement.text, owner=owner, demo=demo,
+                          comparisons=comparison_quotes(request, statement),
+                          copy_field=statement.output_name in {"control", "treatment"})
+        # Structured designs are persisted in the first claim. Only that claim's
+        # explicit local selections can witness their product/demo assertions;
+        # another output's quote and strategic HYP parents cannot repair them.
+        design_owner, design_demo = selected_sources(output.outputs[0], local) if output.outputs else ((), ())
+        design_comparisons = comparison_quotes(request, output.outputs[0]) if output.outputs else ()
+        for experiment in output.experiments:
+            for text in text_leaves(experiment.model_dump()):
+                validate_leaf(text, owner=design_owner, demo=design_demo, comparisons=design_comparisons)
+        for text in (*output.assumptions, *output.limitations):
+            validate_leaf(text)
         eligible = strategic_parents(request)
         for output_index, statement in enumerate(output.outputs):
             # Reject before the first output's design/constraint union. That

@@ -102,6 +102,8 @@ class SemanticRule(str, Enum):
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
     RTB_QUOTE_REQUIRED = "rtb_quote_required"
     PRODUCT_ASSURANCE_SUPPORT_REQUIRED = "product_assurance_support_required"
+    CUSTOMER_PROMISE_REQUIRES_OWNER_SOURCE = "customer_promise_requires_owner_source"
+    DEMONSTRATION_ASSERTION_REQUIRES_SOURCE = "demonstration_assertion_requires_source"
 
 
 class NumericContextFailureReason(str, Enum):
