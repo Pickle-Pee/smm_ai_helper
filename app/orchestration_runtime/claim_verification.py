@@ -257,6 +257,17 @@ is not a missing output. Generic filler or a research instruction that never
 supplies the named output does not fulfill it. Source truth is an owner-provided
 assertion, not independent world verification; retain that limitation.
 
+audit_scope is server-derived from exact proposal/source identity and citations,
+never from the producer's declared_kind or a HYPOTHESIS label in the text.
+For authorized_prospective_proposal, assess factual fidelity: CLEAR means no
+invented factual premise or contradiction, not proof that this strategy works.
+Empirical audience preference, benefit and differentiation validation remains
+REQUIRED and is not a factual UNVERIFIABLE finding. Such proposals have the
+closed verdicts CLEAR, UNSUPPORTED and CONTRADICTED. Uncertainty about an actual
+premise, atomic completeness or usefulness can still veto via UNCERTAIN,
+atoms_complete false or output_fulfilled false. Never turn an unproven factual
+premise into a hypothesis. Source_fact and free_prose keep UNVERIFIABLE.
+
 APPROVE requires complete meaningful outputs, all factual premises accounted for,
 no unsupported assertions and preserved conditions. REJECT for a violation;
 UNCERTAIN when actual safety or usefulness remains unresolved. Never edit draft.
@@ -347,11 +358,10 @@ def review_contract(rows, evidence):
     from .serialization import fingerprint
     from app.module_execution.executors.support_schema import check_schema_bounds
 
-    digest = fingerprint({"version": "verdict_units.v4", "outputs": rows, "evidence": evidence})
+    digest = fingerprint({"version": "scoped_verdicts.v5", "outputs": rows, "evidence": evidence})
     outputs, properties = {}, {}
     categories = list(_ALLOWED_ROLES)
     choices = build_strategy_choices(evidence) if any(row.get("role") == "product_identity" for row in evidence.values()) else {}
-    verdicts = ["CLEAR", "UNSUPPORTED", "CONTRADICTED", "UNVERIFIABLE"]
     for row in rows:
         name = row["output_name"]
         tokens = draft_tokens(row["text"])
@@ -366,6 +376,13 @@ def review_contract(rows, evidence):
         ) or identity in strategy_ids]
         spans = draft_spans(row["text"])
         units = source_units_for(row["text"], ids, evidence, spans, name)
+        prospective = any(row["text"].strip() == choice["text"] for choice in authorized_choices)
+        source_fact = any(row["text"] == evidence[identity]["text"] and any(
+            eligible_source(name, category, ReviewEvidence(**evidence[identity])) for category in categories
+        ) for identity in ids)
+        scope = ("authorized_prospective_proposal" if prospective else
+                 "source_fact" if source_fact else "free_prose")
+        verdicts = ["CLEAR", "UNSUPPORTED", "CONTRADICTED"] + ([] if prospective else ["UNVERIFIABLE"])
         source_view = {}
         for identity in ids:
             source = evidence[identity]
@@ -377,6 +394,8 @@ def review_contract(rows, evidence):
                                    for identity, (start, end) in spans.items()},
                          "units": units, "evidence": source_view,
                          "strategy_choices": authorized_choices,
+                         "audit_scope": scope,
+                         "empirical_validation": "REQUIRED" if prospective else "NOT_ASSESSED",
                          "declared_kind": row.get("kind", "HYPOTHESIS"),
                          "purpose": POSITIONING_OUTPUT_PURPOSES.get(name, "Supply the named output without inventing facts.")}
 
@@ -482,9 +501,11 @@ async def review_positioning(model_call, result, evidence):
                    else "verified" if report["assessment"] == "APPROVE"
                    and all(row["atoms_complete"] and row["output_fulfilled"]
                            for row in report["reviews"].values()) else "blocked"),
-        "contract": "verdict_units.v4", "draft_fingerprint": data["draft_fingerprint"],
+        "contract": "scoped_verdicts.v5", "draft_fingerprint": data["draft_fingerprint"],
         "coverage": "complete",
         "source_unit_coverage": {name: list(row["units"]) for name, row in data["outputs"].items()},
+        "audit_scope": {name: row["audit_scope"] for name, row in data["outputs"].items()},
+        "empirical_validation": {name: row["empirical_validation"] for name, row in data["outputs"].items()},
         "output_fulfillment": {name: row["output_fulfilled"] for name, row in report["reviews"].items()},
         "fulfillment_guarantee": ("available" if any(value.get("requires_follow_up") is True
                                    for value in evidence.values()) else "unavailable"),

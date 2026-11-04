@@ -130,7 +130,7 @@ def test_counterfactual_risk_check_is_reviewable_but_negative_audit_still_blocks
     assert decision["status"] == "verified"
 
     def uncertain(report, data):
-        report["reviews"]["claim_risks"]["claims"][0]["verdict"] = "UNVERIFIABLE"
+        report["reviews"]["claim_risks"]["claims"][0]["verdict"] = "UNSUPPORTED"
 
     decision, _ = run_review([row], evidence, uncertain)
     assert decision["assessment"] == "APPROVE"
@@ -185,9 +185,74 @@ def test_negative_verdict_overrides_an_exact_supported_proposal(verdict):
         report["reviews"]["value_proposition"]["claims"][0]["verdict"] = verdict
 
     decision, _ = run_review([output(choice["text"], choice["required_source_ids"])], evidence, reject)
+    if verdict == "UNVERIFIABLE":
+        assert decision == {"status": "blocked", "reason": "invalid_claim_review"}
+        return
     assert decision["assessment"] == "APPROVE"
     assert decision["status"] == "rejected"
     assert decision["findings"][0]["status"] == verdict
+
+
+def test_bound_proposal_separates_factual_fidelity_from_empirical_validation():
+    evidence = verification_inputs(invocation("course"))
+    choice = dynamic_choice(evidence)
+    decision, captured = run_review([output(choice["text"], choice["required_source_ids"])], evidence)
+    view = captured["data"]["outputs"]["value_proposition"]
+    assert view["audit_scope"] == "authorized_prospective_proposal"
+    assert decision["empirical_validation"]["value_proposition"] == "REQUIRED"
+    schema = captured["schema"]["properties"]["reviews"]["properties"]["value_proposition"]
+    assert schema["properties"]["claims"]["items"]["properties"]["verdict"]["enum"] == [
+        "CLEAR", "UNSUPPORTED", "CONTRADICTED"]
+    assert decision["status"] == "verified"
+
+
+@pytest.mark.parametrize("veto", ["UNCERTAIN", "atoms_complete", "output_fulfilled"])
+def test_bound_proposal_actual_uncertainty_and_usefulness_vetoes_are_preserved(veto):
+    evidence = verification_inputs(invocation("course"))
+    choice = dynamic_choice(evidence)
+
+    def uncertain(report, data):
+        if veto == "UNCERTAIN":
+            report["assessment"] = veto
+        else:
+            report["reviews"]["value_proposition"][veto] = False
+
+    decision, _ = run_review([output(choice["text"], choice["required_source_ids"])], evidence, uncertain)
+    assert decision["findings"] == []
+    assert decision["status"] == "blocked"
+
+
+@pytest.mark.parametrize("alteration", ["missing_source", "changed_text", "unsupported_feature"])
+def test_prospective_scope_cannot_be_obtained_by_a_producer_label(alteration):
+    evidence = verification_inputs(invocation("course"))
+    choice = dynamic_choice(evidence)
+    text, ids = choice["text"], choice["required_source_ids"]
+    if alteration == "missing_source":
+        ids = ids[:-1]
+    elif alteration == "changed_text":
+        text = text[:-1]
+    else:
+        text = "Hypothesis: the course is accredited."
+    row = {**output(text, ids), "kind": "HYPOTHESIS"}
+    decision, captured = run_review([row], evidence)
+    assert captured["data"]["outputs"]["value_proposition"]["audit_scope"] == "free_prose"
+    assert decision["status"] == "rejected"
+
+
+def test_source_fact_keeps_unverifiable_verdict_and_all_required_units():
+    req = invocation("course")
+    evidence = verification_inputs(req)
+    identity = next(identity for identity, source in evidence.items() if source["role"] == "product_truth")
+    text = evidence[identity]["text"]
+
+    def uncertain(report, data):
+        report["reviews"]["offer"]["claims"][0]["verdict"] = "UNVERIFIABLE"
+
+    decision, captured = run_review([output(text, [identity], name="offer")], evidence, uncertain)
+    assert captured["data"]["outputs"]["offer"]["audit_scope"] == "source_fact"
+    assert len(decision["source_unit_coverage"]["offer"]) == 4
+    assert decision["status"] == "rejected"
+    assert decision["findings"][0]["status"] == "UNVERIFIABLE"
 
 
 @pytest.mark.parametrize("case", CASES)
@@ -341,6 +406,34 @@ def test_closed_strategy_key_cannot_be_reused_for_another_output():
         asyncio.run(PositioningExecutor(model_call=SelectionModel(tamper), support_selection_wire=True,
             strategy_selection=True).execute(invocation("course")))
     assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+def test_closed_strategy_generation_cannot_promote_a_proposal_to_factual_inference():
+    from app.module_execution.executors.common import ExecutorOutputError, OutputFailureStage
+
+    def tamper(payload, data):
+        payload["outputs"]["demand_context"]["kind"] = "INFERENCE"
+
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(PositioningExecutor(model_call=SelectionModel(tamper), support_selection_wire=True,
+            strategy_selection=True).execute(invocation("course")))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+@pytest.mark.parametrize("name", ["differentiation", "points_of_difference", "USP_directions"])
+def test_closed_strategy_wire_preserves_canonical_hypothesis_only_outputs(name):
+    from jsonschema import Draft202012Validator
+
+    def inspect_schema(payload, data):
+        candidate = model.calls[-1]["response_schema"]
+        payload["outputs"][name]["kind"] = "RECOMMENDATION"
+        assert not Draft202012Validator(candidate).is_valid(payload)
+        payload["outputs"][name]["kind"] = "HYPOTHESIS"
+
+    model = SelectionModel(inspect_schema)
+    result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True,
+        strategy_selection=True).execute(invocation("course")))
+    assert next(row for row in result.payload["outputs"] if row["output_name"] == name)["kind"] == "HYPOTHESIS"
 
 
 @pytest.mark.parametrize("durable", [False, True])

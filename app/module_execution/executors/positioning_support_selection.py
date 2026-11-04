@@ -195,6 +195,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                         {"$ref": "#/$defs/PositioningAudienceSourceText"},
                     ]}
             if strategy_selection and name not in {"offer", "RTB"}:
+                kind_schema = props["kind"]
+                kinds = [kind for kind in ("HYPOTHESIS", "RECOMMENDATION")
+                         if kind in kind_schema.get("enum", (kind,))
+                         and kind_schema.get("const", kind) == kind]
+                if not kinds:
+                    _fail()
+                props["kind"] = dict(kind_schema) if "const" in kind_schema else {**kind_schema, "enum": kinds}
                 options = strategy_catalog.get(name, {})
                 if not options:
                     _fail()

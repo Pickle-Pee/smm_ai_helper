@@ -177,7 +177,7 @@ def test_numeric_offsets_are_not_part_of_the_public_auditor_contract():
     claim_schema = captured["schema"]["properties"]["reviews"]["properties"]["offer"]["properties"]["claims"]["items"]
     assert "span_id" in claim_schema["properties"]
     assert "start_token" not in claim_schema["properties"] and "end_token" not in claim_schema["properties"]
-    assert decision["contract"] == "verdict_units.v4"
+    assert decision["contract"] == "scoped_verdicts.v5"
     assert decision["status"] == "verified"
 
 

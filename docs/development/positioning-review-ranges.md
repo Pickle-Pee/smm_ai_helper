@@ -1,4 +1,4 @@
-# POSITIONING independent review: verdict_units.v4
+# POSITIONING independent review: scoped_verdicts.v5
 
 The immutable canonical draft remains server-owned. The verifier receives
 closed server span IDs for each output. Their text and internal token ranges are
@@ -20,12 +20,25 @@ sixteen-output positive live sample. v3 removes numeric range calculation from
 the model. Exact authorized prospective proposals do not depend on a correct
 auditor category label; labels cannot make an unauthorized proposal eligible.
 
-The v4 wire has only span_id, unit_id, verdict and support_ids per claim.
+The v5 wire has only span_id, unit_id, verdict and support_ids per claim.
 CLEAR is advisory: server-owned source roles and exact source/proposal contracts
 still determine eligibility. The auditor cannot set kind/category/proof status.
 Negative verdicts always survive server mapping. Original producer kind is a
 quality hint, never proof. Per-output purposes explicitly permit a hypothetical
 demand situation/customer job without observed research at WORKING depth.
+
+Server-derived `audit_scope` separates an exact fully cited authorized prospective
+proposal from source facts and arbitrary prose. For a bound proposal the factual
+verdict is CLEAR, UNSUPPORTED or CONTRADICTED; empirical strategy validation is
+explicitly REQUIRED and remains separate from factual fidelity. This does not
+prove the proposed value, preference or distinction. Root UNCERTAIN, incomplete
+atoms and unfulfilled output still veto acceptance. Source facts and free prose
+retain UNVERIFIABLE. An out-of-scope verdict fails schema validation; it is never
+translated to CLEAR. Removing a required citation, changing the proposal or
+labeling an unknown property HYPOTHESIS cannot obtain prospective scope. The
+saved v4 course with seven UNVERIFIABLE verdicts remains rejected. Its report did
+not include reasons, so confusing untested value with factual uncertainty is an
+inference from independently reviewed content, not known model rationale.
 
 For closed recognized complete owner sources, source_fact_units() plans distinct
 predicates with internal Unicode codepoint ranges. The server resolves anchors
@@ -52,6 +65,8 @@ builder supplies generation and review; a model's harmless paraphrase cannot
 accidentally disagree with the positive proof contract. The historical v9 wire
 remains available while this rollout is disabled. No new public configuration
 flag, canonical schema or migration is introduced.
+Strategic selections permit only HYPOTHESIS/RECOMMENDATION, preventing a producer
+from promoting a proposed demand, value or distinction to factual INFERENCE.
 Production string identities enable request-scoped proposals for the actual
 category, task, value, tentative difference and full positioning sentence. Exact
 product/audience slots and each required source ID must match this request and
