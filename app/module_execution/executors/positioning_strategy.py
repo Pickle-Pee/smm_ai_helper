@@ -17,6 +17,25 @@ STRATEGY_SOURCE_ROLES = {
 }
 
 
+def strategy_evidence(evidence):
+    """Use the same source-role mapping for generation and verification choices."""
+    return {item.record.evidence_id: {"role": STRATEGY_SOURCE_ROLES[item.input_key], "text": item.value}
+            for item in evidence if item.input_key in STRATEGY_SOURCE_ROLES and isinstance(item.value, str)}
+
+
+def strategy_selection_catalog(evidence):
+    """Request-scoped opaque choices; only the server renders selected prose."""
+    import hashlib
+    import json
+
+    sources = strategy_evidence(evidence)
+    if not any(row["role"] == "product_identity" for row in sources.values()):
+        return {}
+    return {name: {"strategy_" + hashlib.sha256(json.dumps(choice, sort_keys=True, ensure_ascii=False).encode()).hexdigest(): choice
+                   for choice in choices}
+            for name, choices in build_strategy_choices(sources).items()}
+
+
 POSITIONING_OUTPUT_PURPOSES: dict[str, str] = {
     "category": "Propose a meaningful product category. A clearly tentative category is valid when no alternative/category research was supplied.",
     "frame_of_reference": "Recommend concrete alternatives or a comparison frame. A hypothetical frame is valid without observed competitor or customer research.",

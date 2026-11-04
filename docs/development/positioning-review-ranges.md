@@ -43,6 +43,15 @@ Facts require the complete exact assertion from an eligible cited source;
 demonstrations remain RTB-only. Nonfactual strategy uses a positive closed
 prospective-language contract (`positioning_strategy.py`), supplied to generation.
 Other wording fails closed, including valid paraphrases outside that contract.
+When durable verification and support selection are enabled together, generation
+uses `positioning.support_selection.v10`: each strategic output selects an opaque
+request-scoped STRATEGY key. The server renders its exact proposal and binds all
+required evidence IDs. Offer/RTB select complete SOURCE assertions. Free prose,
+another output's key and unknown keys fail schema validation. The same catalogue
+builder supplies generation and review; a model's harmless paraphrase cannot
+accidentally disagree with the positive proof contract. The historical v9 wire
+remains available while this rollout is disabled. No new public configuration
+flag, canonical schema or migration is introduced.
 Production string identities enable request-scoped proposals for the actual
 category, task, value, tentative difference and full positioning sentence. Exact
 product/audience slots and each required source ID must match this request and

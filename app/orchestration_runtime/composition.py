@@ -61,6 +61,8 @@ def build_production_graph_runtime(*, queue, fixed_queue_key=FIXED_WAKEUP_KEY,
         positioning_minimal_provider_schema=settings.POSITIONING_MINIMAL_PROVIDER_SCHEMA_ENABLED,
         positioning_product_support_wire=settings.POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED,
         positioning_support_selection_wire=settings.POSITIONING_SUPPORT_SELECTION_WIRE_ENABLED,
+        positioning_strategy_selection=(settings.POSITIONING_DURABLE_VERIFICATION_ENABLED
+                                        and settings.POSITIONING_SUPPORT_SELECTION_WIRE_ENABLED),
         experiments_schema_projection=settings.EXPERIMENTS_SCHEMA_PROJECTION_ENABLED,
         experiments_strategic_parent_wire=settings.EXPERIMENTS_STRATEGIC_PARENT_WIRE_ENABLED,
         experiments_support_selection_wire=settings.EXPERIMENTS_SUPPORT_SELECTION_WIRE_ENABLED,

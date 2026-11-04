@@ -194,7 +194,15 @@ class SelectionModel:
                 key = next(key for key, source in sources.items()
                            if source["evidence_id"] == product["evidence_id"])
                 rows[name]["text"] = sourced(key)
-        payload = {"wire_contract_version": WIRE_VERSION, "outputs": rows, "assumptions": [], "limitations": []}
+        if "positioning_strategy_selection" in data:
+            for name, row in rows.items():
+                if name == "offer":
+                    row["text"] = sourced(next(key for key, source in data["positioning_product_sources"].items()
+                                               if source["category"] == "product_truth"))
+                elif name != "RTB":
+                    row["text"] = {"mode": "STRATEGY", "value": next(iter(data["positioning_strategy_selection"][name]))}
+        version = schema["properties"]["wire_contract_version"]["enum"][0]
+        payload = {"wire_contract_version": version, "outputs": rows, "assumptions": [], "limitations": []}
         assert Draft202012Validator(schema).is_valid(payload)
         if self.mutate:
             self.mutate(payload, data)

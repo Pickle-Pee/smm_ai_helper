@@ -291,3 +291,67 @@ def test_all_outputs_pass_canonical_semantics_and_review_with_scoped_choices(cas
     decision, _ = run_review(rows, evidence)
     assert decision["status"] == "verified", decision
     assert decision["findings"] == []
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_closed_strategy_generation_renders_exact_authorized_proposals_and_binds_sources(case):
+    req = invocation(case)
+    evidence = verification_inputs(req)
+    model = SelectionModel()
+    result = asyncio.run(PositioningExecutor(model_call=model, support_selection_wire=True,
+        strategy_selection=True, provider_schema_projection=True).execute(req))
+    rows = list(result.payload["outputs"])
+    assert len(rows) == 16
+    choices = build_strategy_choices(evidence)
+    for row in rows:
+        if row["output_name"] in {"offer", "RTB"}:
+            assert row["text"] == CASES[case][1]
+        else:
+            choice = next(choice for choice in choices[row["output_name"]] if choice["text"] == row["text"])
+            assert set(choice["required_source_ids"]) <= set(row["evidence_ids"])
+    decision, _ = run_review(rows, evidence)
+    assert decision["status"] == "verified", decision
+
+
+@pytest.mark.parametrize("selection", [
+    {"mode": "QUALITATIVE", "value": "The course is accredited."},
+    {"mode": "STRATEGY", "value": "strategy_unknown"},
+    {"mode": "SOURCE", "value": "The course is accredited."},
+])
+def test_closed_strategy_selection_rejects_prose_and_unbound_keys(selection):
+    from app.module_execution.executors.common import ExecutorOutputError, OutputFailureStage
+
+    def tamper(payload, data):
+        payload["outputs"]["category"]["text"] = selection
+
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(PositioningExecutor(model_call=SelectionModel(tamper), support_selection_wire=True,
+            strategy_selection=True).execute(invocation("course")))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+def test_closed_strategy_key_cannot_be_reused_for_another_output():
+    from app.module_execution.executors.common import ExecutorOutputError, OutputFailureStage
+
+    def tamper(payload, data):
+        payload["outputs"]["category"]["text"] = {
+            "mode": "STRATEGY", "value": next(iter(data["positioning_strategy_selection"]["differentiation"]))}
+
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(PositioningExecutor(model_call=SelectionModel(tamper), support_selection_wire=True,
+            strategy_selection=True).execute(invocation("course")))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+@pytest.mark.parametrize("durable", [False, True])
+def test_production_composition_selects_closed_strategy_wire_only_for_durable_rollout(monkeypatch, durable):
+    from app.config import settings
+    from app.orchestration_runtime.composition import build_production_graph_runtime
+    from tests.test_production_graph_worker import queue
+
+    monkeypatch.setattr(settings, "POSITIONING_DURABLE_VERIFICATION_ENABLED", durable)
+    monkeypatch.setattr(settings, "POSITIONING_SUPPORT_SELECTION_WIRE_ENABLED", True)
+    monkeypatch.setattr(settings, "RESPONSES_WORKFLOW_GOVERNANCE_ENABLED", True)
+    runtime = build_production_graph_runtime(queue=queue())
+    executor = runtime.executors.resolve("positioning.v1")
+    assert executor._strategy_selection is durable

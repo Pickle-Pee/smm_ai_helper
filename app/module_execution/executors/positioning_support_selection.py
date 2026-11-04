@@ -14,6 +14,7 @@ from .experiments_support_wire import assertion_text_schema
 from .common import plain
 
 WIRE_VERSION = "positioning.support_selection.v9"
+STRATEGY_WIRE_VERSION = "positioning.support_selection.v10"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
@@ -69,7 +70,7 @@ def rtb_source_catalog(evidence):
     return catalog
 
 
-def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
+def support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids, *, parent_assertions=(), strategy_selection=False):
     """Transform only the exact server-built contract, never unknown constraints."""
     try:
         names, evidence, parent_ids = tuple(names), tuple(evidence), tuple(parent_ids)
@@ -82,6 +83,8 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 or len(names) * sum(map(len, choices.values())) > MAX_REQUIRED_BOOLEAN_FLAGS):
             _fail()
         definitions = {}
+        from .positioning_strategy import strategy_selection_catalog
+        strategy_catalog = strategy_selection_catalog(evidence) if strategy_selection else {}
         local_assertions = _local_assertions(evidence)
         assertions = tuple(value for _, value in local_assertions) + tuple(parent_assertions)
         if any(type(value) is not str for value in assertions):
@@ -191,6 +194,19 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                         {"$ref": "#/$defs/PositioningQualitativeText"},
                         {"$ref": "#/$defs/PositioningAudienceSourceText"},
                     ]}
+            if strategy_selection and name not in {"offer", "RTB"}:
+                options = strategy_catalog.get(name, {})
+                if not options:
+                    _fail()
+                text_definition = "PositioningStrategyText" + str(index)
+                definitions[text_definition] = {"type": "object", "properties": {
+                    "mode": {"type": "string", "enum": ["STRATEGY"]},
+                    "value": {"type": "string", "enum": sorted(options)},
+                }, "required": ["mode", "value"], "additionalProperties": False}
+            elif strategy_selection and name == "offer":
+                if not condition_keys:
+                    _fail()
+                text_definition = "PositioningConditionSourceText"
             props["text"] = {"$ref": "#/$defs/" + text_definition}
             for field in ("output_name", "evidence_ids", "parent_claim_ids"):
                 props.pop(field)
@@ -208,7 +224,7 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         schema["$defs"] = definitions
         schema["properties"]["outputs"] = {"type": "object", "properties": selected_outputs,
             "required": list(names), "additionalProperties": False}
-        schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [WIRE_VERSION]}
+        schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [STRATEGY_WIRE_VERSION if strategy_selection else WIRE_VERSION]}
         schema["required"].append("wire_contract_version")
         check_schema_bounds(schema)
         Draft202012Validator.check_schema(schema)
@@ -217,13 +233,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         _fail()
 
 
-def decode_support_selection_wire(payload, canonical, output_type, names, evidence, parent_ids, *, parent_assertions=()):
+def decode_support_selection_wire(payload, canonical, output_type, names, evidence, parent_ids, *, parent_assertions=(), strategy_selection=False):
     """Only explicit typed choices become arrays; model arrays are forbidden."""
     try:
         names, evidence, parent_ids = tuple(names), tuple(evidence), tuple(parent_ids)
         choices = support_selection_catalog((e.record.evidence_id for e in evidence), parent_ids)
         schema = support_selection_wire_schema(canonical, output_type, names, evidence, parent_ids,
-            parent_assertions=parent_assertions)
+            parent_assertions=parent_assertions, strategy_selection=strategy_selection)
         if type(payload) is not dict or not Draft202012Validator(schema).is_valid(payload):
             _fail()
         result = deepcopy(payload)
@@ -231,6 +247,8 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
         aliases = source_assertion_aliases(evidence, parent_assertions)
         product_sources = product_source_catalog(evidence)
         product_literals = {source["text"] for source in product_sources.values()}
+        from .positioning_strategy import strategy_selection_catalog
+        strategy_catalog = strategy_selection_catalog(evidence) if strategy_selection else {}
         outputs = []
         for name in names:
             statement = result["outputs"][name]
@@ -243,7 +261,11 @@ def decode_support_selection_wire(payload, canonical, output_type, names, eviden
                 selected["evidence"].add(source["evidence_id"])
                 primary = None
             else:
-                if selected_text["mode"] == "SOURCE":
+                if selected_text["mode"] == "STRATEGY":
+                    choice = strategy_catalog[name][value]
+                    value = choice["text"]
+                    selected["evidence"].update(choice["required_source_ids"])
+                elif selected_text["mode"] == "SOURCE":
                     if value in product_sources:
                         source = product_sources[value]
                         if name not in source["allowed_outputs"]:

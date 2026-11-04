@@ -121,7 +121,13 @@ HYPOTHESIS and RECOMMENDATION only, subject to the stricter output-specific kind
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
-                 product_support_wire=False, minimal_provider_schema=False, support_selection_wire=False):
+                 product_support_wire=False, minimal_provider_schema=False, support_selection_wire=False,
+                 strategy_selection=False):
+        if type(strategy_selection) is not bool:
+            raise TypeError("Expected boolean POSITIONING strategy selection policy")
+        if strategy_selection and not support_selection_wire:
+            raise ValueError("POSITIONING strategy selection requires support selection wire")
+        self._strategy_selection = strategy_selection
         if type(support_selection_wire) is not bool:
             raise TypeError("Expected boolean POSITIONING support selection policy")
         if support_selection_wire and (product_support_wire or minimal_provider_schema):
@@ -147,7 +153,8 @@ support (at most 31); do not repeat the selected ID there. parent_claim_ids rema
 available for materially used accepted parents. No inferred or fabricated IDs."""
 
         if support_selection_wire:
-            self.instruction += f"\nUse wire_contract_version {SELECTION_WIRE_VERSION}." + """
+            from .positioning_support_selection import STRATEGY_WIRE_VERSION
+            self.instruction += f"\nUse wire_contract_version {STRATEGY_WIRE_VERSION if strategy_selection else SELECTION_WIRE_VERSION}." + """
 Return outputs as an object keyed by exactly the requested output names. Do not
 emit evidence_ids/parent_claim_ids arrays. Use positioning_support_selection_catalog
 aliases: select primary_support_key for each output except RTB and set every closed
@@ -241,16 +248,14 @@ The numeric enum is an explicit generation alternative, not independent evidence
 every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
-        from .positioning_strategy import STRATEGY_OPTIONS, build_strategy_choices, STRATEGY_SOURCE_ROLES
+        from .positioning_strategy import STRATEGY_OPTIONS, build_strategy_choices, strategy_evidence, strategy_selection_catalog
 
         data["positioning_strategy_options"] = {
             name: list(STRATEGY_OPTIONS[name]) for name in request.expected_outputs
         }
-        strategy_evidence = {item.record.evidence_id: {
-            "role": STRATEGY_SOURCE_ROLES[item.input_key], "text": item.value,
-        } for item in evidence if item.input_key in STRATEGY_SOURCE_ROLES and isinstance(item.value, str)}
-        choices = (build_strategy_choices(strategy_evidence)
-                   if any(row["role"] == "product_identity" for row in strategy_evidence.values()) else {})
+        sources = strategy_evidence(evidence)
+        choices = (build_strategy_choices(sources)
+                   if any(row["role"] == "product_identity" for row in sources.values()) else {})
         if choices:
             data["positioning_strategy_choices"] = {
                 name: list(choices.get(name, ())) for name in request.expected_outputs
@@ -258,6 +263,13 @@ every numerical statement still requires its actually selected cited source."""
             data["positioning_strategy_options"] = {
                 name: [choice["text"] for choice in choices.get(name, ())] for name in request.expected_outputs
             }
+        if self._strategy_selection:
+            data["positioning_strategy_selection"] = strategy_selection_catalog(evidence)
+            data["positioning_strategy_selection_usage"] = (
+                "For every output except offer and RTB select text mode STRATEGY and its request-scoped key. "
+                "The server renders the exact proposed text and binds its required sources. Never paraphrase. "
+                "Offer and RTB require SOURCE keys preserving complete owner conditions. "
+                "Assess the actual proposals for usefulness; membership alone is not semantic acceptance.")
         if self._support_selection_wire:
             context = data["context"]
             data = {**data, "context": {
@@ -299,7 +311,8 @@ every numerical statement still requires its actually selected cited source."""
                 len(request.expected_outputs) * sum(map(len, choices.values())))
             return support_selection_wire_schema(validation_schema, self.output_type_for(request, evidence),
                 request.expected_outputs, evidence, parents, parent_assertions=tuple(
-                    text for claim in parents.values() for text in assertion_support(claim.value)))
+                    text for claim in parents.values() for text in assertion_support(claim.value)),
+                strategy_selection=self._strategy_selection)
         if self._product_support_wire:
             return product_wire_schema(validation_schema, evidence)
         return super().wire_schema_for(request, validation_schema, evidence)
@@ -311,7 +324,8 @@ every numerical statement still requires its actually selected cited source."""
             canonical = support_response_schema(output_type, (e.record.evidence_id for e in evidence), parents)
             return decode_support_selection_wire(payload, canonical, output_type,
                 request.expected_outputs, evidence, parents, parent_assertions=tuple(
-                    text for claim in parents.values() for text in assertion_support(claim.value)))
+                    text for claim in parents.values() for text in assertion_support(claim.value)),
+                strategy_selection=self._strategy_selection)
         if self._product_support_wire:
             return decode_product_wire(payload, evidence)
         return super().decode_wire_payload(request, payload, evidence)
