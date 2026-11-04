@@ -148,16 +148,13 @@ def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, 
             calls.append("review")
             reviews = {}
             for name, row in data["outputs"].items():
-                rtb = name in {"RTB", "offer"}
-                text = row["spans"]["whole"]
-                support = [
-                    identity for identity, source in row["evidence"].items()
-                    if rtb and source["role"] in {"product_truth", "demonstration"} and source["text"] == text
-                ]
-                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
-                    "span_id": "whole", "category": "product" if rtb else "strategy",
-                    "kind": "fact" if rtb else "hypothesis", "status": "SUPPORTED" if rtb else "HYPOTHESIS",
-                    "support_ids": support,
+                claims = [{"span_id": unit["span_id"], "unit_id": identity,
+                           "verdict": "CLEAR", "support_ids": unit["evidence_ids"]}
+                          for identity, unit in row["units"].items()]
+                exact_sources = [identity for identity, source in row["evidence"].items()
+                                 if source["text"] == row["spans"]["whole"]]
+                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": claims or [{
+                    "span_id": "whole", "unit_id": "free", "verdict": "CLEAR", "support_ids": exact_sources,
                 }]}
             output = json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": assessment, "reviews": reviews})
         return httpx.Response(200, json={"status": "completed", "output_text": output})

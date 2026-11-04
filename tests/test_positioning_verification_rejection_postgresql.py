@@ -55,16 +55,14 @@ def test_worker_blocks_fulfillment_contradiction_despite_approve(mvp_database, m
             reviews = {}
             for name, row in data["outputs"].items():
                 text = row["spans"]["whole"]
-                rtb = name == "RTB"
-                ids = [identity for identity, evidence in row["evidence"].items()
-                       if rtb and evidence["role"] == "product_truth" and evidence["text"] == text]
                 if name == "offer":
                     assert text == promise
                     assert any(evidence.get("requires_follow_up") is True for evidence in row["evidence"].values())
-                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
-                    "span_id": "whole",
-                    "category": "product" if rtb else "strategy", "kind": "fact" if rtb else "hypothesis",
-                    "status": "SUPPORTED" if rtb else "HYPOTHESIS", "support_ids": ids,
+                claims = [{"span_id": unit["span_id"], "unit_id": identity,
+                           "verdict": "CLEAR", "support_ids": unit["evidence_ids"]}
+                          for identity, unit in row["units"].items()]
+                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": claims or [{
+                    "span_id": "whole", "unit_id": "free", "verdict": "CLEAR", "support_ids": [],
                 }]}
             output = json.dumps({"draft_fingerprint": data["draft_fingerprint"],
                                  "assessment": "APPROVE", "reviews": reviews})

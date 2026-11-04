@@ -161,8 +161,8 @@ def test_independent_approval_does_not_override_deterministic_findings():
         data = json.loads(kwargs["text"])
         assert data["outputs"]["offer"]["spans"]["whole"] == text
         return json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE", "reviews": {
-            "offer": {"atoms_complete": True, "output_fulfilled": True, "claims": [{"span_id": "whole", "category": "product",
-                "kind": "fact", "status": "SUPPORTED", "support_ids": ["evd_product"]}]},
+            "offer": {"atoms_complete": True, "output_fulfilled": True, "claims": [{"span_id": "whole", "unit_id": "free",
+                "verdict": "CLEAR", "support_ids": ["evd_product"]}]},
         }})
 
     decision = asyncio.run(review_positioning(auditor, result, {

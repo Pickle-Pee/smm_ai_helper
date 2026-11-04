@@ -19,9 +19,19 @@ def statement(text, *, name="offer", ids=("evd_product",)):
     return {"output_name": name, "text": text, "evidence_ids": list(ids), "parent_claim_ids": []}
 
 
-def atom(span_id="whole", *, category="strategy", kind="hypothesis", status="HYPOTHESIS", ids=()):
-    return {"span_id": span_id, "category": category,
-            "kind": kind, "status": status, "support_ids": list(ids)}
+def atom(span_id="whole", unit_id="free", verdict="CLEAR", ids=(), *, category=None, kind=None, status=None):
+    # Transitional callers may name an old positive label; it never enters the
+    # wire. Source/proposal types are owned exclusively by the server in v4.
+    if status in {"UNSUPPORTED", "CONTRADICTED", "UNVERIFIABLE"}:
+        verdict = status
+    return {"span_id": span_id, "unit_id": unit_id, "verdict": verdict, "support_ids": list(ids)}
+
+
+def unit_claims(output, *, ids=()):
+    if output["units"]:
+        return [atom(unit["span_id"], identity, ids=unit["evidence_ids"])
+                for identity, unit in output["units"].items()]
+    return [atom(ids=ids)]
 
 
 def audit(rows, evidence, mutate=None):
@@ -30,7 +40,7 @@ def audit(rows, evidence, mutate=None):
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         report = {"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE", "reviews": {
-            name: {"atoms_complete": True, "output_fulfilled": True, "claims": [atom()]}
+            name: {"atoms_complete": True, "output_fulfilled": True, "claims": unit_claims(output)}
             for name, output in data["outputs"].items()
         }}
         if mutate:
@@ -48,10 +58,7 @@ def source(text, *, role="product_truth"):
 
 def supported(report, data):
     for name, output in data["outputs"].items():
-        report["reviews"][name]["claims"] = [atom(
-            category="product", kind="fact", status="SUPPORTED",
-            ids=output["evidence"],
-        )]
+        report["reviews"][name]["claims"] = unit_claims(output, ids=output["evidence"])
 
 
 def test_schema_and_server_reject_another_outputs_source():
@@ -170,7 +177,7 @@ def test_numeric_offsets_are_not_part_of_the_public_auditor_contract():
     claim_schema = captured["schema"]["properties"]["reviews"]["properties"]["offer"]["properties"]["claims"]["items"]
     assert "span_id" in claim_schema["properties"]
     assert "start_token" not in claim_schema["properties"] and "end_token" not in claim_schema["properties"]
-    assert decision["contract"] == "closed_spans.v3"
+    assert decision["contract"] == "verdict_units.v4"
     assert decision["status"] == "verified"
 
 
@@ -185,13 +192,10 @@ def test_complete_character_coverage_does_not_imply_atomic_completeness():
 
 
 def test_hypothesis_cannot_authorize_an_unsupported_product_property():
-    def product(report, data):
-        report["reviews"]["offer"]["claims"][0]["category"] = "product"
-
-    decision, _ = audit([statement("Learners receive personal feedback.")],
-                        {"evd_product": source("Learners receive written feedback.")}, product)
+    row = {**statement("Learners receive personal feedback."), "kind": "HYPOTHESIS"}
+    decision, captured = audit([row], {"evd_product": source("Learners receive written feedback.")})
     assert decision["status"] == "rejected"
-    assert decision["findings"][0]["reason"] == "unverified_factual_premise"
+    assert captured["data"]["outputs"]["offer"]["declared_kind"] == "HYPOTHESIS"
 
 
 @pytest.mark.parametrize("text", [
@@ -202,7 +206,6 @@ def test_hypothesis_cannot_authorize_an_unsupported_product_property():
 def test_strategy_label_cannot_hide_a_known_factual_premise(text):
     decision, _ = audit([statement(text)], {"evd_product": source("Learners practice photography.")})
     assert decision["status"] == "rejected"
-    assert decision["findings"][0]["reason"] == "unverified_factual_premise"
 
 
 @pytest.mark.parametrize("split", [False, True])
@@ -215,7 +218,6 @@ def test_unknown_predicate_cannot_be_approved_as_strategy(split):
 
     decision, _ = audit([statement("The course is accredited.")], {}, mutate)
     assert decision["status"] == "rejected"
-    assert any(finding["reason"] == "unverified_factual_premise" for finding in decision["findings"])
 
 
 def test_dividing_a_factual_premise_between_strategy_ranges_cannot_hide_it():
@@ -228,7 +230,6 @@ def test_dividing_a_factual_premise_between_strategy_ranges_cannot_hide_it():
 
     decision, _ = audit([statement(text)], {"evd_product": source("Learners receive written feedback.")}, split)
     assert decision["status"] == "rejected"
-    assert any(finding["reason"] == "unverified_factual_premise" for finding in decision["findings"])
 
 
 @pytest.mark.parametrize("text,kind,status", [
@@ -236,12 +237,10 @@ def test_dividing_a_factual_premise_between_strategy_ranges_cannot_hide_it():
     ("Ask participants whether the timing meets their needs.", "recommendation", "RECOMMENDATION"),
 ])
 def test_prospective_research_questions_and_recommendations_remain_useful(text, kind, status):
-    def research(report, data):
-        report["reviews"]["offer"]["claims"][0].update(kind=kind, status=status)
-
-    decision, _ = audit([statement(text)], {}, research)
+    decision, _ = audit([{**statement(text), "kind": status}], {})
     assert decision["status"] == "verified"
     assert decision["findings"] == []
+    assert decision["reviews"][0]["claims"][0]["kind"] == kind
 
 
 def test_server_resolves_the_entire_eligible_source_without_auditor_quotations():
@@ -379,3 +378,81 @@ def test_first_party_backed_competitor_parent_is_not_verifier_evidence():
     first_party = replace(parent, payload={}, normalized_result=normalized)
     evidence = verification_inputs(parent_request(first_party))
     assert claim.claim_id not in evidence
+
+
+CERAMICS_UNITS_TEXT = "Материалы и обжиг включены. Участники забирают изделия после обжига в другой день."
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "wrong_id", "wrong_anchor", "wrong_source"])
+def test_required_source_units_cannot_be_omitted_or_reassigned_despite_text_coverage(change):
+    def mutate(report, data):
+        claims = report["reviews"]["offer"]["claims"]
+        if change == "missing":
+            claims.pop(1)  # firing shares its textual anchor with materials
+        elif change == "duplicate":
+            claims[1] = dict(claims[0])
+        elif change == "wrong_id":
+            claims[1]["unit_id"] = "free"
+        elif change == "wrong_anchor":
+            claims[1]["span_id"] = "whole"
+        else:
+            claims[1]["support_ids"] = ["evd_foreign"]
+        if change in {"missing", "duplicate", "wrong_id"}:
+            spans = data["outputs"]["offer"]["spans"]
+            assert "".join(dict.fromkeys(spans[claim["span_id"]] for claim in claims)) == CERAMICS_UNITS_TEXT
+
+    decision, captured = audit([statement(CERAMICS_UNITS_TEXT)], {"evd_product": source(CERAMICS_UNITS_TEXT)}, mutate)
+    assert decision == {"status": "blocked", "reason": "invalid_claim_review"}
+    if change == "duplicate":
+        # Schema shape and character coverage are insufficient; the server
+        # independently verifies the prescribed set of semantic unit IDs.
+        assert Draft202012Validator(captured["schema"]).is_valid(captured["report"])
+
+
+def test_materials_and_firing_need_distinct_judgments_even_with_identical_textual_anchors():
+    decision, captured = audit([statement(CERAMICS_UNITS_TEXT)], {"evd_product": source(CERAMICS_UNITS_TEXT)})
+    view = captured["data"]["outputs"]["offer"]
+    assert set(view["units"]) == {"materials_included", "firing_included", "later_collection"}
+    material = view["units"]["materials_included"]
+    firing = view["units"]["firing_included"]
+    assert material["span_id"] != firing["span_id"]
+    assert view["spans"][material["span_id"]] == view["spans"][firing["span_id"]]
+    assert len(captured["report"]["reviews"]["offer"]["claims"]) == 3
+    assert decision["status"] == "verified"
+    assert decision["source_unit_coverage"]["offer"] == list(view["units"])
+
+
+def test_unicode_source_unit_quotes_and_anchors_preserve_the_original_source():
+    text = "Курс Свет📷 cafe\u0301 👩🏽‍🎨 длится 6 недель. Участники выполняют практические задания и получают письменную обратную связь."
+    decision, captured = audit([statement(text)], {"evd_product": source(text)})
+    view = captured["data"]["outputs"]["offer"]
+    facts = {fact["unit_id"]: fact for fact in view["evidence"]["evd_product"]["known_facts"]}
+    assert facts["duration"]["quote"] == "Курс Свет📷 cafe\u0301 👩🏽‍🎨 длится 6 недель."
+    assert facts["practical_tasks"]["quote"] == "Участники выполняют практические задания"
+    assert facts["written_feedback"]["quote"] == "и получают письменную обратную связь."
+    assert view["spans"]["whole"] == text
+    for identity, unit in view["units"].items():
+        assert view["spans"][unit["span_id"]].strip() == facts[identity]["quote"]
+    assert decision["status"] == "verified"
+
+
+@pytest.mark.parametrize("field,value", [("category", "strategy"), ("kind", "hypothesis"), ("status", "HYPOTHESIS")])
+def test_model_proof_labels_are_forbidden_even_for_a_safe_known_proposal(field, value):
+    def relabel(report, data):
+        report["reviews"]["offer"]["claims"][0][field] = value
+
+    decision, _ = audit([statement("Test whether beginners value knowing what to practice next.")], {}, relabel)
+    assert decision == {"status": "blocked", "reason": "invalid_claim_review"}
+
+
+def test_provider_capability_cannot_mutate_the_authoritative_review_schema():
+    async def mutate_schema(**kwargs):
+        data = json.loads(kwargs["text"])
+        kwargs["response_schema"].clear()
+        return json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE",
+            "reviews": {"offer": {"atoms_complete": True, "output_fulfilled": True,
+                                  "claims": [atom()]}}, "unknown_root_field": True})
+
+    result = SimpleNamespace(payload={"outputs": [statement("Test whether beginners value knowing what to practice next.")]})
+    decision = asyncio.run(review_positioning(mutate_schema, result, {}))
+    assert decision == {"status": "blocked", "reason": "invalid_claim_review"}

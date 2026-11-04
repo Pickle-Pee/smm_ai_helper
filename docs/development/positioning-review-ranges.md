@@ -1,6 +1,6 @@
-# POSITIONING independent review: closed_spans.v3
+# POSITIONING independent review: verdict_units.v4
 
-The immutable canonical draft remains server-owned. The verifier receives a
+The immutable canonical draft remains server-owned. The verifier receives
 closed server span IDs for each output. Their text and internal token ranges are
 formed by the server; the auditor never counts inclusive/exclusive boundaries.
 It never reproduces the draft or source quotes. A hash binds the report to the
@@ -19,6 +19,24 @@ v2 numeric-range interface produced three end-boundary coverage failures on a
 sixteen-output positive live sample. v3 removes numeric range calculation from
 the model. Exact authorized prospective proposals do not depend on a correct
 auditor category label; labels cannot make an unauthorized proposal eligible.
+
+The v4 wire has only span_id, unit_id, verdict and support_ids per claim.
+CLEAR is advisory: server-owned source roles and exact source/proposal contracts
+still determine eligibility. The auditor cannot set kind/category/proof status.
+Negative verdicts always survive server mapping. Original producer kind is a
+quality hint, never proof. Per-output purposes explicitly permit a hypothetical
+demand situation/customer job without observed research at WORKING depth.
+
+For closed recognized complete owner sources, source_fact_units() plans distinct
+predicates with internal Unicode codepoint ranges. The server resolves anchors
+and prescribes their evidence IDs. Every unit must appear exactly once with its
+assigned anchor and source; duplicates or omissions fail even at full character
+coverage. Materials and firing are separate units sharing a sentence. Collection
+retains its full after-firing/another-day condition. Known source-plan coverage is
+reported separately from model-reported atomic completeness. Unknown source
+shapes have no such deterministic unit guarantee: an empty unit plan does not
+prove semantic completeness. This is bounded typing, not general NLP extraction.
+
 
 APPROVE cannot authorize arbitrary free prose by labeling it HYPOTHESIS.
 Facts require the complete exact assertion from an eligible cited source;

@@ -13,7 +13,7 @@ from app.module_execution.executors.positioning_strategy import STRATEGY_OPTIONS
 from app.module_registry import ModuleId
 from app.orchestration_runtime.claim_verification import review_positioning, verification_inputs
 from tests.test_module_executors import FakeModel, dispatch, request
-from tests.test_positioning_review_ranges import atom, audit, source, statement
+from tests.test_positioning_review_ranges import audit, source, statement
 
 
 COMPETITIVE_OUTPUTS = (
@@ -24,12 +24,14 @@ PRODUCT_OUTPUTS = (
 )
 
 
-def factual_auditor(category, identity="evd_source"):
+def factual_auditor(identity="evd_source"):
     def mutate(report, data):
         for name, row in data["outputs"].items():
-            report["reviews"][name]["claims"] = [atom(
-                "whole", category=category, kind="fact", status="SUPPORTED", ids=(identity,),
-            )]
+            report["reviews"][name]["claims"] = [
+                {"span_id": unit["span_id"], "unit_id": unit_id,
+                 "verdict": "CLEAR", "support_ids": [identity]}
+                for unit_id, unit in row["units"].items()
+            ] or [{"span_id": "whole", "unit_id": "free", "verdict": "CLEAR", "support_ids": [identity]}]
     return mutate
 
 
@@ -39,11 +41,11 @@ def factual_auditor(category, identity="evd_source"):
     "The competitor site states: A certificate is included.",
     "На сайте конкурента указано: участники получают сертификат.",
 ])
-def test_competitor_source_cannot_support_own_product_output_even_when_auditor_calls_it_competitor(name, text):
+def test_competitor_source_cannot_support_own_product_output_even_when_auditor_marks_it_clear(name, text):
     row = statement(text, name=name, ids=())
     row["parent_claim_ids"] = ["clm_competitor"]
     decision, _ = audit([row], {"clm_competitor": source(text, role="competitor")},
-                        factual_auditor("competitor", "clm_competitor"))
+                        factual_auditor("clm_competitor"))
     assert decision["status"] in {"rejected", "blocked"}
 
 
@@ -53,7 +55,7 @@ def test_competitor_property_requires_explicit_attribution_even_in_a_comparison_
     row = statement(text, name=name, ids=())
     row["parent_claim_ids"] = ["clm_competitor"]
     decision, _ = audit([row], {"clm_competitor": source(text, role="competitor")},
-                        factual_auditor("competitor", "clm_competitor"))
+                        factual_auditor("clm_competitor"))
     assert decision["status"] in {"rejected", "blocked"}
 
 
@@ -66,7 +68,7 @@ def test_attributed_competitor_fact_can_support_an_appropriate_comparison_output
     row = statement(text, name=name, ids=())
     row["parent_claim_ids"] = ["clm_competitor"]
     decision, _ = audit([row], {"clm_competitor": source(text, role="competitor")},
-                        factual_auditor("competitor", "clm_competitor"))
+                        factual_auditor("clm_competitor"))
     assert decision["status"] == "verified"
 
 
@@ -74,7 +76,7 @@ def test_attributed_competitor_fact_can_support_an_appropriate_comparison_output
 def test_audience_source_is_eligible_for_audience_and_need_outputs(name):
     text = "Adults without previous experience."
     decision, _ = audit([statement(text, name=name, ids=("evd_source",))],
-                        {"evd_source": source(text, role="audience")}, factual_auditor("audience"))
+                        {"evd_source": source(text, role="audience")}, factual_auditor())
     assert decision["status"] == "verified"
 
 
@@ -82,14 +84,14 @@ def test_audience_source_is_eligible_for_audience_and_need_outputs(name):
 def test_audience_profile_cannot_authorize_a_product_feature(name):
     text = "Participants receive certificates."
     decision, _ = audit([statement(text, name=name, ids=("evd_source",))],
-                        {"evd_source": source(text, role="audience")}, factual_auditor("audience"))
+                        {"evd_source": source(text, role="audience")}, factual_auditor())
     assert decision["status"] in {"rejected", "blocked"}
 
 
 def test_product_truth_is_not_an_audience_profile():
     text = "No professional equipment is required."
     decision, _ = audit([statement(text, name="target", ids=("evd_source",))],
-                        {"evd_source": source(text)}, factual_auditor("product"))
+                        {"evd_source": source(text)}, factual_auditor())
     assert decision["status"] in {"rejected", "blocked"}
 
 
@@ -97,7 +99,7 @@ def test_product_truth_is_not_an_audience_profile():
 def test_demonstration_is_limited_to_proof_output(name, expected):
     text = "A demonstration sample shows a glazed cup."
     decision, _ = audit([statement(text, name=name, ids=("evd_source",))],
-                        {"evd_source": source(text, role="demonstration")}, factual_auditor("product"))
+                        {"evd_source": source(text, role="demonstration")}, factual_auditor())
     if expected == "verified":
         assert decision["status"] == expected
     else:
@@ -137,17 +139,14 @@ def test_production_executor_and_reviewer_cannot_launder_competitor_certificate_
             data = json.loads(kwargs["text"])
             reviews = {}
             for name, row in data["outputs"].items():
-                ids, category, kind, status = [], "strategy", "hypothesis", "HYPOTHESIS"
-                if name == "RTB":
-                    rendered = row["spans"]["whole"]
-                    ids = [identity for identity, item in row["evidence"].items()
-                           if item["text"] == rendered and item["role"] == "product_truth"]
-                    category, kind, status = "product", "fact", "SUPPORTED"
+                claims = [{"span_id": unit["span_id"], "unit_id": identity,
+                           "verdict": "CLEAR", "support_ids": unit["evidence_ids"]}
+                          for identity, unit in row["units"].items()]
                 if name == "value_proposition":
-                    ids, category, kind, status = [parent_id], "competitor", "fact", "SUPPORTED"
-                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [atom(
-                    "whole", category=category, kind=kind, status=status, ids=ids,
-                )]}
+                    claims = [{"span_id": "whole", "unit_id": "free", "verdict": "CLEAR", "support_ids": [parent_id]}]
+                reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": claims or [{
+                    "span_id": "whole", "unit_id": "free", "verdict": "CLEAR", "support_ids": [],
+                }]}
             return json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE", "reviews": reviews})
 
         decision = await review_positioning(auditor, result, evidence)

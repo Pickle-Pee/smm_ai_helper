@@ -17,6 +17,13 @@ def test_catalogue_covers_each_positioning_output_with_distinct_prospective_opti
     assert len(all_options) == len(set(all_options))
 
 
+def test_output_purposes_cover_exactly_the_positioning_contract():
+    from app.module_execution.executors.positioning_strategy import POSITIONING_OUTPUT_PURPOSES
+
+    assert set(POSITIONING_OUTPUT_PURPOSES) == set(ModuleRegistry.load().get(ModuleId.POSITIONING).outputs)
+    assert len(POSITIONING_OUTPUT_PURPOSES) == 16
+
+
 @pytest.mark.parametrize("text", [
     "Test whether beginners value knowing what to practice next.",
     "Ask participants whether the timing meets their needs.",
@@ -273,3 +280,78 @@ def test_explicit_domain_prefix_variants_enable_the_correct_profile(product, pro
     truth = COURSE_TRUTH if profile == "photography" else CERAMICS_TRUTH
     choices = build_strategy_choices(choice_evidence(truth, product))
     assert "освоение новой практики" not in choices["category"][0]["text"]
+
+
+@pytest.mark.parametrize("duration,equipment,expected", [
+    (False, True, ("practical_tasks", "written_feedback", "no_equipment")),
+    (False, False, ("practical_tasks", "written_feedback")),
+    (True, True, ("duration", "practical_tasks", "written_feedback", "no_equipment")),
+    (True, False, ("duration", "practical_tasks", "written_feedback")),
+])
+def test_known_course_source_has_separate_semantic_units(duration, equipment, expected):
+    from app.module_execution.executors.positioning_strategy import source_fact_units
+
+    text = ("Курс ФотоСтарт длится 6 недель. " if duration else "")
+    text += "Участники выполняют практические задания и получают письменную обратную связь."
+    if equipment:
+        text += " Для занятий не требуется профессиональное оборудование."
+    units = source_fact_units(text)
+    assert tuple(row["unit_id"] for row in units) == expected
+    slices = {row["unit_id"]: text[row["start_char"]:row["end_char"]] for row in units}
+    assert slices["practical_tasks"] == "Участники выполняют практические задания"
+    assert slices["written_feedback"] == "и получают письменную обратную связь."
+    if duration:
+        assert slices["duration"] == "Курс ФотоСтарт длится 6 недель."
+    if equipment:
+        assert slices["no_equipment"] == "Для занятий не требуется профессиональное оборудование."
+    assert all(set(row) == {"unit_id", "label", "start_char", "end_char"}
+               and 0 <= row["start_char"] < row["end_char"] <= len(text) for row in units)
+
+
+def test_ceramics_materials_and_firing_are_distinct_units_with_a_shared_anchor():
+    from app.module_execution.executors.positioning_strategy import source_fact_units
+
+    materials, firing, collection = source_fact_units(CERAMICS_TRUTH)
+    assert materials["unit_id"] == "materials_included"
+    assert firing["unit_id"] == "firing_included"
+    assert (materials["start_char"], materials["end_char"]) == (firing["start_char"], firing["end_char"])
+    assert materials["label"] != firing["label"]
+    assert CERAMICS_TRUTH[materials["start_char"]:materials["end_char"]] == "Материалы и обжиг включены."
+    assert collection["unit_id"] == "later_collection"
+    assert CERAMICS_TRUTH[collection["start_char"]:collection["end_char"]] == (
+        "Участники забирают изделия после обжига в другой день."
+    )
+
+
+@pytest.mark.parametrize("name", ["Фото📷Старт", "Свет cafe\u0301 👩🏽‍🎨", "Участники выполняют практические задания"])
+def test_source_units_use_original_unicode_codepoints_even_with_repeated_words_in_title(name):
+    from app.module_execution.executors.positioning_strategy import source_fact_units
+
+    prefix = f"Курс {name} длится 6 недель."
+    text = prefix + " Участники выполняют практические задания и получают письменную обратную связь."
+    duration, practical, feedback = source_fact_units(text)
+    assert duration["start_char"] == 0 and duration["end_char"] == len(prefix)
+    assert practical["start_char"] == len(prefix) + 1
+    assert text[duration["start_char"]:duration["end_char"]] == prefix
+    assert text[practical["start_char"]:practical["end_char"]] == "Участники выполняют практические задания"
+    assert text[feedback["start_char"]:feedback["end_char"]] == "и получают письменную обратную связь."
+
+
+@pytest.mark.parametrize("text", [
+    "Возможно, " + COURSE_TRUTH,
+    "Пример: " + COURSE_TRUTH,
+    COURSE_TRUTH + " Дополнительные условия нужно уточнить.",
+    COURSE_TRUTH.replace("6 недель", "7 недель"),
+    COURSE_TRUTH.replace("письменную", "персональную"),
+    COURSE_TRUTH.replace("оборудование.", "оборудование?"),
+    "Если участник согласен. " + CERAMICS_TRUTH,
+    CERAMICS_TRUTH.replace("в другой день", "в тот же день"),
+    "Материалы и обжиг включены.",
+    "Получение после обжига.",
+    " ",
+    None,
+])
+def test_unknown_or_altered_whole_source_has_no_unit_plan(text):
+    from app.module_execution.executors.positioning_strategy import source_fact_units
+
+    assert source_fact_units(text) == ()

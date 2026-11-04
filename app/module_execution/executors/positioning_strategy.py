@@ -17,6 +17,26 @@ STRATEGY_SOURCE_ROLES = {
 }
 
 
+POSITIONING_OUTPUT_PURPOSES: dict[str, str] = {
+    "category": "Propose a meaningful product category. A clearly tentative category is valid when no alternative/category research was supplied.",
+    "frame_of_reference": "Recommend concrete alternatives or a comparison frame. A hypothetical frame is valid without observed competitor or customer research.",
+    "target": "Identify the intended audience using the supplied audience scope; do not add unsupported audience characteristics or product conditions.",
+    "demand_context": "At WORKING depth, propose a clearly hypothetical situation in which the audience might consider the offer. Observed customer research is not required for an explicit HYPOTHESIS.",
+    "JTBD_frame": "At WORKING depth, propose a clearly hypothetical task or desired change for the audience. An audience's hypothetical desired change is not a promise that the product delivers that outcome; observed customer research is not required.",
+    "value_proposition": "Propose value grounded in authorized product terms. A feature-based value hypothesis is valid; its benefit must not become a guaranteed outcome.",
+    "differentiation": "Propose a tentative distinction to test. Observed comparative superiority or competitor research is not required for an explicit hypothesis; never assert unsupported superiority.",
+    "points_of_parity": "Propose expected category criteria as hypotheses to validate. Explicit hypothetical expectations are valid without observed category research.",
+    "points_of_difference": "Propose specific distinctions in the offer or its communication as hypotheses. Do not invent competitor properties or imply the distinctions are already proven.",
+    "RTB": "Present the complete actual cited owner substantiation or eligible demonstration, preserving all conditions. Owner assertions are not independent proof; demonstrations do not establish recurring product properties.",
+    "positioning_statement": "Propose a coherent positioning combining the intended audience, product identity, category and grounded value angle; keep unvalidated value and comparative reasoning explicitly tentative.",
+    "USP_directions": "Provide concrete, distinct messaging directions to test. Tentative directions need not establish observed uniqueness or competitor superiority.",
+    "offer": "Preserve the complete authorized offer conditions, including fulfillment requirements and limits; do not invent commercial or operational terms.",
+    "message_hierarchy": "Order actual product-specific messages and supporting conditions into a usable communication hierarchy; a list of generic section labels is insufficient.",
+    "claim_risks": "Identify specific counterfactual checks and possible misreadings before publication. Warning against an unsupported feature or promise does not assert that it exists.",
+    "validation_plan.": "Specify concrete questions or test targets for the proposed positioning and its uncertainties, without invented metrics, numeric thresholds or reported research findings.",
+}
+
+
 STRATEGY_OPTIONS: dict[str, tuple[str, ...]] = {
     "category": (
         "Проверить, как аудитория определяет категорию при выборе.",
@@ -146,6 +166,50 @@ _CERAMICS_TRUTH = (
 )
 _PHOTOGRAPHY_IDENTITY = re.compile(r"Курс (?:мобильной )?фотографии(?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
 _CERAMICS_IDENTITY = re.compile(r"Мастер-класс (?:по )?керамик[еи](?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
+
+
+def source_fact_units(text: str) -> tuple[dict, ...]:
+    """Plan known source propositions only after a complete closed-text match.
+
+    Offsets are half-open Python Unicode codepoint ranges in the original source,
+    for server use only. Sharing an anchor does not merge semantic propositions:
+    materials and firing remain separate units even though their sentence is
+    shared. This is a bounded source plan, not general semantic extraction. The
+    caller must independently establish the source's authorized role.
+    """
+    if type(text) is not str:
+        return ()
+
+    def unit(identity, label, start, end):
+        return {"unit_id": identity, "label": label, "start_char": start, "end_char": end}
+
+    if text == _CERAMICS_TRUTH:
+        first = "Материалы и обжиг включены."
+        end = len(first)
+        return (
+            unit("materials_included", "Материалы включены", 0, end),
+            unit("firing_included", "Обжиг включён", 0, end),
+            unit("later_collection", "Получение после обжига в другой день", end + 1, len(text)),
+        )
+    if not _COURSE_TRUTH.fullmatch(text):
+        return ()
+    practical = "Участники выполняют практические задания"
+    feedback = "и получают письменную обратную связь."
+    equipment = "Для занятий не требуется профессиональное оборудование."
+    # A permitted course title can itself contain the practical-task words.
+    # The actual assertion is the final occurrence after the duration prefix.
+    practical_start = text.rindex(practical)
+    feedback_start = practical_start + len(practical) + 1
+    units = []
+    if practical_start:
+        units.append(unit("duration", "Длительность курса", 0, practical_start - 1))
+    units.extend((
+        unit("practical_tasks", "Практические задания", practical_start, practical_start + len(practical)),
+        unit("written_feedback", "Письменная обратная связь", feedback_start, feedback_start + len(feedback)),
+    ))
+    if text.endswith(equipment):
+        units.append(unit("no_equipment", "Отсутствие требования к оборудованию", len(text) - len(equipment), len(text)))
+    return tuple(units)
 
 
 def _profile_statements(profile: str, product: str, audience: str) -> dict[str, str]:
