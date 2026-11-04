@@ -48,12 +48,12 @@ def run_review(rows, evidence, mutate=None):
         data = json.loads(kwargs["text"])
         reviews = {}
         for name, row in data["outputs"].items():
-            text = "".join(token["text"] for token in row["tokens"])
+            text = row["spans"]["whole"]
             exact_ids = [identity for identity, source in row["evidence"].items()
                          if source["role"] == "product_truth" and source["text"] == text]
             factual = name in {"offer", "RTB"} and bool(exact_ids)
             reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
-                "start_token": 0, "end_token": len(row["tokens"]),
+                "span_id": "whole",
                 "category": "product" if factual else "strategy",
                 "kind": "fact" if factual else "hypothesis",
                 "status": "SUPPORTED" if factual else "HYPOTHESIS",
@@ -78,6 +78,19 @@ def test_dynamic_choice_with_all_dependencies_is_reviewable(case):
     assert decision["status"] == "verified"
     assert choice in captured["data"]["outputs"]["value_proposition"]["strategy_choices"]
     assert set(choice["required_source_ids"]) <= captured["data"]["outputs"]["value_proposition"]["evidence"].keys()
+
+
+@pytest.mark.parametrize("category", ["product", "audience", "competitor", "fulfillment"])
+def test_exact_dynamic_proposal_does_not_depend_on_auditor_category_label(category):
+    evidence = verification_inputs(invocation("course"))
+    choice = dynamic_choice(evidence)
+
+    def relabel(report, data):
+        report["reviews"]["value_proposition"]["claims"][0]["category"] = category
+
+    decision, _ = run_review([output(choice["text"], choice["required_source_ids"])], evidence, relabel)
+    assert decision["status"] == "verified", decision
+    assert decision["findings"] == []
 
 
 @pytest.mark.parametrize("case", CASES)

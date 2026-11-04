@@ -28,7 +28,7 @@ def factual_auditor(category, identity="evd_source"):
     def mutate(report, data):
         for name, row in data["outputs"].items():
             report["reviews"][name]["claims"] = [atom(
-                0, len(row["tokens"]), category=category, kind="fact", status="SUPPORTED", ids=(identity,),
+                "whole", category=category, kind="fact", status="SUPPORTED", ids=(identity,),
             )]
     return mutate
 
@@ -139,14 +139,14 @@ def test_production_executor_and_reviewer_cannot_launder_competitor_certificate_
             for name, row in data["outputs"].items():
                 ids, category, kind, status = [], "strategy", "hypothesis", "HYPOTHESIS"
                 if name == "RTB":
-                    rendered = "".join(token["text"] for token in row["tokens"])
+                    rendered = row["spans"]["whole"]
                     ids = [identity for identity, item in row["evidence"].items()
                            if item["text"] == rendered and item["role"] == "product_truth"]
                     category, kind, status = "product", "fact", "SUPPORTED"
                 if name == "value_proposition":
                     ids, category, kind, status = [parent_id], "competitor", "fact", "SUPPORTED"
                 reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [atom(
-                    0, len(row["tokens"]), category=category, kind=kind, status=status, ids=ids,
+                    "whole", category=category, kind=kind, status=status, ids=ids,
                 )]}
             return json.dumps({"draft_fingerprint": data["draft_fingerprint"], "assessment": "APPROVE", "reviews": reviews})
 

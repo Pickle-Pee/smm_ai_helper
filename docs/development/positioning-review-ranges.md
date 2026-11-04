@@ -1,17 +1,24 @@
-# POSITIONING independent review: token_ranges.v2
+# POSITIONING independent review: closed_spans.v3
 
 The immutable canonical draft remains server-owned. The verifier receives a
-lossless numbered token table for each output and selects half-open token ranges.
+closed server span IDs for each output. Their text and internal token ranges are
+formed by the server; the auditor never counts inclusive/exclusive boundaries.
 It never reproduces the draft or source quotes. A hash binds the report to the
 exact draft, citations, evidence and contract version. No Unicode normalization
-or UTF-16/byte offsets are used. The server resolves ranges into original text.
+or UTF-16/byte offsets are used. The server resolves IDs into original text.
 
 Reports are keyed by exactly the requested output names. Each output has its
 own closed source-ID enum, limited to its existing citations and available
 authorized sources. Complete source quotations are resolved by the server.
-Ranges can overlap: several atomic propositions can occupy one sentence.
+Anchors can overlap: several atomic propositions can occupy one sentence and
+share an anchor. Sentence/clause segmentation is a selection aid, never proof
+of atomic decomposition. The auditor still must identify all factual premises.
 The union of ranges must cover every token. `atoms_complete` is a separate
-semantic judgment; token coverage cannot prove extraction recall.
+semantic judgment; token coverage cannot prove extraction recall. The superseded
+v2 numeric-range interface produced three end-boundary coverage failures on a
+sixteen-output positive live sample. v3 removes numeric range calculation from
+the model. Exact authorized prospective proposals do not depend on a correct
+auditor category label; labels cannot make an unauthorized proposal eligible.
 
 APPROVE cannot authorize arbitrary free prose by labeling it HYPOTHESIS.
 Facts require the complete exact assertion from an eligible cited source;

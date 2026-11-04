@@ -9,6 +9,7 @@ from app.llm.telemetry import graph_call_context
 from app.models import PositioningVerification
 from app.module_execution import ModuleExecutorDispatcher
 from app.orchestration_runtime.errors import RuntimeContractError
+from app.orchestration_runtime.contracts import module_job_id
 from app.orchestration_runtime.model_adapter import production_model_call
 from app.orchestration_runtime.retry_policy import RetryGovernanceError
 from app.orchestration_runtime.service import GraphExecutionService, evaluate_result
@@ -43,8 +44,8 @@ def test_checkpoint_replays_paid_response_without_reposting(mvp_database, monkey
             db, responses_governance=True, positioning_verifier=production_model_call,
         )
         try:
-            assert await ModuleGraphWorker(service).once()  # prerequisite competitor job
-            item = await service.claim()
+            assert await ModuleGraphWorker(service).once(module_job_id(run_id, 1, "competitor_analysis"))
+            item = await service.claim(module_job_id(run_id, 1, "positioning"))
             binding, request = await service.load_work(item)
             assert request.module_id.value == "POSITIONING"
             result = await ModuleExecutorDispatcher(service.executors).dispatch(binding, request)
@@ -142,13 +143,13 @@ def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, 
             reviews = {}
             for name, row in data["outputs"].items():
                 rtb = name in {"RTB", "offer"}
-                text = "".join(token["text"] for token in row["tokens"])
+                text = row["spans"]["whole"]
                 support = [
                     identity for identity, source in row["evidence"].items()
                     if rtb and source["role"] in {"product_truth", "demonstration"} and source["text"] == text
                 ]
                 reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
-                    "start_token": 0, "end_token": len(row["tokens"]), "category": "product" if rtb else "strategy",
+                    "span_id": "whole", "category": "product" if rtb else "strategy",
                     "kind": "fact" if rtb else "hypothesis", "status": "SUPPORTED" if rtb else "HYPOTHESIS",
                     "support_ids": support,
                 }]}
@@ -163,8 +164,8 @@ def test_worker_publishes_only_after_separate_review(mvp_database, monkeypatch, 
             responses_governance=True, positioning_verifier=production_model_call)
         try:
             worker = ModuleGraphWorker(service)
-            assert await worker.once()
-            assert await worker.once()
+            assert await worker.once(module_job_id(run_id, 1, "competitor_analysis"))
+            assert await worker.once(module_job_id(run_id, 1, "positioning"))
             run, jobs, artifacts = await state(db, run_id)
             position = next(job for job in jobs if job.workflow_step == "positioning")
             async with db() as session:

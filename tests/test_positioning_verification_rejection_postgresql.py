@@ -6,6 +6,7 @@ import json
 import httpx
 
 from app.models import PositioningVerification
+from app.orchestration_runtime.contracts import module_job_id
 from app.orchestration_runtime.model_adapter import production_model_call
 from app.orchestration_runtime.worker import ModuleGraphWorker
 from tests import graph_fakes
@@ -53,7 +54,7 @@ def test_worker_blocks_fulfillment_contradiction_despite_approve(mvp_database, m
             calls.append("verification")
             reviews = {}
             for name, row in data["outputs"].items():
-                text = "".join(token["text"] for token in row["tokens"])
+                text = row["spans"]["whole"]
                 rtb = name == "RTB"
                 ids = [identity for identity, evidence in row["evidence"].items()
                        if rtb and evidence["role"] == "product_truth" and evidence["text"] == text]
@@ -61,7 +62,7 @@ def test_worker_blocks_fulfillment_contradiction_despite_approve(mvp_database, m
                     assert text == promise
                     assert any(evidence.get("requires_follow_up") is True for evidence in row["evidence"].values())
                 reviews[name] = {"atoms_complete": True, "output_fulfilled": True, "claims": [{
-                    "start_token": 0, "end_token": len(row["tokens"]),
+                    "span_id": "whole",
                     "category": "product" if rtb else "strategy", "kind": "fact" if rtb else "hypothesis",
                     "status": "SUPPORTED" if rtb else "HYPOTHESIS", "support_ids": ids,
                 }]}
@@ -76,8 +77,8 @@ def test_worker_blocks_fulfillment_contradiction_despite_approve(mvp_database, m
             responses_governance=True, positioning_verifier=production_model_call)
         try:
             worker = ModuleGraphWorker(service)
-            assert await worker.once()
-            assert await worker.once()
+            assert await worker.once(module_job_id(run_id, 1, "competitor_analysis"))
+            assert await worker.once(module_job_id(run_id, 1, "positioning"))
             run, jobs, artifacts = await state(mvp_database, run_id)
             position = next(job for job in jobs if job.workflow_step == "positioning")
             async with mvp_database() as session:

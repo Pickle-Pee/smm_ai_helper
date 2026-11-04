@@ -229,7 +229,8 @@ def factual_competitor_parents(request):
         if upstream.module_id.value in {"COMPETITOR_ANALYSIS", "MARKET_ANALYSIS"}
         for claim in upstream.result.normalized_result.claims
         if claim.evidence_ids
-        and set(claim.evidence_ids) <= {record.evidence_id for record in upstream.result.normalized_result.evidence}
+        and set(claim.evidence_ids) <= {record.evidence_id for record in upstream.result.normalized_result.evidence
+                                       if record.source_class is EvidenceSourceClass.EXTERNAL_PRIMARY}
     }
     return {identity: claim for identity, claim in parent_claims(request).items()
             if identity in backed and claim.claim_type in {ClaimType.FACT, ClaimType.OBSERVATION}
