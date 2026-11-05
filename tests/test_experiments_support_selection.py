@@ -216,11 +216,18 @@ def test_generation_overhead_refuses_before_model_without_filtering_sources(invo
 
 def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
     from app.module_execution.executors.experiments_support_selection import support_selection_wire_schema
+    from app.module_execution.executors.provider_schema import nodes
+    from app.module_execution.executors.experiments_support_wire import QUALITATIVE_DESIGN_PATTERN
+    from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
     v2, evidence, parents = scope_schema(2, 3)
     before = deepcopy(v2)
     v3 = support_selection_wire_schema(v2, 16, evidence, parents)
     assert v2 == before
-    assert v3["$defs"]["ExperimentDesign"] == v2["$defs"]["ExperimentDesign"]
+    expected_design = deepcopy(v2["$defs"]["ExperimentDesign"])
+    for node in nodes(expected_design):
+        if node.get("pattern") == QUALITATIVE_DESIGN_PATTERN:
+            node["pattern"] = QUALITATIVE_GENERATION_PATTERN
+    assert v3["$defs"]["ExperimentDesign"] == expected_design
     old = v2["$defs"]["ExperimentStatement"]["properties"]
     assert v3["$defs"]["ExperimentStatement"] == {"anyOf": [
         {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
@@ -228,8 +235,11 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
         {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
     ]}
     new = v3["$defs"][OTHER_STATEMENT_DEFINITION]["properties"]
-    for key in ("text", "kind", "confidence", "strategic_parent_id"):
+    for key in ("kind", "confidence", "strategic_parent_id"):
         assert new[key] == old[key]
+    expected_text = deepcopy(old["text"])
+    (expected_text["anyOf"][0] if "anyOf" in expected_text else expected_text)["pattern"] = QUALITATIVE_GENERATION_PATTERN
+    assert new["text"] == expected_text
     assert new["output_name"] == {**old["output_name"],
         "enum": [name for name in old["output_name"]["enum"] if name not in {"evidence_basis", "guardrails"}]}
     basis = v3["$defs"][EVIDENCE_BASIS_DEFINITION]["properties"]
@@ -391,11 +401,7 @@ def test_evidence_basis_branches_do_not_weaken_exact_output_coverage(invocation,
     with pytest.raises(ExecutorOutputError) as caught:
         asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
             support_selection_wire=True).execute(invocation))
-    if mutation == "duplicate":
-        assert caught.value.stage is OutputFailureStage.RESULT_CONTRACT_INVALID
-        assert caught.value.failure_rule.value == "output_duplicate_names"
-    else:
-        assert caught.value.stage is OutputFailureStage.OUTPUT_COVERAGE_INVALID
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
 def test_fourteen_other_output_names_retain_free_bounded_text():
@@ -582,10 +588,130 @@ def test_decoder_preserves_model_text_and_does_not_mutate_wire_payload(invocatio
         decoded = decode_support_selection_wire(payload, captured["v2"], len(invocation.expected_outputs),
             captured["evidence"], captured["parents"])
         assert payload == before
-        assert [s["text"] for s in decoded["outputs"]] == [s["text"] for s in payload["outputs"]]
+        assert {s["output_name"]: s["text"] for s in decoded["outputs"]} == {
+            s["output_name"]: s["text"] for s in payload["outputs"]}
+        assert decoded["outputs"][0]["output_name"] == "evidence_basis"
+        assert [s["output_name"] for s in decoded["outputs"][1:]] == [
+            s["output_name"] for s in payload["outputs"] if s["output_name"] != "evidence_basis"]
         assert decoded["experiments"] == payload["experiments"]
         return json.dumps(payload)
     asyncio.run(Capture(model_call=model, strategic_parent_wire=True, support_selection_wire=True).execute(invocation))
+
+
+@pytest.mark.parametrize("position", [0, 7, 15])
+@pytest.mark.parametrize("source_output", ["evidence_basis", "hypothesis"])
+def test_named_basis_owns_nested_sources_independently_of_model_order(invocation, position, source_output):
+    from tests.test_module_executors import fact
+    demo = "Демонстрационный образец показывает сравнение снимков."
+    request = replace(invocation, context_packet=replace(invocation.context_packet,
+        known_facts=(*invocation.context_packet.known_facts, fact("existing_proof", demo))))
+    raw_names = []
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        payload = typed_payload(data, kwargs["response_schema"])
+        basis = next(row for row in payload["outputs"] if row["output_name"] == "evidence_basis")
+        payload["outputs"].remove(basis)
+        payload["outputs"].insert(position, basis)
+        raw_names.extend(row["output_name"] for row in payload["outputs"])
+        identity = next(item["evidence_id"] for item in data["local_evidence"] if item["input_key"] == "existing_proof")
+        alias = next(key for key, value in data["experiments_support_selection_catalog"]["evidence"].items() if value == identity)
+        next(row for row in payload["outputs"] if row["output_name"] == source_output)["additional_evidence_support"][alias] = True
+        payload["experiments"][0]["minimum_required_inputs"] = [demo]
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True, support_selection_wire=True)
+    if source_output == "hypothesis":
+        with pytest.raises(ExecutorOutputError):
+            asyncio.run(executor.execute(request))
+    else:
+        result = asyncio.run(executor.execute(request))
+        assert [row["output_name"] for row in result.payload["outputs"]] == ["evidence_basis"] + [
+            name for name in raw_names if name != "evidence_basis"]
+        assert result.normalized_result.claims[0].declared_output_name == "evidence_basis"
+        assert "experiments" in json.loads(result.normalized_result.claims[0].value)
+        quality = evaluate_result(request.execution_id, result, request.upstream_results)
+        assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+
+
+@pytest.mark.parametrize("names", [("hypothesis",), ("mechanism", "hypothesis")])
+def test_partial_request_without_basis_retains_original_first_output_contract(invocation, names):
+    request = replace(invocation, expected_outputs=names)
+    async def model(**kwargs):
+        return json.dumps(typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"]))
+    result = asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+        support_selection_wire=True).execute(request))
+    assert tuple(row["output_name"] for row in result.payload["outputs"]) == names
+    assert result.normalized_result.claims[0].declared_output_name == names[0]
+
+
+@pytest.mark.parametrize("mutation", ["duplicate_other", "missing_other"])
+def test_named_basis_order_does_not_bypass_other_output_coverage(invocation, mutation):
+    async def model(**kwargs):
+        payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        other = next(row for row in payload["outputs"] if row["output_name"] == "mechanism")
+        if mutation == "duplicate_other":
+            payload["outputs"][0] = deepcopy(other)
+        else:
+            payload["outputs"].remove(other)
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+            support_selection_wire=True).execute(invocation))
+    expected = (OutputFailureStage.RESULT_CONTRACT_INVALID if mutation == "duplicate_other"
+                else OutputFailureStage.OUTPUT_COVERAGE_INVALID)
+    assert caught.value.stage is expected
+
+
+@pytest.mark.parametrize("location", ["mechanism", "stop_rule", "minimum_required_inputs", "intervention"])
+def test_v6_qualitative_filter_blocks_observed_unsupported_two_count(invocation, location):
+    async def model(**kwargs):
+        payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        text = "Тексты двух вариантов сообщений"
+        if location in {"mechanism", "stop_rule"}:
+            next(row for row in payload["outputs"] if row["output_name"] == location)["text"] = text
+        else:
+            payload["experiments"][0][location] = [text] if location == "minimum_required_inputs" else text
+        assert not Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+            support_selection_wire=True).execute(invocation))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+@pytest.mark.parametrize("location", ["mechanism", "minimum_required_inputs"])
+@pytest.mark.parametrize("cite", [False, True])
+def test_complete_spelled_quantity_source_uses_exact_enum_and_actual_support(invocation, location, cite):
+    numeric_id, other_id, *_ = strategic_parents(invocation)
+    quote = "Ask two questions"
+    request = replace_parent_assertion(invocation, numeric_id, quote)
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        payload = typed_payload(data, kwargs["response_schema"])
+        for row in payload["outputs"]:
+            row["strategic_parent_id"] = other_id
+        if location == "mechanism":
+            row = next(row for row in payload["outputs"] if row["output_name"] == location)
+            row["text"] = quote
+            alias = next(key for key, value in data["experiments_support_selection_catalog"]["parents"].items() if value == numeric_id)
+            row["additional_parent_support"][alias] = cite
+        else:
+            payload["experiments"][0]["minimum_required_inputs"] = [quote]
+            payload["experiments"][0]["related_strategic_claim_ids"] = [numeric_id if cite else other_id]
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True, support_selection_wire=True)
+    if cite:
+        result = asyncio.run(executor.execute(request))
+        if location == "mechanism":
+            assert next(row for row in result.payload["outputs"] if row["output_name"] == location)["text"] == quote
+        else:
+            assert result.payload["experiments"][0]["minimum_required_inputs"] == (quote,)
+    else:
+        with pytest.raises(ExecutorOutputError) as caught:
+            asyncio.run(executor.execute(request))
+        assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
 
 
 def test_noncompliant_provider_cannot_bypass_original_selected_parent_or_number_rules(invocation):

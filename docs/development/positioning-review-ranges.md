@@ -171,7 +171,7 @@ retain the existing source checks; appending a promise or positive assertion to
 the negative clause does not match the limitation grammar. Other safe free-form
 limitations outside this bounded grammar can still reject.
 
-EXPERIMENTS support-selection v5 constrains `evidence_basis` to a closed
+EXPERIMENTS support-selection v6 constrains `evidence_basis` to a closed
 RU/EN provenance note: the explicitly selected accepted strategic hypothesis
 guides a test and does not establish effectiveness. It cannot generate a mixed
 demo-proof assertion there. Qualitative `guardrails` selects a closed owner-truth
@@ -180,6 +180,18 @@ available with its original exact selected-source checks. This is a deliberately
 bounded generation subset. All fourteen other outputs, including experiment-specific
 stop/scale decisions, and nested design failure conditions remain unchanged.
 The source IDs, array shape and canonical payload remain compatible.
+After complete wire validation, the decoder places the unique `evidence_basis`
+first. Its explicit sources alone witness the nested designs attached to that
+first canonical claim; another output's selections are never unioned into it.
+All other outputs keep their relative order. Full sixteen-output responses must
+contain that basis. Partial requests without it retain their existing first-output
+contract. Historical canonical payloads are not reordered or migrated.
+
+Free qualitative output/design fields reuse the small CMO two/два-family regular
+generation filter. Complete authorized source assertions use separate unchanged
+enums, including recognized quantities written as words. Canonical numerical
+validation still rejects unsupported counts; the generation filter is not a full
+quantity ontology and can conservatively restrict other prose using those words.
 
 Two bounded nonassertive RU verb contexts no longer trigger the current-demo
 check through whole-leaf keyword co-occurrence: operator-clause-head

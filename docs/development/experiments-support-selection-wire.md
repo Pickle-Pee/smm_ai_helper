@@ -18,7 +18,7 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The current version is experiments.support_selection.v5. It is built on the existing
+The current version is experiments.support_selection.v6. It is built on the existing
 V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
@@ -66,7 +66,7 @@ promote a hypothesis into efficacy proof. There is no implicit demo citation.
 
 The source statement is still canonical v1 after decoding. Existing accepted
 artifacts/history are read as before; new wire responses must use the current version. Duplicate or
-missing outputs remain canonical coverage failures. Unknown statement names, source
+missing outputs remain rejected. Unknown statement names, source
 definition collisions, text bounds and unexpected schema shapes fail closed before
 provider I/O. A changed wire version never authorizes repeating a completed durable
 operation. Historical diagnostic failures remain unchanged.
@@ -87,6 +87,27 @@ Nested designs, failure conditions, input requirements, citations, mandatory
 strategic parent, field/array bounds and canonical v1 history are unchanged. An
 unprovided outcome or unsupported numerical target does not become an accepted
 guardrail. No source is selected implicitly by either kind of policy note.
+
+Version 6 makes the uniquely named `evidence_basis` the first canonical output,
+regardless of model array order. The executor attaches nested design data and
+checks its selected witnesses on that first claim. Only the statement moves:
+content, selected source flags and the relative order of all other outputs are
+preserved. No other output's citations are borrowed or unioned into its evidence.
+A full request requires the basis exactly once. Partial requests containing it
+also move it first; partial requests without it retain their original first-output
+ownership contract. Duplicate/missing output rejection and canonical bounds remain.
+Historical accepted payloads are not reordered or rewritten.
+
+The same v6 generation schema applies the existing small RU/EN two-form filter
+to free qualitative statement/design text, including minimum-input items. It
+does not touch complete source/numerical enums. The authorized assertion catalogs
+now recognize the existing canonical word-quantity detector as well as digits,
+preserving exact supplied `two/двух` quotations that previously fit qualitative
+generation. Every numerical statement/design still needs its actual selected
+source and complete exact assertion; an allowed enum is not an implicit citation.
+Other quantities and unlisted languages remain subject to canonical validation.
+The wire version changes the request fingerprint, never the durable operation ID
+or the prohibition on repeating a completed/unknown provider operation.
 
 ## Bounded generation overhead
 

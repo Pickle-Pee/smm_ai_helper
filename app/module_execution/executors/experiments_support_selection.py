@@ -12,10 +12,11 @@ from .experiments_support_wire import (
 )
 from .intelligence_schemas import ExperimentStatement
 from .numeric_quantity import has_numeric_quantity
+from .qualitative_generation import QUALITATIVE_GENERATION_PATTERN
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v5"
+WIRE_VERSION = "experiments.support_selection.v6"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
@@ -168,6 +169,11 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
         if count != 1:
             _fail()
         _specialize_policy_statements(definitions)
+        # Only free qualitative generation gets the small observed-count
+        # filter. Complete source/numerical enums retain their exact text.
+        for node in nodes(schema):
+            if node.get("pattern") == QUALITATIVE_DESIGN_PATTERN:
+                node["pattern"] = QUALITATIVE_GENERATION_PATTERN
         schema["properties"]["wire_contract_version"]["enum"] = [WIRE_VERSION]
         # References cannot point into removed fields or outside this schema.
         for node in nodes(schema):
@@ -197,6 +203,14 @@ def decode_support_selection_wire(payload, v2_schema, expected_output_count, evi
         if type(payload) is not dict or not Draft202012Validator(schema).is_valid(payload):
             _fail()
         result = deepcopy(payload)
+        basis = [row for row in result["outputs"] if row["output_name"] == "evidence_basis"]
+        if len(basis) > 1 or (expected_output_count == 16 and not basis):
+            _fail()
+        if basis:
+            # The named provenance statement owns structured design evidence.
+            # Move it without copying citations from any other output; partial
+            # requests without it keep their original first-output contract.
+            result["outputs"] = basis + [row for row in result["outputs"] if row["output_name"] != "evidence_basis"]
         result["wire_contract_version"] = V2_VERSION
         for statement in result["outputs"]:
             for family, field, output in (("evidence", "additional_evidence_support", "evidence_ids"),
