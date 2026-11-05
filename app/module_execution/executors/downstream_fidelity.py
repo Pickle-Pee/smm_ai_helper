@@ -22,6 +22,13 @@ existing_proof text as a separate text/item and actually select that evidence ID
 Never paraphrase a sample into proof of course format, recurring service or
 effectiveness. Keep interpretation/validation plans in separate items. Creating
 a new sample or checking its possible value is a proposal, not existing proof.
+Written feedback alone does not establish personal/individual review or regular
+delivery. A demo comparison does not establish the contents of written feedback.
+Do not embed these unconfirmed product attributes inside a HYPOTHESIS. Recognized
+format claims need the same complete selected owner source as product copy.
+Treat upstream risk warnings as constraints, never as extra product capabilities.
+Audience preferences/goals and testable value hypotheses may remain open without
+asserting new delivery features; confirm proposed product changes with the owner.
 These requirements also apply to nested designs, assumptions and limitations.
 """
 
@@ -61,6 +68,11 @@ _DEMO = re.compile(r"\b(?:демонстраци\w*|демо(?:[-‐‑–—]?(
 _DEMO_FACT = re.compile(
     r"\b(?:существующ\w*|имеющ\w*|имеется|представлен\w*|показыва\w*|демонстриру\w*|"
     r"подтвержда\w*|доказыва\w*|existing|available|shows?|demonstrates?|proves?|illustrates?)\b", re.I)
+_NONASSERTIVE_DEMO_VERBS = (
+    re.compile(r"(?:^|;)\s*дополнительно\s+(?P<verb>показывать)\b", re.I),
+    re.compile(r"\bесли\s+(?:(?:качественные\s+)?интервью\s+и\s+тест|тест)\s+"
+               r"(?P<verb>показывают|показывает)\b", re.I),
+)
 _DEMO_PROPOSALS = frozenset({
     'Check whether a new demo shows the intended comparison.',
     'Проверить, показывает ли новый демонстрационный образец предполагаемое сравнение.',
@@ -97,6 +109,71 @@ _NEGATIVE_DEMO_CLAUSE = (
 _NEGATIVE_DEMO_LIMITATION = re.compile(
     _NEGATIVE_DEMO_CLAUSE + r"(?:\.\s+" + _NEGATIVE_DEMO_CLAUSE + r")?\.?", re.I)
 _NEGATIVE_DEMO_PREFIX = re.compile(_NEGATIVE_DEMO_CLAUSE + r"\b", re.I)
+_RU_PERSONAL_FEEDBACK = (
+    r"(?:персональн[а-яё]*|индивидуальн[а-яё]*)(?:\s*,\s*|\s+(?:и\s+)?)(?:письменн[а-яё]*\s+)?"
+    r"(?:обратн[а-яё]*\s+связ[а-яё]*|отклик[а-яё]*|разбор[а-яё]*|отзыв[а-яё]*|рецензи[а-яё]*)"
+)
+_EN_PERSONAL_FEEDBACK = (
+    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?)(?:\s*,\s*|\s+(?:and\s+)?)(?:written\s+)?"
+    r"(?:feedback|reviews?|responses?|critiques?)"
+)
+_PERSONAL_FEEDBACK = re.compile(
+    r"\b(?:" + _RU_PERSONAL_FEEDBACK + r"|" + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:письменн[а-яё]*\s+)?обратн[а-яё]*\s+связ[а-яё]*\s+"
+    r"(?:является\s+)?(?:персональн[а-яё]*|индивидуальн[а-яё]*)|"
+    r"(?:written\s+)?(?:feedback|reviews?)\s+(?:is|are|will\s+be)\s+"
+    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?))\b", re.I)
+_FEEDBACK_CONTENT = re.compile(
+    r"\b(?:(?:(?:письменн[а-яё]*\s+)?обратн[а-яё]*\s+связ[а-яё]*|"
+    r"письменн[а-яё]*\s+отклик[а-яё]*)\s*(?:,\s*)?"
+    r"(?:(?:которая|который|которые)\s+)?(?:(?:может|будет)\s+)?"
+    r"(?:показывает|показывать|содержит|содержать|иллюстрирует|иллюстрировать|"
+    r"демонстрирует|демонстрировать|включает|включать)\s+"
+    r"(?:(?:конкретн[а-яё]*|подробн[а-яё]*|практическ[а-яё]*)\s+){0,2}"
+    r"(?:изменени[а-яё]*|сравнени[а-яё]*|разбор[а-яё]*|комментари[а-яё]*|"
+    r"содержани[а-яё]*|правк[а-яё]*|рекомендаци[а-яё]*|пример[а-яё]*|ответ[а-яё]*|"
+    r"что\s+(?:менять|изменить|улучшить)|как\s+(?:менять|изменить|улучшить))|"
+    r"(?:written\s+)?feedback\s+(?:(?:that|which)\s+)?(?:(?:can|may|might|will)\s+)?"
+    r"(?:shows?|contains?|illustrates?|demonstrates?|includes?)\s+(?:(?:a|an|the)\s+)?"
+    r"(?:(?:specific|concrete|detailed|practical)\s+){0,2}"
+    r"(?:changes?|improvements?|comparisons?|reviews?|critiques?|comments?|content|"
+    r"examples?|corrections?|recommendations?|answers?|what\s+to\s+(?:change|improve)|"
+    r"how\s+to\s+(?:change|improve)))\b", re.I)
+_FORMAT_RESEARCH_OR_GOAL = re.compile(
+    r"(?:(?:(?:Исследовать|Проверить|Выяснить|Спросить),\s*)?"
+    r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"(?:Исследовать|Проверить|Выяснить|Спросить),\s*(?:предпочитает|хочет|ценит)\s+ли\s+"
+    r"аудитория\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"(?:Цель|Потребность|Желание)\s+аудитории\s*[:—-]\s*(?:получить|получать|найти)\s+"
+    + _RU_PERSONAL_FEEDBACK + r"|"
+    r"Гипотеза(?:\s+предпочтения\s+аудитории)?:\s*(?:аудитории\s+(?:важна|нужна|полезна)|"
+    r"аудитория\s+(?:предпочитает|ценит|хочет))\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"(?:Research|Check|Ask|Explore|Test)\s+(?:whether|if)\s+(?:the\s+)?"
+    r"(?:audience|customers|participants)\s+(?:want|value|prefer|need)\s+" + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:Do|Would)\s+(?:the\s+)?(?:audience|customers|participants)\s+"
+    r"(?:want|value|prefer|need)\s+" + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:Customer|Audience|Learning|Desired)\s+goal:\s*(?:receive|get|find|obtain)\s+"
+    + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:Audience\s+preference\s+hypothesis|Hypothesis):\s*(?:the\s+)?"
+    r"(?:audience|customers|participants)\s+(?:want|value|prefer|need)\s+"
+    + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:Собрать|Получить)\s+" + _RU_PERSONAL_FEEDBACK +
+    r"\s+(?:представителей\s+)?аудитории\s+о\s+(?:тестовом\s+)?сообщении|"
+    r"(?:Collect|Gather)\s+" + _EN_PERSONAL_FEEDBACK +
+    r"\s+from\s+(?:the\s+)?audience\s+about\s+(?:the\s+)?(?:test\s+)?message)[.?]?", re.I)
+_FORMAT_POLICY_WARNINGS = frozenset({
+    'Рекомендация перед публикацией — проверить, не подменяет ли сообщение практические задания домашними, а письменную обратную связь персональным разбором; уточнить темы курса и темп освоения у владельца.',
+    'Не приравнивать письменную обратную связь к персональному разбору без подтверждения владельца.',
+    'Do not equate written feedback with personalized review without owner confirmation.',
+})
+_CONTENT_RESEARCH_OR_GOAL = re.compile(
+    r"(?:(?:Исследовать|Проверить|Выяснить),\s*нужна\s+ли\s+аудитории\s+"
+    r"письменная\s+обратная\s+связь,\s+которая\s+показывает\s+конкретные\s+изменения\s+в\s+снимках|"
+    r"Цель\s+аудитории\s*[:—-]\s*получить\s+письменную\s+обратную\s+связь,\s+которая\s+"
+    r"показывает\s+конкретные\s+изменения\s+в\s+снимках|"
+    r"(?:Research|Check|Ask)\s+whether\s+customers\s+want\s+written\s+feedback\s+that\s+"
+    r"shows\s+concrete\s+changes\s+in\s+photos|"
+    r"Audience\s+goal:\s*receive\s+written\s+feedback\s+that\s+shows\s+concrete\s+changes\s+in\s+photos)[.?]?", re.I)
 
 
 def selected_sources(statement, local):
@@ -139,6 +216,11 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     value = text.strip()
     if value in comparisons or _COUNTERFACTUAL.fullmatch(value):
         return
+    if (_PERSONAL_FEEDBACK.search(value) or _FEEDBACK_CONTENT.search(value)):
+        format_question = (_FORMAT_RESEARCH_OR_GOAL.fullmatch(value)
+                           or _CONTENT_RESEARCH_OR_GOAL.fullmatch(value))
+        if not (format_question or value in _FORMAT_POLICY_WARNINGS or _verbatim_leaf(value, owner)):
+            raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
     outcomes = tuple(_OUTCOME.finditer(text))
     quoted = any(mark in text for mark in ('«', '»', '"')) or bool(re.search(r"(?<!\w)'[^\n]+'(?!\w)", text))
     research = (len(outcomes) == 1 and _RESEARCH_ACTION.search(value)
@@ -155,7 +237,13 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     if product_copy or imperative_copy or (outcomes and not research and (_DIRECT.search(text) or _COPY_CONTEXT.search(text) or quoted)):
         if not _verbatim_leaf(value, owner):
             raise StatementSemanticsError(SemanticRule.CUSTOMER_PROMISE_REQUIRES_OWNER_SOURCE)
-    if _DEMO.search(text) and _DEMO_FACT.search(text):
+    # These bounded operator/conditional-research forms do not assert what an
+    # existing demonstration proves. Exclude only their verb token, never the
+    # rest of the leaf: another positive/relative assertion still blocks.
+    nonassertive = set() if copy_field or quoted else {
+        match.span("verb") for pattern in _NONASSERTIVE_DEMO_VERBS for match in pattern.finditer(text)}
+    demo_facts = tuple(match for match in _DEMO_FACT.finditer(text) if match.span() not in nonassertive)
+    if _DEMO.search(text) and demo_facts:
         planned = value in _DEMO_PROPOSALS
         if not planned and not _verbatim_leaf(value, demo):
             raise StatementSemanticsError(SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE)

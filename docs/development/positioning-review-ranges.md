@@ -171,6 +171,33 @@ retain the existing source checks; appending a promise or positive assertion to
 the negative clause does not match the limitation grammar. Other safe free-form
 limitations outside this bounded grammar can still reject.
 
+EXPERIMENTS support-selection v4 constrains only `evidence_basis` to a closed
+RU/EN provenance note: the explicitly selected accepted strategic hypothesis
+guides a test and does not establish effectiveness. It cannot generate a mixed
+demo-proof assertion there. The source IDs, array shape, canonical payload and
+all fifteen other output contracts remain unchanged.
+
+Two bounded nonassertive RU verb contexts no longer trigger the current-demo
+check through whole-leaf keyword co-occurrence: operator-clause-head
+`дополнительно показывать`, and conditional test/interview subjects such as
+`если качественные интервью и тест показывают`. Only the individual verb match
+is excluded, outside quoted/public-copy leaves. Another positive assertion or
+relative demo clause still triggers the original whole-source guard. Product
+or participant future predicates containing the same infinitive do not qualify
+as an operator clause. This is not a general grammatical/entailment classifier.
+
+Recognized personal/individual feedback or review, and assertions that written
+feedback shows/contains particular changes or content, require a complete
+verbatim selected request-local owner source. A demonstration comparison,
+audience wish or accepted parent HYPOTHESIS cannot establish these delivery
+properties. The check also visits nested designs and global fields before
+persistence. Closed whole audience research questions, goals/preferences and
+negative policy warnings remain usable; appending an owner quote cannot repair
+an unsupported feature elsewhere in the leaf. Unknown properties such as
+regularity/systematic practice remain outside these bounded runtime families
+and require separate actual-content review. The instruction also explicitly
+treats upstream risk warnings as constraints, not a product-feature catalog.
+
 ## CMO qualitative generation and spelled quantities
 
 The d9ddd25 full-course diagnostic reached a verified POSITIONING artifact, then

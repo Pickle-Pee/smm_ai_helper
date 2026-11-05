@@ -18,12 +18,12 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The new version is experiments.support_selection.v3. It is built on the existing
-V2 schema and changes only canonical-output support representation. Outputs remain
+The current version is experiments.support_selection.v4. It is built on the existing
+V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
 other bounds. Canonical evidence_ids and parent_claim_ids are absent and forbidden
-in V3 wire input. Instead each statement returns additional_evidence_support and
+in the support-selection wire input. Instead each statement returns additional_evidence_support and
 additional_parent_support: closed objects containing every source alias as a
 required strictly boolean property.
 
@@ -53,6 +53,23 @@ and assumptions/limitations. Original canonical schema, Pydantic, duplicate/iden
 strategic, numeric/word-quantity, constraint, confidence and Quality Gate checks
 remain authoritative after decoding. This is a versioned provider representation,
 not equivalence with V2 raw-response acceptance or a relaxation of canonical rules.
+
+Version 4 gives `evidence_basis` a closed epistemic provenance note in Russian or
+English: the explicitly selected accepted strategic hypothesis guides the
+experiment and does not establish its effectiveness. It adds two disjoint nested
+statement branches distinguished by `output_name`: `evidence_basis` and the other
+fifteen outputs. Only the former text is constrained to that note. All other text,
+kinds, confidence, explicit citation selections, mandatory strategic parent, field
+and array bounds remain unchanged. Notes do not claim that a demonstration exists,
+proves a recurring service format, or establishes customer outcomes. They cannot
+promote a hypothesis into efficacy proof. There is no implicit demo citation.
+
+The source statement is still canonical v1 after decoding. Existing accepted
+artifacts/history are read as before; new wire responses must use v4. Duplicate or
+missing outputs remain canonical coverage failures. Unknown statement names, source
+definition collisions, text bounds and unexpected schema shapes fail closed before
+provider I/O. A changed wire version never authorizes repeating a completed durable
+operation. Historical diagnostic failures remain unchanged.
 
 ## Bounded generation overhead
 

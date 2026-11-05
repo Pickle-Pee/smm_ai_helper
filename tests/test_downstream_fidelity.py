@@ -20,6 +20,66 @@ DEMO_LIMITATION = ('Существующее доказательство огр
                    'и не подтверждает масштабную эффективность акцента.')
 DEMO_LIMITATION_EN = ('Existing evidence is limited to a demonstration sample '
                       'and does not prove the effectiveness of the course.')
+PLANNED_DEMO_METHOD = (
+    'Контролируемый коммуникационный A/B-тест на лендинге или в рекламном потоке: '
+    'сравнить сообщение с акцентом на практические задания и письменную обратную связь '
+    'с контрольным нейтральным описанием курса; дополнительно показывать '
+    'демонстрационный образец сравнения снимков в варианте теста.')
+CONDITIONAL_DEMO_DECISION = (
+    'После теста: если качественные интервью и тест показывают понимание и предпочтение '
+    'акцента — согласовать формат обратной связи и масштабировать; если понимание есть, '
+    'но доверие низкое — добавить наглядные демонстрации изменений снимков; '
+    'если понимания нет — вернуться к уточнению формата и сообщению.')
+
+
+@pytest.mark.parametrize('text', [PLANNED_DEMO_METHOD, CONDITIONAL_DEMO_DECISION])
+def test_operator_showing_and_conditional_test_findings_are_not_current_demo_assertions(text):
+    validate_leaf(text)
+
+
+@pytest.mark.parametrize('name,text', [
+    ('test_method', PLANNED_DEMO_METHOD), ('decision_tree', CONDITIONAL_DEMO_DECISION),
+])
+def test_actual_experiment_accepts_nonassertive_demo_plan_leaves(name, text):
+    def inject(payload, data):
+        next(row for row in payload['outputs'] if row['output_name'] == name)['text'] = text
+    result = run(valid_request(ModuleId.EXPERIMENTS), inject)
+    assert any(row['output_name'] == name and row['text'] == text for row in result.payload['outputs'])
+
+
+@pytest.mark.parametrize('text', [
+    PLANNED_DEMO_METHOD + ' Существующий демонстрационный образец показывает формат курса.',
+    CONDITIONAL_DEMO_DECISION + ' Демонстрационный образец подтверждает эффективность курса.',
+    'Дополнительно показывать демонстрационный образец, который демонстрирует формат курса.',
+    'Если тест показывает, что демонстрационный образец показывает формат курса, изменить сообщение.',
+    'Если качественные интервью и тест показывают понимание, существующее демо доказывает результативность курса.',
+    'Гипотеза: ' + PLANNED_DEMO_METHOD + ' Демо доказывает эффективность курса.',
+])
+def test_nonassertive_verb_token_never_waives_another_positive_demo_fact(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, demo=(DEMO,))
+    assert caught.value.rule is SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE
+
+
+@pytest.mark.parametrize('text', [
+    'Курс будет дополнительно показывать демонстрационный образец на занятиях.',
+    'Участники будут дополнительно показывать демонстрационный образец на каждом занятии.',
+    'Курс будет: дополнительно показывать демонстрационный образец на занятиях.',
+    'Участники будут\nдополнительно показывать демонстрационный образец на каждом занятии.',
+    'Гипотеза: курс будет дополнительно показывать демонстрационный образец на занятиях.',
+])
+def test_operator_clause_match_does_not_hide_a_future_course_or_participant_assertion(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, demo=(DEMO,))
+    assert caught.value.rule is SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE
+
+
+@pytest.mark.parametrize('text,copy_field', [
+    (PLANNED_DEMO_METHOD, True), ('Copy: "' + PLANNED_DEMO_METHOD + '"', False),
+])
+def test_nonassertive_token_exception_does_not_expand_public_copy_or_quoted_scope(text, copy_field):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text, demo=(DEMO,), copy_field=copy_field)
 
 
 @pytest.mark.parametrize('text', [

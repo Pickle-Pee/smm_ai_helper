@@ -3,17 +3,28 @@ from copy import deepcopy
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
+from typing import get_args
 
 from app.module_execution.errors import ModuleExecutionContractError
-from .experiments_support_wire import WIRE_VERSION as V2_VERSION, decode_strategic_parent_wire
+from .experiments_support_wire import (
+    WIRE_VERSION as V2_VERSION, decode_strategic_parent_wire, QUALITATIVE_DESIGN_PATTERN,
+    STATEMENT_NUMERIC_ASSERTION_DEFINITION,
+)
+from .intelligence_schemas import ExperimentStatement
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v3"
+WIRE_VERSION = "experiments.support_selection.v4"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
 STATEMENT_FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids", "strategic_parent_id"}
+EVIDENCE_BASIS_DEFINITION = "EvidenceBasisExperimentStatement"
+OTHER_STATEMENT_DEFINITION = "OtherExperimentStatement"
+EVIDENCE_BASIS_NOTES = (
+    "Основанием для проверки служит принятая стратегическая гипотеза; она задаёт направление эксперимента, но не доказывает его результативность.",
+    "The accepted strategic hypothesis guides the experiment; it does not establish the experiment's effectiveness.",
+)
 
 
 def _fail():
@@ -41,8 +52,42 @@ def _boolean_map(aliases):
             "required": list(aliases), "additionalProperties": False}
 
 
+def _specialize_evidence_basis(definitions):
+    """Constrain one provenance note, preserving all other statement contracts."""
+    statement = definitions["ExperimentStatement"]
+    props = statement["properties"]
+    expected_names = list(get_args(ExperimentStatement.model_fields["output_name"].annotation))
+    name = props["output_name"]
+    if (set(name) - {"type", "enum", "title"} or name.get("type") != "string"
+            or name.get("enum") != expected_names or "evidence_basis" not in expected_names):
+        _fail()
+    text = props["text"]
+    qualitative = text
+    if "anyOf" in text:
+        if (set(text) != {"anyOf"} or len(text["anyOf"]) != 2
+                or text["anyOf"][1] != {"$ref": "#/$defs/" + STATEMENT_NUMERIC_ASSERTION_DEFINITION}):
+            _fail()
+        qualitative = text["anyOf"][0]
+    if (set(qualitative) - {"type", "minLength", "maxLength", "title", "pattern"}
+            or qualitative.get("type") != "string" or qualitative.get("minLength") != 1
+            or qualitative.get("maxLength") != 4000
+            or qualitative.get("pattern") != QUALITATIVE_DESIGN_PATTERN):
+        _fail()
+    basis, other = deepcopy(statement), deepcopy(statement)
+    basis["properties"]["output_name"]["enum"] = ["evidence_basis"]
+    basis["properties"]["text"] = {key: value for key, value in qualitative.items() if key != "pattern"}
+    basis["properties"]["text"]["enum"] = list(EVIDENCE_BASIS_NOTES)
+    other["properties"]["output_name"]["enum"] = [name for name in expected_names if name != "evidence_basis"]
+    definitions[EVIDENCE_BASIS_DEFINITION] = basis
+    definitions[OTHER_STATEMENT_DEFINITION] = other
+    definitions["ExperimentStatement"] = {"anyOf": [
+        {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
+        {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
+    ]}
+
+
 def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids, parent_ids):
-    """Replace only raw citation arrays; all V2 content restrictions survive."""
+    """Select citations and a closed evidence-basis note; other V2 content survives."""
     try:
         choices = support_selection_catalog(evidence_ids, parent_ids)
         if (type(expected_output_count) is not int or not 1 <= expected_output_count <= 16
@@ -53,7 +98,9 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
         definitions = schema["$defs"]
         if (schema["properties"]["wire_contract_version"] != {"type": "string", "enum": [V2_VERSION]}
                 or schema["properties"]["outputs"].get("type") != "array"
-                or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP))):
+                or schema["properties"]["outputs"].get("items") != {"$ref": "#/$defs/ExperimentStatement"}
+                or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP,
+                                                        EVIDENCE_BASIS_DEFINITION, OTHER_STATEMENT_DEFINITION))):
             _fail()
         for family, definition in (("evidence", "AllowedEvidenceId"), ("parents", "AllowedParentClaimId")):
             scoped = definitions.get(definition)
@@ -76,6 +123,7 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
             if not {"output_name", "strategic_parent_id"} <= props.keys():
                 continue
             if (set(node) - {"type", "properties", "required", "additionalProperties", "title"}
+                    or node is not definitions.get("ExperimentStatement")
                     or set(props) != STATEMENT_FIELDS or set(node.get("required", [])) != STATEMENT_FIELDS
                     or node.get("type") != "object" or node.get("additionalProperties") is not False
                     or "anyOf" in node or props["strategic_parent_id"] != {"$ref": "#/$defs/AllowedStrategicParentId"}):
@@ -94,8 +142,9 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
                 props[replacement] = {"$ref": "#/$defs/" + definition}
                 node["required"] = [replacement if name == field else name for name in node["required"]]
             count += 1
-        if not count:
+        if count != 1:
             _fail()
+        _specialize_evidence_basis(definitions)
         schema["properties"]["wire_contract_version"]["enum"] = [WIRE_VERSION]
         # References cannot point into removed fields or outside this schema.
         for node in nodes(schema):
