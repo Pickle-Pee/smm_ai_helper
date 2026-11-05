@@ -9,7 +9,7 @@ from .cmo_provider_contract import cmo_provider_schema
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
 
-WIRE_VERSION = "virtual_cmo.support_selection.v3"
+WIRE_VERSION = "virtual_cmo.support_selection.v4"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"

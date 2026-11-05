@@ -16,11 +16,19 @@ remain 64 complete entries and 16384 serialized UTF-8 bytes.
 
 CMO statement text and each strategy item exclude ASCII digits and standalone
 RU/EN cardinal words from the existing canonical quantity detector's finite
-vocabulary. The compact pattern uses explicit case pairs, alphabet boundaries
-and a multiline negative lookahead. It blocks the saved unsupported "два
-варианта" failure before canonical construction. The exact pattern was accepted
-by a bounded gpt-5-mini schema probe; that incomplete response is not evidence of
-generation quality or a general completion-rate guarantee.
+vocabulary. A finite trie-complement pattern uses explicit case pairs, alphabet
+boundaries and only external anchors. It blocks the saved unsupported "два
+варианта" failure before canonical construction. A bounded gpt-5-mini probe of
+the exact full-vocabulary pattern completed with nonempty, schema-valid output;
+this is a capability check, not business quality or a completion-rate guarantee.
+
+The earlier negative-lookahead candidate returned HTTP 200 but empty incomplete
+output, including at the full CMO budget. A regular variant with an end anchor
+inside a repeated alternative did the same. A bounded differential matrix
+confirmed the ASCII control and Cyrillic ranges work, and the same small trie
+completes when anchors occur only at the outside. This identifies an observed
+provider grammar restriction without claiming its internal implementation. The
+final expression is larger; local matching on bounded prose is regression-tested.
 
 This deliberately narrower generation language also excludes harmless uses such
 as "one of the options". Complete source-bound numeric quotations, including

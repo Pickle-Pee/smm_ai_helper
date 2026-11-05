@@ -165,16 +165,19 @@ is stricter; a post-response semantic failure does not authorize another POST.
 The d9ddd25 full-course diagnostic reached a verified POSITIONING artifact, then
 failed CMO on an unsupported "два варианта". The existing canonical quantity
 guard correctly rejected it; the provider's ASCII-digit-only pattern had not
-prevented it. CMO support-selection wire v3 now additionally excludes standalone
+prevented it. CMO support-selection wire v4 now additionally excludes standalone
 RU/EN cardinal words from that same guard's finite vocabulary in qualitative
 text/items. Numeric context still permits complete request-scoped source quotes,
 including quantities spelled as words. Canonical quantity/provenance validation,
 persisted DTOs and durable operation IDs are unchanged. EXPERIMENTS/POSITIONING
 generation schemas are unaffected by this CMO-specific constraint.
 
-The compact pattern uses explicit RU/EN case pairs/boundaries and a multiline
-negative lookahead. A bounded gpt-5-mini capability probe accepted this exact
-pattern; its empty, incomplete output was not a generation-quality pass. This is
+The regular pattern uses a finite trie complement with explicit RU/EN case
+pairs/boundaries and anchors only outside the expression. The prior lookahead
+candidate and a repeated inner-end-anchor variant both yielded empty incomplete
+responses. A differential matrix isolated the anchor construction; the final
+full-vocabulary pattern completed a bounded probe with nonempty schema-valid
+output. This capability check is not a business-quality pass. This is
 a narrower generation language: even harmless "one of the options" is excluded.
 Other languages, Unicode decimal digits and arbitrary semantic quantities remain
 the canonical guard's responsibility. It is not a complete quantity ontology.
