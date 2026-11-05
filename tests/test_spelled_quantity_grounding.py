@@ -182,7 +182,12 @@ def test_cmo_word_quote_catalog_and_provider_keep_exact_same_source_pairs():
     assert numeric_quote_catalog(local, {}) == sorted(numeric_quote_catalog(local, {}), key=lambda e:e["support_id"])
     assert cmo_provider_schema(canonical, numeric_quote_catalog(local, {})) == provider
     assert canonical == original
-    assert all(node.get("pattern") == "^[^0-9]*$" for node in nodes(provider) if "pattern" in node)
+    # Same-source numerical quotations remain allowed in their dedicated
+    # context; the qualitative prose branch must not generate that quantity.
+    prose = deepcopy(candidate)
+    prose["outputs"][0]["text"] = quote
+    assert Draft202012Validator(canonical).is_valid(prose)
+    assert not validator.is_valid(prose)
     for bad in ({"support_id":ids["existing_proof"], "quote":quote},
                 {"support_id":ids["product_truth"], "quote":"Ask two short questions"},
                 {"support_id":"evd_unknown", "quote":quote}):
