@@ -159,3 +159,24 @@ number guards and source-role limits are not weakened.
 No persisted schema or migration changes. Historical accepted artifacts retain
 their historical semantics, including saved diagnostic failures. New generation
 is stricter; a post-response semantic failure does not authorize another POST.
+
+## CMO qualitative generation and spelled quantities
+
+The d9ddd25 full-course diagnostic reached a verified POSITIONING artifact, then
+failed CMO on an unsupported "два варианта". The existing canonical quantity
+guard correctly rejected it; the provider's ASCII-digit-only pattern had not
+prevented it. CMO support-selection wire v3 now additionally excludes standalone
+RU/EN cardinal words from that same guard's finite vocabulary in qualitative
+text/items. Numeric context still permits complete request-scoped source quotes,
+including quantities spelled as words. Canonical quantity/provenance validation,
+persisted DTOs and durable operation IDs are unchanged. EXPERIMENTS/POSITIONING
+generation schemas are unaffected by this CMO-specific constraint.
+
+The compact pattern uses explicit RU/EN case pairs/boundaries and a multiline
+negative lookahead. A bounded gpt-5-mini capability probe accepted this exact
+pattern; its empty, incomplete output was not a generation-quality pass. This is
+a narrower generation language: even harmless "one of the options" is excluded.
+Other languages, Unicode decimal digits and arbitrary semantic quantities remain
+the canonical guard's responsibility. It is not a complete quantity ontology.
+An existing operation with a saved response or changed fingerprint cannot be
+resubmitted merely because the wire version changed.

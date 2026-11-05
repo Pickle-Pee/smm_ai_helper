@@ -44,6 +44,49 @@ def test_provider_rejects_digits_already_forbidden_by_cmo_guard(field):
     assert not Draft202012Validator(projected).is_valid(value)
 
 
+@pytest.mark.parametrize("field", ["text", "items"])
+@pytest.mark.parametrize("text", [
+    "Разработать два варианта тестовых сообщений: акцент на обратной связи и акцент на практике.",
+    "Compare two short options", "Сравнить ДвА варианта", "Протестировать\nтри варианта",
+    "Сравнить\nтекст\nи два варианта\nсообщений", "два", "two", "два-варианта",
+])
+def test_provider_blocks_word_quantities_before_canonical_rejection(field, text):
+    _, original, projected, ids = capture()
+    value = output(ids, **{field: text if field == "text" else [text]})
+    assert Draft202012Validator(original).is_valid(value)
+    assert not Draft202012Validator(projected).is_valid(value)
+
+
+def test_qualitative_pattern_excludes_whole_cardinal_vocabulary_without_token_splitting():
+    import re
+    from app.module_execution.executors.numeric_quantity import _CARDINALS
+    from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
+    pattern = re.compile(QUALITATIVE_GENERATION_PATTERN)
+    for cardinal in _CARDINALS:
+        for word in (cardinal, cardinal.upper(), cardinal.title()):
+            for text in (word, f"Compare {word} options", f"Текст\n«{word}»\nпосле"):
+                assert pattern.fullmatch(text) is None, text
+        # Complete word boundaries, rather than substring matching.
+        assert pattern.fullmatch("prefix" + cardinal + "suffix")
+    for text in ("Разработать варианты сообщений", "Compare alternatives", "someone has feedback",
+                 "Первый шаг — проверить интерес", "двадцатый вариант", "Отзывы\nи практика.",
+                 "Проверить реакцию на сообщение. " * 100):
+        assert pattern.fullmatch(text), text
+    # Deliberately narrower than canonical semantics, documented rather than
+    # pretending that every harmless use of a cardinal is a quantity.
+    assert pattern.fullmatch("one of the options") is None
+
+
+def test_source_bound_spelled_quantity_stays_in_numeric_context():
+    quote = "Занятия включают два задания."
+    req = request(ModuleId.VIRTUAL_CMO, facts=(fact("business_goal", "Validate demand"),
+        fact("product", "Synthetic course"), fact("product_truth", quote)), identity="a" * 32)
+    _, original, projected, ids = capture(req)
+    value = output(ids, numeric_context=[{"support_id": ids["product_truth"], "quote": quote}])
+    assert Draft202012Validator(original).is_valid(value)
+    assert Draft202012Validator(projected).is_valid(value)
+
+
 def test_provider_rejects_numeric_context_for_source_without_eligible_quote():
     _, original, projected, ids = capture()
     value = output(ids, numeric_context=[{"support_id":ids["product"], "quote":PRICE}])

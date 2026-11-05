@@ -7,9 +7,10 @@ from jsonschema.exceptions import SchemaError
 
 from .numeric_grounding import MAX_NUMERIC_QUOTE_CATALOG_BYTES, MAX_NUMERIC_QUOTE_CATALOG_ENTRIES
 from .provider_schema import SchemaProjectionError, collapse_redundant_support_anyof, nodes
+from .qualitative_generation import QUALITATIVE_GENERATION_PATTERN
 from .support_schema import check_schema_bounds
 
-QUALITATIVE_PATTERN = "^[^0-9]*$"
+QUALITATIVE_PATTERN = QUALITATIVE_GENERATION_PATTERN
 _STRING_KEYS = {"type", "minLength", "maxLength", "title", "description", "pattern"}
 _OBJECT_KEYS = {"type", "properties", "required", "additionalProperties", "title"}
 
@@ -28,7 +29,7 @@ def _qualitative_text(field, maximum):
 
 
 def qualitative_cmo_schema(schema):
-    """Independent, idempotent ASCII-generation constraint, not a Unicode proof."""
+    """Idempotent generation subset; canonical quantity validation still applies."""
     try:
         if type(schema) is not dict:
             _fail()
