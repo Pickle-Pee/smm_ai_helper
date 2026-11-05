@@ -116,6 +116,28 @@ def test_saved_nested_demo_intervention_cannot_claim_feedback_format_from_a_comp
     assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
 
 
+@pytest.mark.parametrize('text', [
+    'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора.',
+    'Не приписывать конкурентам отсутствие обратной связи; в коммуникации избегать формулировок, которые можно понять как замену персонального разбора; держать описание формата обратной связи точным и согласованным с владельцем курса.',
+])
+def test_closed_negative_format_mention_masks_only_that_mention(text):
+    validate_leaf(text)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text + ' ' + PERSONAL)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text + ' Письменная обратная связь содержит конкретные изменения в снимках.')
+
+
+@pytest.mark.parametrize('text', [
+    'Курс будет в коммуникации избегать формулировок, которые можно понять как замену персонального разбора.',
+    'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора, который включён в курс.',
+    'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора и письменной обратной связи, которую предлагает курс.',
+])
+def test_negative_policy_prefix_does_not_mask_a_product_or_relative_assertion(text):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text)
+
+
 @pytest.mark.parametrize('module,location', [
     (ModuleId.VIRTUAL_CMO, 'text'), (ModuleId.VIRTUAL_CMO, 'items'),
     (ModuleId.VIRTUAL_CMO, 'assumptions'), (ModuleId.VIRTUAL_CMO, 'limitations'),

@@ -142,6 +142,10 @@ _FEEDBACK_CONTENT = re.compile(
 _DEMO_FEEDBACK_FORMAT = re.compile(
     r"(?:это\s+иллюстраци[а-яё]*\s+формат[а-яё]*\s+(?:письменной\s+)?обратной\s+связи|"
     r"(?:illustrates?|demonstrates?|shows?)\s+(?:the\s+)?(?:written\s+)?feedback\s+format)", re.I)
+_NEGATIVE_FORMAT_MENTION = re.compile(
+    r"(?:^|;)\s*(?:в\s+коммуникации\s+)?избегать\s+формулировок,\s*"
+    r"которые\s+можно\s+понять\s+как\s+замену\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
+    r")(?=\s*(?:[;.!?]|$))", re.I)
 _FORMAT_RESEARCH_OR_GOAL = re.compile(
     r"(?:(?:(?:Исследовать|Проверить|Выяснить|Спросить),\s*)?"
     r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_PERSONAL_FEEDBACK + r"|"
@@ -221,7 +225,10 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     value = text.strip()
     if value in comparisons or _COUNTERFACTUAL.fullmatch(value):
         return
-    if (_PERSONAL_FEEDBACK.search(value) or _FEEDBACK_CONTENT.search(value)
+    negative_formats = {match.span('format') for match in _NEGATIVE_FORMAT_MENTION.finditer(value)}
+    personal_formats = tuple(match for match in _PERSONAL_FEEDBACK.finditer(value)
+                             if match.span() not in negative_formats)
+    if (personal_formats or _FEEDBACK_CONTENT.search(value)
             or (_DEMO.search(value) and _DEMO_FEEDBACK_FORMAT.search(value))):
         format_question = (_FORMAT_RESEARCH_OR_GOAL.fullmatch(value)
                            or _CONTENT_RESEARCH_OR_GOAL.fullmatch(value))

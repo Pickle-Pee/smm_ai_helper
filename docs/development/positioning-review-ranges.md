@@ -202,6 +202,9 @@ an unsupported feature elsewhere in the leaf. Unknown properties such as
 regularity/systematic practice remain outside these bounded runtime families
 and require separate actual-content review. The instruction also explicitly
 treats upstream risk warnings as constraints, not a product-feature catalog.
+The closed operator clause about avoiding wording mistaken for personal review
+excludes only that negative mention from the personal-format check. It neither
+skips the rest of the leaf nor accepts a relative clause asserting actual delivery.
 
 ## CMO qualitative generation and spelled quantities
 
