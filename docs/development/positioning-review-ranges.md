@@ -192,7 +192,12 @@ verbatim selected request-local owner source. A demonstration comparison,
 audience wish or accepted parent HYPOTHESIS cannot establish these delivery
 properties. The check also visits nested designs and global fields before
 persistence. Closed whole audience research questions, goals/preferences and
-negative policy warnings remain usable; appending an owner quote cannot repair
+negative policy warnings remain usable, as do closed whole questions asking the
+owner whether personal feedback is included. A demonstration comparison cannot
+be labelled an illustration of the written-feedback format without selected
+whole owner truth. EXPERIMENTS explicitly requires exact separate source
+sentences even for nested minimum-input items; wrappers and relative-clause
+paraphrases do not satisfy that existing contract. Appending an owner quote cannot repair
 an unsupported feature elsewhere in the leaf. Unknown properties such as
 regularity/systematic practice remain outside these bounded runtime families
 and require separate actual-content review. The instruction also explicitly

@@ -70,7 +70,17 @@ quotes are attributed context, never numerical support for outputs or design fie
 Use HYPOTHESIS or RECOMMENDATION kinds. Formal AB designs without baseline,
 measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
-learning_record explicit in requested canonical outputs. At most three experiments.""" + FIDELITY_INSTRUCTION
+learning_record explicit in requested canonical outputs. At most three experiments.
+Treat minimum_required_inputs as separate text leaves, not labels exempt from
+source rules. If an input refers to an existing demonstration, use its COMPLETE
+verbatim existing_proof sentence as the entire item, and select that local source
+on the first canonical output, which supplies nested-design evidence. Do not
+wrap it in 'access to', 'already existing', parentheses or a relative clause.
+Other minimum inputs describe information or access still to obtain. Do not
+present an unprovided current landing page, campaign or service format as fact.
+A comparison sample does not illustrate written-feedback delivery merely because
+the course also includes written feedback. Test message emphasis without making
+that unsupported connection, and request owner confirmation of the format.""" + FIDELITY_INSTRUCTION
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,

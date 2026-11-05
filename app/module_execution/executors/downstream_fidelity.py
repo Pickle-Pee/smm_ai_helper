@@ -139,6 +139,9 @@ _FEEDBACK_CONTENT = re.compile(
     r"(?:changes?|improvements?|comparisons?|reviews?|critiques?|comments?|content|"
     r"examples?|corrections?|recommendations?|answers?|what\s+to\s+(?:change|improve)|"
     r"how\s+to\s+(?:change|improve)))\b", re.I)
+_DEMO_FEEDBACK_FORMAT = re.compile(
+    r"(?:это\s+иллюстраци[а-яё]*\s+формат[а-яё]*\s+(?:письменной\s+)?обратной\s+связи|"
+    r"(?:illustrates?|demonstrates?|shows?)\s+(?:the\s+)?(?:written\s+)?feedback\s+format)", re.I)
 _FORMAT_RESEARCH_OR_GOAL = re.compile(
     r"(?:(?:(?:Исследовать|Проверить|Выяснить|Спросить),\s*)?"
     r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_PERSONAL_FEEDBACK + r"|"
@@ -160,7 +163,9 @@ _FORMAT_RESEARCH_OR_GOAL = re.compile(
     r"(?:Собрать|Получить)\s+" + _RU_PERSONAL_FEEDBACK +
     r"\s+(?:представителей\s+)?аудитории\s+о\s+(?:тестовом\s+)?сообщении|"
     r"(?:Collect|Gather)\s+" + _EN_PERSONAL_FEEDBACK +
-    r"\s+from\s+(?:the\s+)?audience\s+about\s+(?:the\s+)?(?:test\s+)?message)[.?]?", re.I)
+    r"\s+from\s+(?:the\s+)?audience\s+about\s+(?:the\s+)?(?:test\s+)?message|"
+    r"Уточнить\s+у\s+владельца,\s*включает\s+ли\s+курс\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"Confirm\s+with\s+the\s+owner\s+whether\s+the\s+course\s+includes\s+" + _EN_PERSONAL_FEEDBACK + r")[.?]?", re.I)
 _FORMAT_POLICY_WARNINGS = frozenset({
     'Рекомендация перед публикацией — проверить, не подменяет ли сообщение практические задания домашними, а письменную обратную связь персональным разбором; уточнить темы курса и темп освоения у владельца.',
     'Не приравнивать письменную обратную связь к персональному разбору без подтверждения владельца.',
@@ -216,7 +221,8 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     value = text.strip()
     if value in comparisons or _COUNTERFACTUAL.fullmatch(value):
         return
-    if (_PERSONAL_FEEDBACK.search(value) or _FEEDBACK_CONTENT.search(value)):
+    if (_PERSONAL_FEEDBACK.search(value) or _FEEDBACK_CONTENT.search(value)
+            or (_DEMO.search(value) and _DEMO_FEEDBACK_FORMAT.search(value))):
         format_question = (_FORMAT_RESEARCH_OR_GOAL.fullmatch(value)
                            or _CONTENT_RESEARCH_OR_GOAL.fullmatch(value))
         if not (format_question or value in _FORMAT_POLICY_WARNINGS or _verbatim_leaf(value, owner)):

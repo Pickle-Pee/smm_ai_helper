@@ -32,6 +32,8 @@ POLICY = ('Рекомендация перед публикацией — про
     'Получить персональные отклики представителей аудитории о тестовом сообщении.',
     'Collect personal feedback from the audience about the message.',
     'Gather individual reviews from the audience about the test message.',
+    'Уточнить у владельца, включает ли курс персональную обратную связь.',
+    'Confirm with the owner whether the course includes personal feedback.',
 ])
 def test_explicit_audience_research_collection_is_not_owner_feedback_delivery(text):
     validate_leaf(text)
@@ -58,6 +60,9 @@ def with_fact(module, role='product_truth', value=TRUTH):
 
 @pytest.mark.parametrize('text', [
     CMO_BET, EXP_MECHANISM, PERSONAL, CONTENTS,
+    'Добавить демонстрационный образец сравнения снимков, сопровождаемый пояснением, что это иллюстрация формата письменной обратной связи.',
+    'The demonstration sample illustrates the written feedback format.',
+    'The demonstration sample shows the feedback format.',
     'Гипотеза: ' + PERSONAL, 'Если это гипотеза, курс включает индивидуальный разбор.',
     'Copy: "Our course includes personalized written feedback".',
     'We offer individual reviews.', 'The feedback is personalized.',
@@ -98,6 +103,16 @@ def test_saved_live_cmo_and_experiment_product_premises_reject_before_result(mod
         row['evidence_ids'] = [item['evidence_id'] for item in data['local_evidence']]
     with pytest.raises(ExecutorOutputError) as caught:
         run(req, inject)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_saved_nested_demo_intervention_cannot_claim_feedback_format_from_a_comparison():
+    text = ('Добавить на лендинг демонстрационный образец сравнения снимков, '
+            'сопровождаемый пояснением, что это иллюстрация формата письменной обратной связи.')
+    def inject(payload, data):
+        payload['experiments'][0]['intervention'] = text
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(with_fact(ModuleId.EXPERIMENTS), inject)
     assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
 
 
