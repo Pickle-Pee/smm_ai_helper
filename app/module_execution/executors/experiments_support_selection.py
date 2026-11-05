@@ -11,19 +11,25 @@ from .experiments_support_wire import (
     STATEMENT_NUMERIC_ASSERTION_DEFINITION,
 )
 from .intelligence_schemas import ExperimentStatement
+from .numeric_quantity import has_numeric_quantity
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v4"
+WIRE_VERSION = "experiments.support_selection.v5"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
 STATEMENT_FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids", "strategic_parent_id"}
 EVIDENCE_BASIS_DEFINITION = "EvidenceBasisExperimentStatement"
+GUARDRAILS_DEFINITION = "GuardrailsExperimentStatement"
 OTHER_STATEMENT_DEFINITION = "OtherExperimentStatement"
 EVIDENCE_BASIS_NOTES = (
     "Основанием для проверки служит принятая стратегическая гипотеза; она задаёт направление эксперимента, но не доказывает его результативность.",
     "The accepted strategic hypothesis guides the experiment; it does not establish the experiment's effectiveness.",
+)
+GUARDRAIL_NOTES = (
+    "Публичное сообщение должно соответствовать подтверждённому описанию продукта; неподтверждённые свойства и результаты нельзя обещать.",
+    "Public copy must match confirmed owner product descriptions; do not promise unconfirmed features or outcomes.",
 )
 
 
@@ -52,8 +58,8 @@ def _boolean_map(aliases):
             "required": list(aliases), "additionalProperties": False}
 
 
-def _specialize_evidence_basis(definitions):
-    """Constrain one provenance note, preserving all other statement contracts."""
+def _specialize_policy_statements(definitions):
+    """Close qualitative provenance/policy notes, retaining numeric guardrails."""
     statement = definitions["ExperimentStatement"]
     props = statement["properties"]
     expected_names = list(get_args(ExperimentStatement.model_fields["output_name"].annotation))
@@ -68,26 +74,42 @@ def _specialize_evidence_basis(definitions):
                 or text["anyOf"][1] != {"$ref": "#/$defs/" + STATEMENT_NUMERIC_ASSERTION_DEFINITION}):
             _fail()
         qualitative = text["anyOf"][0]
+        numerical = definitions[STATEMENT_NUMERIC_ASSERTION_DEFINITION]
+        quotes = numerical.get("enum")
+        if (set(numerical) != {"type", "minLength", "maxLength", "enum"}
+                or numerical.get("type") != "string" or numerical.get("minLength") != 1
+                or numerical.get("maxLength") != 4000 or type(quotes) is not list or not quotes
+                or any(type(quote) is not str or not 1 <= len(quote) <= 4000
+                       or not has_numeric_quantity(quote) for quote in quotes)):
+            _fail()
     if (set(qualitative) - {"type", "minLength", "maxLength", "title", "pattern"}
             or qualitative.get("type") != "string" or qualitative.get("minLength") != 1
             or qualitative.get("maxLength") != 4000
             or qualitative.get("pattern") != QUALITATIVE_DESIGN_PATTERN):
         _fail()
-    basis, other = deepcopy(statement), deepcopy(statement)
+    basis, guardrails, other = deepcopy(statement), deepcopy(statement), deepcopy(statement)
     basis["properties"]["output_name"]["enum"] = ["evidence_basis"]
     basis["properties"]["text"] = {key: value for key, value in qualitative.items() if key != "pattern"}
     basis["properties"]["text"]["enum"] = list(EVIDENCE_BASIS_NOTES)
-    other["properties"]["output_name"]["enum"] = [name for name in expected_names if name != "evidence_basis"]
+    guardrails["properties"]["output_name"]["enum"] = ["guardrails"]
+    guardrail_text = {key: value for key, value in qualitative.items() if key != "pattern"}
+    guardrail_text["enum"] = list(GUARDRAIL_NOTES)
+    guardrails["properties"]["text"] = ({"anyOf": [guardrail_text, deepcopy(text["anyOf"][1])]}
+                                        if "anyOf" in text else guardrail_text)
+    other["properties"]["output_name"]["enum"] = [
+        name for name in expected_names if name not in {"evidence_basis", "guardrails"}]
     definitions[EVIDENCE_BASIS_DEFINITION] = basis
+    definitions[GUARDRAILS_DEFINITION] = guardrails
     definitions[OTHER_STATEMENT_DEFINITION] = other
     definitions["ExperimentStatement"] = {"anyOf": [
         {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
+        {"$ref": "#/$defs/" + GUARDRAILS_DEFINITION},
         {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
     ]}
 
 
 def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids, parent_ids):
-    """Select citations and a closed evidence-basis note; other V2 content survives."""
+    """Select citations and bounded policy notes; other V2 content survives."""
     try:
         choices = support_selection_catalog(evidence_ids, parent_ids)
         if (type(expected_output_count) is not int or not 1 <= expected_output_count <= 16
@@ -100,7 +122,8 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
                 or schema["properties"]["outputs"].get("type") != "array"
                 or schema["properties"]["outputs"].get("items") != {"$ref": "#/$defs/ExperimentStatement"}
                 or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP,
-                                                        EVIDENCE_BASIS_DEFINITION, OTHER_STATEMENT_DEFINITION))):
+                                                        EVIDENCE_BASIS_DEFINITION, GUARDRAILS_DEFINITION,
+                                                        OTHER_STATEMENT_DEFINITION))):
             _fail()
         for family, definition in (("evidence", "AllowedEvidenceId"), ("parents", "AllowedParentClaimId")):
             scoped = definitions.get(definition)
@@ -144,7 +167,7 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
             count += 1
         if count != 1:
             _fail()
-        _specialize_evidence_basis(definitions)
+        _specialize_policy_statements(definitions)
         schema["properties"]["wire_contract_version"]["enum"] = [WIRE_VERSION]
         # References cannot point into removed fields or outside this schema.
         for node in nodes(schema):

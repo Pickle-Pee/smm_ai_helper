@@ -119,6 +119,11 @@ def test_saved_nested_demo_intervention_cannot_claim_feedback_format_from_a_comp
 @pytest.mark.parametrize('text', [
     'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора.',
     'Не приписывать конкурентам отсутствие обратной связи; в коммуникации избегать формулировок, которые можно понять как замену персонального разбора; держать описание формата обратной связи точным и согласованным с владельцем курса.',
+    'Не обещать персональный разбор, пока формат обратной связи и объём не согласованы с владельцем; все публичные формулировки должны соответствовать подтверждённому описанию продукта.',
+    'Не гарантировать индивидуальную обратную связь без подтверждения владельца.',
+    'Не рекламировать персональный разбор.',
+    'Do not promise personalized feedback without owner confirmation.',
+    'Do not guarantee individual reviews.',
 ])
 def test_closed_negative_format_mention_masks_only_that_mention(text):
     validate_leaf(text)
@@ -128,10 +133,26 @@ def test_closed_negative_format_mention_masks_only_that_mention(text):
         validate_leaf(text + ' Письменная обратная связь содержит конкретные изменения в снимках.')
 
 
+@pytest.mark.parametrize('module,name', [
+    (ModuleId.VIRTUAL_CMO, 'risks'), (ModuleId.EXPERIMENTS, 'guardrails'),
+])
+def test_actual_executor_preserves_negative_personal_promise_policy(module, name):
+    text = ('Не обещать персональный разбор, пока формат обратной связи и объём не согласованы '
+            'с владельцем; все публичные формулировки должны соответствовать подтверждённому описанию продукта.')
+    def inject(payload, data):
+        next(row for row in payload['outputs'] if row['output_name'] == name)['text'] = text
+    result = run(valid_request(module), inject)
+    assert any(row['output_name'] == name and row['text'] == text for row in result.payload['outputs'])
+
+
 @pytest.mark.parametrize('text', [
     'Курс будет в коммуникации избегать формулировок, которые можно понять как замену персонального разбора.',
     'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора, который включён в курс.',
     'В коммуникации избегать формулировок, которые можно понять как замену персонального разбора и письменной обратной связи, которую предлагает курс.',
+    'Курс будет не обещать персональный разбор.',
+    'Не обещать персональный разбор, который уже включён в курс.',
+    'Не обещать персональный разбор, пока курс уже включает персональный разбор.',
+    'Do not promise personal feedback which the course already includes.',
 ])
 def test_negative_policy_prefix_does_not_mask_a_product_or_relative_assertion(text):
     with pytest.raises(StatementSemanticsError):

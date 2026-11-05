@@ -18,7 +18,7 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The current version is experiments.support_selection.v4. It is built on the existing
+The current version is experiments.support_selection.v5. It is built on the existing
 V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
@@ -65,11 +65,28 @@ proves a recurring service format, or establishes customer outcomes. They cannot
 promote a hypothesis into efficacy proof. There is no implicit demo citation.
 
 The source statement is still canonical v1 after decoding. Existing accepted
-artifacts/history are read as before; new wire responses must use v4. Duplicate or
+artifacts/history are read as before; new wire responses must use the current version. Duplicate or
 missing outputs remain canonical coverage failures. Unknown statement names, source
 definition collisions, text bounds and unexpected schema shapes fail closed before
 provider I/O. A changed wire version never authorizes repeating a completed durable
 operation. Historical diagnostic failures remain unchanged.
+
+Version 5 adds a third disjoint statement branch for `guardrails`. Its qualitative
+text is a closed RU/EN publication policy: public copy must match confirmed owner
+product descriptions and must not promise unconfirmed features or outcomes. This
+avoids repeatedly generating free-form policy wording that can resemble delivery
+claims. It is an intentionally narrower generation subset, not equivalence with
+every valid free-form guardrail. The original alternative for complete supplied
+numerical assertions remains intact; its enum must contain recognized quantities,
+and original canonical validation still requires the actual selected source for
+the complete statement. It cannot become an arbitrary qualitative escape.
+
+`evidence_basis` keeps its v4 notes. The other fourteen output contracts remain
+unchanged, including experiment-specific stop/scale decisions and learning records.
+Nested designs, failure conditions, input requirements, citations, mandatory
+strategic parent, field/array bounds and canonical v1 history are unchanged. An
+unprovided outcome or unsupported numerical target does not become an accepted
+guardrail. No source is selected implicitly by either kind of policy note.
 
 ## Bounded generation overhead
 

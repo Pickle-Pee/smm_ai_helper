@@ -15,6 +15,7 @@ from app.module_execution.executors.common import ExecutorOutputError, OutputFai
 from app.module_execution.executors.experiments import strategic_parents
 from app.module_execution.executors.experiments_support_selection import (
     WIRE_VERSION, EVIDENCE_BASIS_NOTES, EVIDENCE_BASIS_DEFINITION, OTHER_STATEMENT_DEFINITION,
+    GUARDRAIL_NOTES, GUARDRAILS_DEFINITION,
 )
 from app.orchestration_runtime.serialization import result_to_json, result_from_json
 from app.orchestration_runtime.service import evaluate_result
@@ -28,6 +29,8 @@ def typed_payload(data, schema):
     for statement in payload["outputs"]:
         if statement["output_name"] == "evidence_basis":
             statement["text"] = EVIDENCE_BASIS_NOTES[0]
+        elif statement["output_name"] == "guardrails":
+            statement["text"] = GUARDRAIL_NOTES[0]
         statement.pop("evidence_ids");statement.pop("parent_claim_ids")
         statement["additional_evidence_support"] = {key:False for key in choices["evidence"]}
         statement["additional_parent_support"] = {key:False for key in choices["parents"]}
@@ -221,13 +224,14 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
     old = v2["$defs"]["ExperimentStatement"]["properties"]
     assert v3["$defs"]["ExperimentStatement"] == {"anyOf": [
         {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
+        {"$ref": "#/$defs/" + GUARDRAILS_DEFINITION},
         {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
     ]}
     new = v3["$defs"][OTHER_STATEMENT_DEFINITION]["properties"]
     for key in ("text", "kind", "confidence", "strategic_parent_id"):
         assert new[key] == old[key]
     assert new["output_name"] == {**old["output_name"],
-        "enum": [name for name in old["output_name"]["enum"] if name != "evidence_basis"]}
+        "enum": [name for name in old["output_name"]["enum"] if name not in {"evidence_basis", "guardrails"}]}
     basis = v3["$defs"][EVIDENCE_BASIS_DEFINITION]["properties"]
     assert basis["output_name"]["enum"] == ["evidence_basis"]
     assert basis["text"]["enum"] == list(EVIDENCE_BASIS_NOTES)
@@ -235,6 +239,11 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
     assert basis["text"]["maxLength"] == old["text"]["maxLength"] == 4000
     for key in set(basis) - {"output_name", "text"}:
         assert basis[key] == new[key]
+    guardrails = v3["$defs"][GUARDRAILS_DEFINITION]["properties"]
+    assert guardrails["output_name"]["enum"] == ["guardrails"]
+    assert guardrails["text"]["enum"] == list(GUARDRAIL_NOTES)
+    for key in set(guardrails) - {"output_name", "text"}:
+        assert guardrails[key] == new[key]
     assert "parent_claim_ids" not in new and "evidence_ids" not in new
     from app.module_execution.executors.provider_schema import nodes
     for node in nodes(v3):
@@ -270,6 +279,83 @@ def test_evidence_basis_note_preserves_exact_selections_and_canonical_history(in
     quality = evaluate_result(invocation.execution_id, result, invocation.upstream_results)
     assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
     assert result_from_json(result_to_json(result)) == result
+
+
+@pytest.mark.parametrize("note", GUARDRAIL_NOTES)
+def test_closed_publication_guardrails_preserve_normal_pipeline_and_quality(invocation, note):
+    async def model(**kwargs):
+        payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        next(row for row in payload["outputs"] if row["output_name"] == "guardrails")["text"] = note
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    result = asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+        support_selection_wire=True).execute(invocation))
+    assert next(row for row in result.payload["outputs"] if row["output_name"] == "guardrails")["text"] == note
+    quality = evaluate_result(invocation.execution_id, result, invocation.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+    assert result_from_json(result_to_json(result)) == result
+
+
+@pytest.mark.parametrize("text", [
+    "Не обещать персональный разбор, пока формат обратной связи и объём не согласованы с владельцем; все публичные формулировки должны соответствовать подтверждённому описанию продукта.",
+    "Our course provides personal feedback.", "A qualitative guardrail outside the closed provider subset",
+    "Invented 40 percent conversion target", {"text": GUARDRAIL_NOTES[0]},
+])
+def test_guardrails_do_not_have_a_free_qualitative_or_object_escape(invocation, text):
+    async def model(**kwargs):
+        payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        next(row for row in payload["outputs"] if row["output_name"] == "guardrails")["text"] = text
+        assert not Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+            support_selection_wire=True).execute(invocation))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
+
+
+@pytest.mark.parametrize("cite", [False, True])
+@pytest.mark.parametrize("projection", [False, True])
+def test_guardrails_numeric_alternative_retains_exact_actual_source_requirement(invocation, cite, projection):
+    quote = "Supplied scenario contains 20 qualified inquiries"
+    parent_id = "clm_z_additional_recommendation"
+    request = replace_parent_assertion(invocation, parent_id, quote)
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        payload = typed_payload(data, kwargs["response_schema"])
+        row = next(row for row in payload["outputs"] if row["output_name"] == "guardrails")
+        row["text"] = quote
+        alias = next(key for key, identity in data["experiments_support_selection_catalog"]["parents"].items()
+                     if identity == parent_id)
+        row["additional_parent_support"][alias] = cite
+        guardrail_schema = kwargs["response_schema"]["$defs"][GUARDRAILS_DEFINITION]["properties"]["text"]
+        assert guardrail_schema["anyOf"][0]["enum"] == list(GUARDRAIL_NOTES)
+        assert guardrail_schema["anyOf"][1] == {"$ref": "#/$defs/AllowedExperimentStatementNumericAssertion"}
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+        support_selection_wire=True, provider_schema_projection=projection)
+    if cite:
+        result = asyncio.run(executor.execute(request))
+        assert next(row for row in result.payload["outputs"] if row["output_name"] == "guardrails")["text"] == quote
+    else:
+        with pytest.raises(ExecutorOutputError) as caught:
+            asyncio.run(executor.execute(request))
+        assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_guardrails_numeric_definition_cannot_be_replaced_by_an_arbitrary_qualitative_enum():
+    from app.module_execution.errors import ModuleExecutionContractError
+    from app.module_execution.executors.experiments_support_selection import support_selection_wire_schema
+    v2, evidence, parents = scope_schema(2, 3)
+    text = v2["$defs"]["ExperimentStatement"]["properties"]["text"]
+    v2["$defs"]["AllowedExperimentStatementNumericAssertion"] = {
+        "type": "string", "minLength": 1, "maxLength": 4000, "enum": ["An arbitrary qualitative escape"]}
+    v2["$defs"]["ExperimentStatement"]["properties"]["text"] = {
+        "anyOf": [text, {"$ref": "#/$defs/AllowedExperimentStatementNumericAssertion"}]}
+    before = deepcopy(v2)
+    with pytest.raises(ModuleExecutionContractError):
+        support_selection_wire_schema(v2, 16, evidence, parents)
+    assert v2 == before
 
 
 @pytest.mark.parametrize("text", [
@@ -312,14 +398,14 @@ def test_evidence_basis_branches_do_not_weaken_exact_output_coverage(invocation,
         assert caught.value.stage is OutputFailureStage.OUTPUT_COVERAGE_INVALID
 
 
-def test_fifteen_other_output_names_retain_free_bounded_text():
+def test_fourteen_other_output_names_retain_free_bounded_text():
     from app.module_execution.executors.experiments_support_selection import support_selection_wire_schema
     v2, evidence, parents = scope_schema(2, 3)
     wire = support_selection_wire_schema(v2, 16, evidence, parents)
     definition = wire["$defs"][OTHER_STATEMENT_DEFINITION]
     validator = Draft202012Validator({"$defs": wire["$defs"], **definition})
     names = definition["properties"]["output_name"]["enum"]
-    assert len(names) == 15 and "evidence_basis" not in names
+    assert len(names) == 14 and not {"evidence_basis", "guardrails"} & set(names)
     for name in names:
         statement = {"output_name": name, "text": "Compare supplied alternatives",
             "kind": "HYPOTHESIS", "confidence": "MEDIUM", "strategic_parent_id": parents[0],
@@ -331,13 +417,15 @@ def test_fifteen_other_output_names_retain_free_bounded_text():
             assert not validator.is_valid({**statement, "text": text}), (name, text[:20])
 
 
-@pytest.mark.parametrize("mutation", ["basis_collision", "other_collision", "output_names", "text_bound", "array_ref"])
+@pytest.mark.parametrize("mutation", ["basis_collision", "guardrails_collision", "other_collision", "output_names", "text_bound", "array_ref"])
 def test_evidence_basis_specialization_refuses_unknown_contracts_without_mutating(mutation):
     from app.module_execution.errors import ModuleExecutionContractError
     from app.module_execution.executors.experiments_support_selection import support_selection_wire_schema
     v2, evidence, parents = scope_schema(2, 3)
     if mutation == "basis_collision":
         v2["$defs"][EVIDENCE_BASIS_DEFINITION] = {"type": "string"}
+    elif mutation == "guardrails_collision":
+        v2["$defs"][GUARDRAILS_DEFINITION] = {"type": "string"}
     elif mutation == "other_collision":
         v2["$defs"][OTHER_STATEMENT_DEFINITION] = {"type": "string"}
     elif mutation == "output_names":

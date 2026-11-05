@@ -171,11 +171,15 @@ retain the existing source checks; appending a promise or positive assertion to
 the negative clause does not match the limitation grammar. Other safe free-form
 limitations outside this bounded grammar can still reject.
 
-EXPERIMENTS support-selection v4 constrains only `evidence_basis` to a closed
+EXPERIMENTS support-selection v5 constrains `evidence_basis` to a closed
 RU/EN provenance note: the explicitly selected accepted strategic hypothesis
 guides a test and does not establish effectiveness. It cannot generate a mixed
-demo-proof assertion there. The source IDs, array shape, canonical payload and
-all fifteen other output contracts remain unchanged.
+demo-proof assertion there. Qualitative `guardrails` selects a closed owner-truth
+publication-policy note; the complete supplied-number alternative remains
+available with its original exact selected-source checks. This is a deliberately
+bounded generation subset. All fourteen other outputs, including experiment-specific
+stop/scale decisions, and nested design failure conditions remain unchanged.
+The source IDs, array shape and canonical payload remain compatible.
 
 Two bounded nonassertive RU verb contexts no longer trigger the current-demo
 check through whole-leaf keyword co-occurrence: operator-clause-head
@@ -202,9 +206,11 @@ an unsupported feature elsewhere in the leaf. Unknown properties such as
 regularity/systematic practice remain outside these bounded runtime families
 and require separate actual-content review. The instruction also explicitly
 treats upstream risk warnings as constraints, not a product-feature catalog.
-The closed operator clause about avoiding wording mistaken for personal review
-excludes only that negative mention from the personal-format check. It neither
-skips the rest of the leaf nor accepts a relative clause asserting actual delivery.
+Closed operator clauses about avoiding wording mistaken for personal review or
+not promising that format exclude only their captured negative mention from the
+personal-format check. Owner-approval conditions use a bounded complete grammar;
+the rest of the leaf is still checked. Relative clauses asserting actual delivery
+and appended positive product claims are not exempt.
 
 ## CMO qualitative generation and spelled quantities
 

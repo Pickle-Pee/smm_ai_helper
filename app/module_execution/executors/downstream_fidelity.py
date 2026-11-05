@@ -146,6 +146,13 @@ _NEGATIVE_FORMAT_MENTION = re.compile(
     r"(?:^|;)\s*(?:в\s+коммуникации\s+)?избегать\s+формулировок,\s*"
     r"которые\s+можно\s+понять\s+как\s+замену\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
     r")(?=\s*(?:[;.!?]|$))", re.I)
+_NEGATIVE_PROMISE_FORMAT_MENTION = re.compile(
+    r"(?:^|;)\s*Не\s+(?:обещать|гарантировать|рекламировать)\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
+    r")(?:(?:\s+без\s+подтверждения\s+владельца)|,\s*пока\s+формат\s+обратной\s+связи"
+    r"(?:\s+и\s+объ[её]м)?\s+не\s+согласован(?:ы)?\s+с\s+владельцем)?(?=\s*(?:[;.!?]|$))", re.I)
+_EN_NEGATIVE_PROMISE_FORMAT_MENTION = re.compile(
+    r"(?:^|;)\s*Do\s+not\s+(?:promise|guarantee|advertise)\s+(?P<format>" + _EN_PERSONAL_FEEDBACK +
+    r")(?:\s+without\s+owner\s+confirmation)?(?=\s*(?:[;.!?]|$))", re.I)
 _FORMAT_RESEARCH_OR_GOAL = re.compile(
     r"(?:(?:(?:Исследовать|Проверить|Выяснить|Спросить),\s*)?"
     r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_PERSONAL_FEEDBACK + r"|"
@@ -225,7 +232,9 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     value = text.strip()
     if value in comparisons or _COUNTERFACTUAL.fullmatch(value):
         return
-    negative_formats = {match.span('format') for match in _NEGATIVE_FORMAT_MENTION.finditer(value)}
+    negative_formats = {match.span('format') for pattern in (
+        _NEGATIVE_FORMAT_MENTION, _NEGATIVE_PROMISE_FORMAT_MENTION, _EN_NEGATIVE_PROMISE_FORMAT_MENTION)
+        for match in pattern.finditer(value)}
     personal_formats = tuple(match for match in _PERSONAL_FEEDBACK.finditer(value)
                              if match.span() not in negative_formats)
     if (personal_formats or _FEEDBACK_CONTENT.search(value)
