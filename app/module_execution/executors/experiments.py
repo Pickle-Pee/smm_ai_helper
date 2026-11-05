@@ -192,7 +192,7 @@ citation. Keep all original grounding, design and exact constraint requirements.
         return await self.generate(request, evidence)
 
     def build_result(self, request, output, evidence, parents):
-        from .downstream_fidelity import comparison_quotes, selected_sources, text_leaves, validate_leaf
+        from .downstream_fidelity import comparison_quotes, selected_sources, text_leaves, validate_leaf, validate_limitation
 
         local = {item.record.evidence_id: item for item in evidence}
         for statement in output.outputs:
@@ -208,8 +208,10 @@ citation. Keep all original grounding, design and exact constraint requirements.
         for experiment in output.experiments:
             for text in text_leaves(experiment.model_dump()):
                 validate_leaf(text, owner=design_owner, demo=design_demo, comparisons=design_comparisons)
-        for text in (*output.assumptions, *output.limitations):
+        for text in output.assumptions:
             validate_leaf(text)
+        for text in output.limitations:
+            validate_limitation(text, local)
         eligible = strategic_parents(request)
         for output_index, statement in enumerate(output.outputs):
             # Reject before the first output's design/constraint union. That

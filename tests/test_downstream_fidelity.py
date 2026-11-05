@@ -6,7 +6,7 @@ import pytest
 
 from app.marketing_orchestrator.quality_gates.contracts import EvidenceSourceClass
 from app.module_execution.executors.common import ExecutorOutputError, SemanticRule, StatementSemanticsError
-from app.module_execution.executors.downstream_fidelity import selected_sources, validate_leaf
+from app.module_execution.executors.downstream_fidelity import selected_sources, validate_leaf, validate_limitation
 from app.module_registry import ModuleId
 from tests.test_module_executors import fact
 from tests.test_strategy_intelligence import run, valid_request
@@ -16,6 +16,10 @@ PROMISE = 'Сообщение «Курс Линия — практика с пи
 TRUTH = 'Участники выполняют практические задания и получают письменную обратную связь.'
 DEMO = 'Демонстрационный образец показывает сравнение снимков.'
 DEMO_CLAIM = 'Существующее демонстрационное proof демонстрирует формат обратной связи.'
+DEMO_LIMITATION = ('Существующее доказательство ограничено демонстрационным образцом '
+                   'и не подтверждает масштабную эффективность акцента.')
+DEMO_LIMITATION_EN = ('Existing evidence is limited to a demonstration sample '
+                      'and does not prove the effectiveness of the course.')
 
 
 @pytest.mark.parametrize('text', [
@@ -201,3 +205,163 @@ def test_exact_foreign_attribution_is_not_an_owner_source_for_new_copy():
         validate_leaf('You will learn photography.', comparisons=(foreign,))
     with pytest.raises(StatementSemanticsError):
         validate_leaf(foreign + ' Our course: you will master photography.', comparisons=(foreign,))
+
+
+def limitation_request(module, role='existing_proof', value=DEMO):
+    req = valid_request(module)
+    facts = req.context_packet.known_facts
+    if role is not None:
+        facts = (*facts, fact(role, value))
+    return replace(req, context_packet=replace(req.context_packet, known_facts=facts))
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+@pytest.mark.parametrize('text', [
+    DEMO_LIMITATION,
+    'Демонстрационный образец не доказывает эффективность курса.',
+    DEMO_LIMITATION + ' Демонстрационный образец не подтверждает эффективность обучения.',
+    DEMO_LIMITATION_EN,
+    'The demonstration sample does not confirm the effectiveness of training.',
+    DEMO_LIMITATION_EN + ' The demonstration sample does not prove large-scale effectiveness of training.',
+])
+def test_actual_executors_accept_closed_negative_demo_coverage_as_global_limitation(module, text):
+    def inject(payload, data):
+        payload['limitations'] = [text]
+    result = run(limitation_request(module), inject)
+    assert text in result.payload['limitations']
+    assert result.normalized_result.claims
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+@pytest.mark.parametrize('role,value', [
+    (None, DEMO), ('product_truth', DEMO), ('target_or_target_hypothesis', DEMO),
+    ('existing_proof', 'Собраны ответы аудитории.'),
+    ('existing_proof', 'Existing proof shows feedback format.'),
+])
+def test_actual_limitation_requires_request_local_demo_proof_not_owner_or_hypothesis_parent(module, role, value):
+    def inject(payload, data):
+        payload['limitations'] = [DEMO_LIMITATION]
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module, role, value), inject)
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+def test_english_negative_confirm_clause_requires_witness_even_without_old_positive_verb_signal(module):
+    def inject(payload, data):
+        payload['limitations'] = ['The demonstration sample does not confirm the effectiveness of training.']
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module, role=None), inject)
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+@pytest.mark.parametrize('source', [
+    'Демонстрационный образец отсутствует.',
+    'Демонстрационный образец не предоставлен.',
+    'No demonstration sample exists.',
+    'The demonstration sample is not available.',
+    'Создать демонстрационный образец, который показывает сравнение снимков.',
+    'Проверить, показывает ли демонстрационный образец сравнение снимков.',
+    'Check whether the demonstration sample shows a comparison.',
+    'Hypothesis: the demonstration sample shows a comparison.',
+    'The demonstration sample will show a comparison.',
+    'Демонстрационный образец',
+    'Демонстрационный образец показывает сравнение снимков, если его создать.',
+    'The demonstration sample shows a comparison if we create it.',
+    'Демонстрационный образец показывает сравнение, если мы его создадим.',
+    'The demo shows the comparison if created.',
+    'The demonstration sample shows a comparison when created.',
+    'The demonstration sample shows a comparison once created.',
+    'The demonstration sample shows a comparison after creation.',
+    'The demonstration sample is available when created.',
+    'Демонстрационный образец показывает сравнение снимков, когда будет готов.',
+    'Демонстрационный образец показывает сравнение снимков, когда только создадут.',
+    'Демонстрационный образец показывает сравнение снимков?',
+    'The demonstration sample shows a comparison?',
+])
+def test_actual_limitation_cannot_infer_current_demo_from_absence_plan_question_or_bare_marker(module, source):
+    def inject(payload, data):
+        payload['limitations'] = [DEMO_LIMITATION]
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module, value=source), inject)
+
+
+@pytest.mark.parametrize('source', [
+    DEMO, 'Демонстрационный образец показывает вариант глазурования чаши.',
+    'Предоставлен демонстрационный образец.', 'Имеется демонстрационный образец.',
+    'The demonstration sample shows a comparison.', 'A provided demo illustrates a comparison.',
+    'The demonstration sample is available.', 'Provided demonstration sample.',
+])
+def test_limitation_current_witness_uses_only_closed_complete_sources(source):
+    local = {'demo': SimpleNamespace(input_key='existing_proof', value=source,
+             record=SimpleNamespace(source_class=EvidenceSourceClass.FIRST_PARTY))}
+    if 'illustrates' in source:
+        # A valid but unsupported paraphrase does not expand this presence
+        # recognizer; it is deliberately not general NLP existence inference.
+        with pytest.raises(StatementSemanticsError):
+            validate_limitation(DEMO_LIMITATION, local)
+    else:
+        validate_limitation(DEMO_LIMITATION, local)
+
+
+@pytest.mark.parametrize('source_class', [EvidenceSourceClass.EXTERNAL_PRIMARY, EvidenceSourceClass.EXTERNAL_SECONDARY])
+def test_limitation_witness_must_be_typed_first_party(source_class):
+    local = {'demo': SimpleNamespace(input_key='existing_proof', value=DEMO,
+             record=SimpleNamespace(source_class=source_class))}
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_limitation(DEMO_LIMITATION, local)
+    assert caught.value.rule is SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+def test_actual_limitation_rejects_external_class_even_when_demo_role_is_present(module, monkeypatch):
+    from app.module_execution.executors import experiments, virtual_cmo
+    implementation = virtual_cmo if module is ModuleId.VIRTUAL_CMO else experiments
+    original = implementation.first_party_evidence
+    def external(*args, **kwargs):
+        return tuple(replace(item, record=replace(item.record, source_class=EvidenceSourceClass.EXTERNAL_PRIMARY))
+                     if item.input_key == 'existing_proof' else item
+                     for item in original(*args, **kwargs))
+    monkeypatch.setattr(implementation, 'first_party_evidence', external)
+    def inject(payload, data):
+        payload['limitations'] = [DEMO_LIMITATION]
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module), inject)
+
+
+@pytest.mark.parametrize('module', [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+@pytest.mark.parametrize('text', [
+    DEMO_LIMITATION + ' Вы научитесь уверенно фотографировать.',
+    DEMO_LIMITATION + ' Демонстрационный образец показывает формат курса.',
+    DEMO_LIMITATION_EN + ' The course is effective.',
+    'The demonstration sample does not confirm the effectiveness of training. You will master photography.',
+    'Гипотеза: ' + DEMO_CLAIM,
+    DEMO,
+    DEMO_CLAIM,
+    'The existing demonstration proves the course is effective.',
+    DEMO_LIMITATION + ' Демонстрационный образец не подтверждает эффективность обучения. '
+    + 'Демонстрационный образец не доказывает эффективность курса.',
+])
+def test_negative_coverage_exception_never_grants_positive_or_appended_claim_authority(module, text):
+    def inject(payload, data):
+        payload['limitations'] = [text]
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module), inject)
+
+
+@pytest.mark.parametrize('module,location', [
+    (ModuleId.VIRTUAL_CMO, 'text'), (ModuleId.VIRTUAL_CMO, 'items'),
+    (ModuleId.VIRTUAL_CMO, 'assumptions'), (ModuleId.EXPERIMENTS, 'text'),
+    (ModuleId.EXPERIMENTS, 'intervention'), (ModuleId.EXPERIMENTS, 'assumptions'),
+])
+def test_global_limitation_rule_does_not_authorize_other_output_locations(module, location):
+    def inject(payload, data):
+        if location == 'assumptions':
+            payload['assumptions'] = [DEMO_LIMITATION]
+        elif location == 'intervention':
+            payload['experiments'][0]['intervention'] = DEMO_LIMITATION
+        elif location == 'items':
+            payload['outputs'][0]['items'] = [DEMO_LIMITATION]
+        else:
+            payload['outputs'][0]['text'] = DEMO_LIMITATION
+    with pytest.raises(ExecutorOutputError):
+        run(limitation_request(module), inject)

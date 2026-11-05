@@ -70,6 +70,33 @@ _DEMO_PROPOSALS = frozenset({
 _COUNTERFACTUAL = re.compile(
     r"^(?:Не\s+(?:обещать|использовать\s+обещание)|Do\s+not\s+promise|Avoid\s+promising)\s+"
     r"(?:«[^«»\n]+»|\"[^\"\n]+\"|'[^'\n]+')[.!]?$", re.I)
+_RU_DEMO_SOURCE = r"(?:демонстрационный\s+(?:образец|пример|материал|ролик)|демо)"
+_EN_DEMO_SOURCE = r"(?:demo|demonstration)(?:\s+(?:sample|example))?"
+_CURRENT_DEMO_SOURCE = re.compile(
+    r"(?:" + _RU_DEMO_SOURCE + r"\s+(?:(?:показывает|демонстрирует)\s+"
+    r"(?:сравнение снимков|вариант глазурования чаши)|имеется|предоставлен|существует)|"
+    r"(?:Имеется|Предоставлен|Существует)\s+" + _RU_DEMO_SOURCE + r"|"
+    r"(?:(?:The|A|An)\s+)?(?:(?:existing|provided)\s+)?" + _EN_DEMO_SOURCE +
+    r"\s+(?:(?:shows?|demonstrates?)\s+(?:a comparison|the comparison|"
+    r"a comparison of photographs|a cup glazing variant|a glazing variant for a cup)|"
+    r"exists?|is\s+(?:available|provided))|"
+    r"(?:Available|Provided)\s+" + _EN_DEMO_SOURCE + r")\.?", re.I)
+_NEGATIVE_DEMO_CLAUSE = (
+    r"(?:(?:Существующее|Предоставленное)\s+доказательство\s+ограничено\s+"
+    r"демонстрационным\s+образцом\s+и\s+не\s+подтверждает\s+"
+    r"(?:масштабную\s+)?эффективность\s+(?:акцента|курса|обучения)|"
+    r"Демонстрационный\s+образец\s+не\s+(?:подтверждает|доказывает)\s+"
+    r"(?:масштабную\s+)?эффективность\s+(?:акцента|курса|обучения)|"
+    r"(?:Existing|Provided)\s+evidence\s+is\s+limited\s+to\s+a\s+demonstration\s+"
+    r"sample\s+and\s+does\s+not\s+(?:confirm|prove)\s+(?:the\s+)?"
+    r"(?:large-scale\s+)?effectiveness\s+of\s+(?:the\s+)?(?:emphasis|course|training)|"
+    r"(?:The\s+)?demonstration\s+sample\s+does\s+not\s+(?:confirm|prove)\s+"
+    r"(?:the\s+)?(?:large-scale\s+)?effectiveness\s+of\s+"
+    r"(?:the\s+)?(?:emphasis|course|training))"
+)
+_NEGATIVE_DEMO_LIMITATION = re.compile(
+    _NEGATIVE_DEMO_CLAUSE + r"(?:\.\s+" + _NEGATIVE_DEMO_CLAUSE + r")?\.?", re.I)
+_NEGATIVE_DEMO_PREFIX = re.compile(_NEGATIVE_DEMO_CLAUSE + r"\b", re.I)
 
 
 def selected_sources(statement, local):
@@ -132,6 +159,32 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
         planned = value in _DEMO_PROPOSALS
         if not planned and not _verbatim_leaf(value, demo):
             raise StatementSemanticsError(SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE)
+
+
+def validate_limitation(text, local):
+    """Permit closed negative coverage only in global output limitations.
+
+    A request-local first-party current demo can witness its lack of established
+    effectiveness, never a positive product outcome or a new demo-format fact.
+    The entire leaf must contain only one or two closed negative clauses. No
+    appended assertion, parent hypothesis or generic proof role grants authority.
+    The complete source must match a closed presence/comparison/glazing shape;
+    there is no arbitrary object or suffix. Other valid source paraphrases can
+    reject. This is deliberately not general NLP existence inference.
+    """
+    value = text.strip()
+    if _NEGATIVE_DEMO_LIMITATION.fullmatch(value):
+        if any(item.input_key == "existing_proof"
+               and item.record.source_class is EvidenceSourceClass.FIRST_PARTY
+               and isinstance(item.value, str) and _CURRENT_DEMO_SOURCE.fullmatch(item.value.strip())
+               for item in local.values()):
+            return
+        raise StatementSemanticsError(SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE)
+    if _NEGATIVE_DEMO_PREFIX.match(value):
+        # A recognized negative clause cannot launder appended positive prose,
+        # even where the old lexical co-occurrence check would miss its verb.
+        raise StatementSemanticsError(SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE)
+    validate_leaf(text)
 
 
 def text_leaves(value):

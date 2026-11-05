@@ -160,6 +160,17 @@ No persisted schema or migration changes. Historical accepted artifacts retain
 their historical semantics, including saved diagnostic failures. New generation
 is stricter; a post-response semantic failure does not authorize another POST.
 
+Global negative evidence limitations have a separate bounded context check.
+Whole closed RU/EN clauses stating that a supplied demonstration does not prove
+effectiveness are permitted only when request-local FIRST_PARTY existing_proof
+positively witnesses an actual demonstration. A keyword in an absent, planned,
+conditional or unrelated source cannot confer this authority. This is metadata
+about a proof limitation, not permission to assert product outcomes or what the
+demo positively shows. Assumptions, statement text/items and nested designs
+retain the existing source checks; appending a promise or positive assertion to
+the negative clause does not match the limitation grammar. Other safe free-form
+limitations outside this bounded grammar can still reject.
+
 ## CMO qualitative generation and spelled quantities
 
 The d9ddd25 full-course diagnostic reached a verified POSITIONING artifact, then
