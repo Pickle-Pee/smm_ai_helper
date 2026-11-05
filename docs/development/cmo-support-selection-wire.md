@@ -20,11 +20,11 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v4. Neither Registry descriptors nor DTOs change.
-Version 4 retains v2 selection semantics and adds the regular qualitative
-cardinal-word restriction described in cmo-provider-semantic-contract.md. The v3
-lookahead candidate produced an empty incomplete provider response and was not
-released. Persisted
+virtual_cmo.support_selection.v5. Neither Registry descriptors nor DTOs change.
+Version 5 retains v2 selection semantics and adds the small observed-count
+generation filter described in cmo-provider-semantic-contract.md. The v3
+lookahead and v4 full-vocabulary candidates produced incomplete provider
+responses and were not released. Persisted
 canonical payloads and durable operation identities remain unchanged; a changed
 generation fingerprint never authorizes replaying a completed provider POST.
 

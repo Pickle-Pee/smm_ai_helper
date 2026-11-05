@@ -47,7 +47,7 @@ def test_provider_rejects_digits_already_forbidden_by_cmo_guard(field):
 @pytest.mark.parametrize("field", ["text", "items"])
 @pytest.mark.parametrize("text", [
     "Разработать два варианта тестовых сообщений: акцент на обратной связи и акцент на практике.",
-    "Compare two short options", "Сравнить ДвА варианта", "Протестировать\nтри варианта",
+    "Compare two short options", "Сравнить ДвА варианта", "Протестировать\nдве гипотезы",
     "Сравнить\nтекст\nи два варианта\nсообщений", "два", "two", "два-варианта",
 ])
 def test_provider_blocks_word_quantities_before_canonical_rejection(field, text):
@@ -57,12 +57,12 @@ def test_provider_blocks_word_quantities_before_canonical_rejection(field, text)
     assert not Draft202012Validator(projected).is_valid(value)
 
 
-def test_qualitative_pattern_excludes_whole_cardinal_vocabulary_without_token_splitting():
+def test_generation_filter_excludes_observed_count_forms_without_token_splitting():
     import re
-    from app.module_execution.executors.numeric_quantity import _CARDINALS
-    from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
+    from app.module_execution.executors.qualitative_generation import (
+        GENERATION_COUNT_WORDS, QUALITATIVE_GENERATION_PATTERN)
     pattern = re.compile(QUALITATIVE_GENERATION_PATTERN)
-    for cardinal in _CARDINALS:
+    for cardinal in GENERATION_COUNT_WORDS:
         for word in (cardinal, cardinal.upper(), cardinal.title()):
             for text in (word, f"Compare {word} options", f"Текст\n«{word}»\nпосле"):
                 assert pattern.fullmatch(text) is None, text
@@ -72,9 +72,21 @@ def test_qualitative_pattern_excludes_whole_cardinal_vocabulary_without_token_sp
                  "Первый шаг — проверить интерес", "двадцатый вариант", "Отзывы\nи практика.",
                  "Проверить реакцию на сообщение. " * 100):
         assert pattern.fullmatch(text), text
-    # Deliberately narrower than canonical semantics, documented rather than
-    # pretending that every harmless use of a cardinal is a quantity.
-    assert pattern.fullmatch("one of the options") is None
+    assert pattern.fullmatch("one of the options")
+
+
+def test_unfiltered_count_still_fails_the_full_canonical_guard():
+    from app.module_execution.executors.common import StatementSemanticsError, SemanticRule, NumericLocation
+    from app.module_execution.executors.intelligence_schemas import OtherStrategyStatement
+    from app.module_execution.executors.numeric_grounding import validate_numeric_context
+    _, _, projected, ids = capture()
+    value = output(ids, text="Сравнить три варианта")
+    assert Draft202012Validator(projected).is_valid(value)
+    statement = OtherStrategyStatement(**{**value["outputs"][0], "output_name": "strategic_diagnosis"})
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_numeric_context(statement, {}, {})
+    assert caught.value.rule is SemanticRule.NUMERICAL_SUPPORT_REQUIRED
+    assert caught.value.numeric_location is NumericLocation.TEXT
 
 
 def test_source_bound_spelled_quantity_stays_in_numeric_context():

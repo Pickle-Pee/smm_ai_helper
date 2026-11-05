@@ -1,7 +1,9 @@
-"""A regular-language RU/EN generation subset, not quantity validation."""
+"""Small generation filter for the observed count failure, not quantity validation."""
 from .numeric_quantity import _CARDINALS
 
 
+GENERATION_COUNT_WORDS = frozenset(("two", "два", "две", "двух", "двум", "двумя"))
+assert GENERATION_COUNT_WORDS <= _CARDINALS
 _ALPHABET = "abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя"
 _LETTERS = "A-Za-zА-Яа-яЁё"
 _WORD_CHARACTER = f"[{_LETTERS}]"
@@ -26,14 +28,14 @@ def _character_class(letters):
 
 
 def _allowed_word_pattern():
-    """Complement the finite cardinal trie using only regular expressions.
+    """Complement the small observed-count trie using regular expressions.
 
     A word is allowed when it ends at a nonterminal prefix, diverges from the
     trie, or continues beyond a terminal leaf. No lookaround, flags or Unicode
     shorthand classes are needed by the provider's constrained decoder.
     """
     trie = {}
-    for word in sorted(_CARDINALS):
+    for word in sorted(GENERATION_COUNT_WORDS):
         node = trie
         for letter in word:
             node = node.setdefault(letter, {})
@@ -66,7 +68,8 @@ QUALITATIVE_GENERATION_PATTERN = (
     "^" + _SEPARATOR + "*(?:" + _WORD_PATTERN
     + "(?:" + _SEPARATOR + "+" + _WORD_PATTERN + ")*)?" + _SEPARATOR + "*$"
 )
-# This deliberately also excludes harmless standalone cardinals such as "one
-# of the options". Other languages/Unicode digits and actual source provenance
-# remain the unchanged canonical guard's responsibility. Numeric quotations
-# use their separate complete, source-bound numeric_context branch.
+# This covers the observed "два варианта"/"two options" generation failure.
+# Other quantities, Unicode digits and source provenance remain the unchanged
+# full canonical guard's responsibility. Absence of a pattern rejection proves
+# nothing about numerical safety. Complete source-bound quotations still use
+# numeric_context. A full-vocabulary grammar failed actual CMO generation.

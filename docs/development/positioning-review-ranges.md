@@ -165,21 +165,23 @@ is stricter; a post-response semantic failure does not authorize another POST.
 The d9ddd25 full-course diagnostic reached a verified POSITIONING artifact, then
 failed CMO on an unsupported "два варианта". The existing canonical quantity
 guard correctly rejected it; the provider's ASCII-digit-only pattern had not
-prevented it. CMO support-selection wire v4 now additionally excludes standalone
-RU/EN cardinal words from that same guard's finite vocabulary in qualitative
-text/items. Numeric context still permits complete request-scoped source quotes,
+prevented it. CMO support-selection wire v5 additionally excludes the observed
+count forms two/два/две/двух/двум/двумя in qualitative text/items. The complete
+canonical guard remains authoritative for all other counts. Numeric context
+still permits complete request-scoped source quotes,
 including quantities spelled as words. Canonical quantity/provenance validation,
 persisted DTOs and durable operation IDs are unchanged. EXPERIMENTS/POSITIONING
 generation schemas are unaffected by this CMO-specific constraint.
 
-The regular pattern uses a finite trie complement with explicit RU/EN case
+The small regular pattern uses a trie complement with explicit RU/EN case
 pairs/boundaries and anchors only outside the expression. The prior lookahead
 candidate and a repeated inner-end-anchor variant both yielded empty incomplete
 responses. A differential matrix isolated the anchor construction; the final
-full-vocabulary pattern completed a bounded probe with nonempty schema-valid
-output. This capability check is not a business-quality pass. This is
-a narrower generation language: even harmless "one of the options" is excluded.
-Other languages, Unicode decimal digits and arbitrary semantic quantities remain
+full-vocabulary pattern completed a primitive probe but truncated the actual
+CMO response. Provider causation is unknown; this motivated the small filter
+instead of treating a primitive pass as full-schema acceptance. Harmless "one
+of the options" remains allowed. Other counts/languages, Unicode digits and
+arbitrary semantic quantities remain
 the canonical guard's responsibility. It is not a complete quantity ontology.
 An existing operation with a saved response or changed fingerprint cannot be
 resubmitted merely because the wire version changed.
