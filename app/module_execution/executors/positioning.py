@@ -12,7 +12,10 @@ from .provider_schema import (
 )
 from .positioning_provider_schema import minimal_positioning_schema
 from .positioning_observation_schema import positioning_observation_schema
-from .positioning_assurance import ASSURANCE as _ASSURANCE, has_product_assurance
+from .positioning_assurance import (
+    ASSURANCE as _ASSURANCE, NO_EQUIPMENT_PURCHASE, has_product_assurance,
+    supports_no_equipment_purchase,
+)
 from .intelligence_common import require_supported_numbers, supported_text
 from .claim_support import assertion_support
 from .schemas import (
@@ -21,6 +24,7 @@ from .schemas import (
 )
 from .positioning_support_selection import (
     support_selection_wire_schema, decode_support_selection_wire, support_selection_catalog,
+    product_source_catalog, source_assertion_aliases,
     WIRE_VERSION as SELECTION_WIRE_VERSION,
 )
 from .support_schema import support_response_schema
@@ -49,7 +53,17 @@ class PositioningExecutor(BaseExecutor):
     instruction = """Develop the requested positioning outputs: category/frame, target/customer job,
 value proposition, differentiation, RTB, positioning, USP directions, offer and
 message hierarchy as requested. Ground product promises and RTB in supplied product
-truth/proof; a positioning statement is not a slogan. Never invent uniqueness or
+truth/proof; a positioning statement is not a slogan.
+Use target only for who the audience is and what it wants to achieve. Describe
+audience characteristics and needs using audience evidence, and keep uncertainty
+explicit. Keep all product conditions out of target, including equipment
+requirements or exemptions, delivery format, included items, eligibility and
+terms of use. This applies even when the condition is sourced or phrased as
+something the audience wants. Put supported product conditions in a requested
+product output such as value_proposition or offer. If no suitable product output
+was requested, omit the condition. Do not infer product features or terms from
+the audience profile or product name.
+Never invent uniqueness or
 customer quotes. For differentiation, points_of_difference and USP_directions,
 kind must always be HYPOTHESIS, including when based on supplied product truth.
 For RTB, value_proposition, positioning_statement and offer, evidence_ids must
@@ -107,7 +121,13 @@ HYPOTHESIS and RECOMMENDATION only, subject to the stricter output-specific kind
     limitation = "Positioning uses supplied product truth and optional predecessor claims; uniqueness and customer response require validation."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
-                 product_support_wire=False, minimal_provider_schema=False, support_selection_wire=False):
+                 product_support_wire=False, minimal_provider_schema=False, support_selection_wire=False,
+                 strategy_selection=False):
+        if type(strategy_selection) is not bool:
+            raise TypeError("Expected boolean POSITIONING strategy selection policy")
+        if strategy_selection and not support_selection_wire:
+            raise ValueError("POSITIONING strategy selection requires support selection wire")
+        self._strategy_selection = strategy_selection
         if type(support_selection_wire) is not bool:
             raise TypeError("Expected boolean POSITIONING support selection policy")
         if support_selection_wire and (product_support_wire or minimal_provider_schema):
@@ -133,42 +153,153 @@ support (at most 31); do not repeat the selected ID there. parent_claim_ids rema
 available for materially used accepted parents. No inferred or fabricated IDs."""
 
         if support_selection_wire:
-            self.instruction += f"\nUse wire_contract_version {SELECTION_WIRE_VERSION}." + """
+            from .positioning_support_selection import STRATEGY_WIRE_VERSION
+            self.instruction += f"\nUse wire_contract_version {STRATEGY_WIRE_VERSION if strategy_selection else SELECTION_WIRE_VERSION}." + """
 Return outputs as an object keyed by exactly the requested output names. Do not
 emit evidence_ids/parent_claim_ids arrays. Use positioning_support_selection_catalog
-aliases: select primary_support_key from the schema enum and set every closed
+aliases: select primary_support_key for each output except RTB and set every closed
 boolean evidence_support/parent_support flag explicitly. True means the source
 is materially used, false means unused. Product outputs require primary local
 product truth/proof; other outputs may use accepted parents or local evidence.
+For target, use the audience source as primary when used. Write audience-only
+QUALITATIVE prose, or use SOURCE for an exact audience-only assertion. Do not
+select or quote a product condition for target in either mode.
 Primary and true additional overlap denotes one citation. Retain all original
 source authority, numeric, RTB, assurance, kind and fulfillment conditions.
 Free text must stay qualitative, use unqualified roles and end with punctuation.
-Every text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
+For outputs other than RTB, text is an explicit object: {"mode":"QUALITATIVE","value":"..."} for
 new qualitative prose, or {"mode":"SOURCE","value":"..."} for an ENTIRE
-AllowedPositioningSupportedAssertion copied exactly. Never return a bare text
-string. SOURCE mode does not supply a citation or establish product authority.
-Its free-text pattern excludes ASCII digits. Keep prose unquantified and roles
+AllowedPositioningSupportedAssertion. For a product fact, select its key from
+positioning_product_sources, using only keys whose allowed_outputs lists that
+output. The server renders the entire supplied assertion with its evidence.
+The product_truth catalog supplies verbatim context for strategic reasoning.
+existing_proof keys are RTB material only; never infer product conditions from
+them. Use a product key in offer and RTB for the exact factual terms. In
+value_proposition, positioning_statement and message_hierarchy, write a benefit
+hypothesis, positioning recommendation and message angle respectively, each
+with a distinct purpose. Ground the angle in the source without repeating the
+offer. Express it as something to test or communicate. Treat delivery format,
+assignment details, feedback arrangements, equipment, instructor qualifications
+and outcomes as unknown unless explicitly supported. Preserve all limits and
+conditions of any source you use. Describe unknowns as questions to verify. Never return a bare text string. Other SOURCE values still require
+explicit support selection.
+The qualitative pattern excludes ASCII digits. Keep prose unquantified and roles
 unqualified; do not invent or respell counts or add guarantees/qualifications.
 Any supplied numerical fact or qualification must use an ENTIRE exact source
 assertion and its actual cited source, never an invented or paraphrased fact.
-Do not add any qualification or guarantee in ANY section, including competitive
-frame or message hierarchy. For a supplied qualification, choose the ENTIRE
-AllowedPositioningSupportedAssertion and its actual local product truth/proof.
+Use QUALITATIVE for neutral prose only. If a product output needs a supplied
+condition expressed with qualification wording (including negated equipment
+requirements), use SOURCE with the corresponding positioning_product_sources
+key. Use the same mechanism for factual product attributes such as the delivery
+format, assignments and feedback. Do not infer a recurring practice from an
+example, a homework requirement from a task, or personal feedback from written
+feedback. Treat unverified competitive differences as hypotheses to validate. Keep mixed summaries
+neutral and leave the qualified condition in the separate sourced output. If
+there is no suitable exact assertion or requested slot, omit the qualified claim.
+Before writing demand_context, value_proposition, differentiation and
+positioning_statement, separate the proposed marketing angle from factual product
+terms. demand_context describes a need to investigate, not a product exemption.
+value_proposition proposes a benefit to test, not a promise that the course gives
+skills. differentiation proposes a comparison to validate, not a claim that a
+product is fully usable under particular conditions. positioning_statement
+recommends an angle, not a summary that strengthens the product's commitments.
+Use explicit test language such as "Проверить интерес к практике фотографии."
+or "Тестировать акцент на применении навыков." Only include a factual premise
+when its actual cited source establishes it; HYPOTHESIS and RECOMMENDATION do
+not authorize new product properties or audience facts.
+The server supplies positioning_strategy_options for each output. For QUALITATIVE
+strategy choose one entire option for that output verbatim. These are prospective
+research/marketing decisions, not established facts. Do not append product
+properties, combine options, or rewrite an option. Independent verification
+blocks prose outside this positive strategy contract. Preserve exact sourced
+facts through the existing SOURCE mechanism, with their actual citations.
+When positioning_strategy_choices is supplied, cite ALL required_source_ids of
+your chosen option using the actual primary/additional support flags. The options
+are request-scoped: their exact audience, product identity and proposed angle
+belong together. Empty options require an exact eligible SOURCE (offer and RTB).
+Only RTB may cite existing_proof/demonstration. For strategic choices choose a
+required source as primary (product_truth where the output requires it, audience
+for target) and set true support flags only for required_source_ids. Do not add
+an unrelated demonstration just to fill a primary or extra citation slot.
+Keep equipment conditions in the exact SOURCE offer or RTB, preserving the
+entire source and its citation. Do not paraphrase them in QUALITATIVE text as
+"без желания или возможности приобретать профессиональное оборудование",
+"не требуя профессионального оборудования", "без необходимости профессиональной
+техники" or "без покупки профессионального оборудования". These phrases are
+not neutral strategic reasoning. Do not substitute another equipment synonym.
+If the strategic output cannot use SOURCE, omit the equipment clause and keep
+its distinct marketing question or testable angle. A source saying practical
+tasks does not establish homework, and written feedback does not establish
+personal feedback. An unsupplied audience preference remains a question to test.
+For claim_risks, describe the uncertainty neutrally, for example
+"Уточнить, что именно получает участник после курса." Avoid quoting or negating
+qualification terms in free-text risk descriptions.
 Supplied assertions are literal alternatives; their existence alone is not evidence. If ANY quantity is needed, including a supplied
-duration, use an ENTIRE exact AllowedPositioningSupportedAssertion enum value and
-select its actual source. Never paraphrase a numerical fact, respell digits in
+duration, use its product source key or an ENTIRE exact non-product source
+assertion with its actual citation. Never paraphrase a numerical fact, respell digits in
 words (six weeks / шесть недель), shorten or combine source sentences. Otherwise
-omit the quantity from that free-form statement. RTB MUST use SOURCE mode with
-an ENTIRE exact AllowedPositioningRTBAssertion from local product_truth/existing_proof
-and select its actual cited source. RTB cannot use QUALITATIVE mode or paraphrase proof;
+omit the quantity from that free-form statement. For RTB, use SOURCE mode and set
+text.value to a key from positioning_product_sources and the AllowedPositioningRTBSourceKey
+enum. That key supplies the entire verbatim text and its required citation together.
+Use the support flags only for additional sources that materially support the RTB.
+RTB cannot use QUALITATIVE mode or paraphrase proof;
 other positioning/offer text can stay useful without repeating its duration.
 The numeric enum is an explicit generation alternative, not independent evidence;
 every numerical statement still requires its actually selected cited source."""
 
     def model_input_for(self, request, data, evidence, parents):
+        from .positioning_strategy import STRATEGY_OPTIONS, build_strategy_choices, strategy_evidence, strategy_selection_catalog
+
+        data["positioning_strategy_options"] = {
+            name: list(STRATEGY_OPTIONS[name]) for name in request.expected_outputs
+        }
+        sources = strategy_evidence(evidence)
+        choices = (build_strategy_choices(sources)
+                   if any(row["role"] == "product_identity" for row in sources.values()) else {})
+        if choices:
+            data["positioning_strategy_choices"] = {
+                name: list(choices.get(name, ())) for name in request.expected_outputs
+            }
+            data["positioning_strategy_options"] = {
+                name: [choice["text"] for choice in choices.get(name, ())] for name in request.expected_outputs
+            }
+        if self._strategy_selection:
+            data["positioning_strategy_selection"] = strategy_selection_catalog(evidence)
+            data["positioning_strategy_selection_usage"] = (
+                "For every output except offer and RTB select text mode STRATEGY and its request-scoped key. "
+                "The server renders the exact proposed text and binds its required sources. Never paraphrase. "
+                "Offer and RTB require SOURCE keys preserving complete owner conditions. "
+                "Assess the actual proposals for usefulness; membership alone is not semantic acceptance.")
         if self._support_selection_wire:
-            return {**data, "positioning_support_selection_catalog": support_selection_catalog(
+            context = data["context"]
+            data = {**data, "context": {
+                **context, "known_facts": [
+                    fact for fact in context["known_facts"]
+                    if (fact.get("input_key") or fact.get("label")) not in PRODUCT_CATEGORIES
+                ],
+            }, "local_evidence": [
+                {key: value for key, value in row.items() if key != "value"}
+                if row["input_key"] in PRODUCT_CATEGORIES else row
+                for row in data["local_evidence"]
+            ], "positioning_support_selection_catalog": support_selection_catalog(
                 (e.record.evidence_id for e in evidence), parents)}
+            product_sources = product_source_catalog(evidence)
+            if product_sources:
+                data["positioning_product_sources"] = {
+                    key: {field: value for field, value in source.items()
+                          if field != "text" or source["category"] == "product_truth"}
+                    for key, source in product_sources.items()
+                }
+            aliases = source_assertion_aliases(evidence, (
+                text for claim in parents.values() for text in assertion_support(claim.value)))
+            product_literals = {source["text"] for source in product_sources.values()}
+            aliases = {key: value for key, value in aliases.items() if value not in product_literals}
+            if aliases:
+                data["positioning_source_assertions"] = {
+                    "usage": "For a quoted SOURCE assertion, select its key from the schema enum. "
+                             "The key represents the entire mapped text and requires its actual citation.",
+                    "values": aliases,
+                }
         return data
 
     def wire_schema_for(self, request, validation_schema, evidence):
@@ -180,7 +311,8 @@ every numerical statement still requires its actually selected cited source."""
                 len(request.expected_outputs) * sum(map(len, choices.values())))
             return support_selection_wire_schema(validation_schema, self.output_type_for(request, evidence),
                 request.expected_outputs, evidence, parents, parent_assertions=tuple(
-                    text for claim in parents.values() for text in assertion_support(claim.value)))
+                    text for claim in parents.values() for text in assertion_support(claim.value)),
+                strategy_selection=self._strategy_selection)
         if self._product_support_wire:
             return product_wire_schema(validation_schema, evidence)
         return super().wire_schema_for(request, validation_schema, evidence)
@@ -192,7 +324,8 @@ every numerical statement still requires its actually selected cited source."""
             canonical = support_response_schema(output_type, (e.record.evidence_id for e in evidence), parents)
             return decode_support_selection_wire(payload, canonical, output_type,
                 request.expected_outputs, evidence, parents, parent_assertions=tuple(
-                    text for claim in parents.values() for text in assertion_support(claim.value)))
+                    text for claim in parents.values() for text in assertion_support(claim.value)),
+                strategy_selection=self._strategy_selection)
         if self._product_support_wire:
             return decode_product_wire(payload, evidence)
         return super().decode_wire_payload(request, payload, evidence)
@@ -298,6 +431,12 @@ every numerical statement still requires its actually selected cited source."""
                 rule = (SemanticRule.RTB_QUOTE_REQUIRED if statement.output_name == "RTB"
                         else SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED)
                 raise StatementSemanticsError(rule)
+        if statement.output_name != "RTB" and NO_EQUIPMENT_PURCHASE.search(statement.text) and not any(
+            local[e].input_key in PRODUCT_CATEGORIES and isinstance(local[e].value, str)
+            and (statement.text in local[e].value or supports_no_equipment_purchase(local[e].value))
+            for e in statement.evidence_ids
+        ):
+            raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
         if statement.kind == "OBSERVATION":
             # Preserve numeric authority separately: only factual parents can
             # authorize an observation, and only their assertion channel counts.

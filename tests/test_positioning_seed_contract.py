@@ -209,6 +209,7 @@ def test_semantic_rule_codes_are_bounded_server_constants():
         "product_claim_requires_truth", "rtb_quote_required", "product_assurance_support_required",
         "strategy_kind_invalid", "strategy_parent_required",
         "main_growth_constraint_invalid", "numerical_support_required", "observation_support_required",
+        "customer_promise_requires_owner_source", "demonstration_assertion_requires_source",
     }
     with pytest.raises(TypeError):
         StatementSemanticsError("PRIVATE_ARBITRARY_RULE")

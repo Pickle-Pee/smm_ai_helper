@@ -27,6 +27,7 @@ from .schema_annotations import strip_schema_annotations
 from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
 from .claim_support import assertion_support
+from .downstream_fidelity import FIDELITY_INSTRUCTION
 
 
 def strategic_parents(request):
@@ -69,7 +70,17 @@ quotes are attributed context, never numerical support for outputs or design fie
 Use HYPOTHESIS or RECOMMENDATION kinds. Formal AB designs without baseline,
 measurement/population data stay limited and state required inputs.
 Keep control/treatment, guardrails, stop/scale decisions, inconclusive outcomes and
-learning_record explicit in requested canonical outputs. At most three experiments."""
+learning_record explicit in requested canonical outputs. At most three experiments.
+Treat minimum_required_inputs as separate text leaves, not labels exempt from
+source rules. If an input refers to an existing demonstration, use its COMPLETE
+verbatim existing_proof sentence as the entire item, and select that local source
+on the first canonical output, which supplies nested-design evidence. Do not
+wrap it in 'access to', 'already existing', parentheses or a relative clause.
+Other minimum inputs describe information or access still to obtain. Do not
+present an unprovided current landing page, campaign or service format as fact.
+A comparison sample does not illustrate written-feedback delivery merely because
+the course also includes written feedback. Test message emphasis without making
+that unsupported connection, and request owner confirmation of the format.""" + FIDELITY_INSTRUCTION
     limitation = "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions."
 
     def __init__(self, *, model_call, composer=None, provider_schema_projection=False,
@@ -92,7 +103,12 @@ be boolean. True selects support; false does not exclude the mandatory strategic
 parent. Primary UNION additional true choices defines the canonical citation set.
 Select no more than thirty-two distinct sources per family in total. Cite sources
 actually supporting numerical text; a text or numeric assertion does not add a
-citation. Keep all original grounding, design and exact constraint requirements."""
+citation. When evidence_basis is requested, the server makes it the first
+canonical output regardless of generated array order. Partial requests without
+it retain the first generated output as the nested-source owner. Select each
+local owner/demo source needed by nested design leaves on that owner; a selection
+on another output cannot repair it.
+Keep all original grounding, design and exact constraint requirements."""
         self._provider_schema_projection = provider_schema_projection
         self._strategic_parent_wire = strategic_parent_wire
 
@@ -191,6 +207,26 @@ citation. Keep all original grounding, design and exact constraint requirements.
         return await self.generate(request, evidence)
 
     def build_result(self, request, output, evidence, parents):
+        from .downstream_fidelity import comparison_quotes, selected_sources, text_leaves, validate_leaf, validate_limitation
+
+        local = {item.record.evidence_id: item for item in evidence}
+        for statement in output.outputs:
+            owner, demo = selected_sources(statement, local)
+            validate_leaf(statement.text, owner=owner, demo=demo,
+                          comparisons=comparison_quotes(request, statement),
+                          copy_field=statement.output_name in {"control", "treatment"})
+        # Structured designs are persisted in the first claim. Only that claim's
+        # explicit local selections can witness their product/demo assertions;
+        # another output's quote and strategic HYP parents cannot repair them.
+        design_owner, design_demo = selected_sources(output.outputs[0], local) if output.outputs else ((), ())
+        design_comparisons = comparison_quotes(request, output.outputs[0]) if output.outputs else ()
+        for experiment in output.experiments:
+            for text in text_leaves(experiment.model_dump()):
+                validate_leaf(text, owner=design_owner, demo=design_demo, comparisons=design_comparisons)
+        for text in output.assumptions:
+            validate_leaf(text)
+        for text in output.limitations:
+            validate_limitation(text, local)
         eligible = strategic_parents(request)
         for output_index, statement in enumerate(output.outputs):
             # Reject before the first output's design/constraint union. That

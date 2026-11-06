@@ -5,6 +5,7 @@ import pytest
 
 from app.module_execution.executors.positioning import PositioningExecutor
 from app.module_execution.executors.common import StatementSemanticsError, SemanticRule
+from app.module_execution.executors.positioning_assurance import has_product_assurance
 from app.module_execution.executors.schemas import OutputStatement
 
 
@@ -73,6 +74,74 @@ def test_entire_statement_not_just_matching_qualification_must_be_supported():
     with pytest.raises(StatementSemanticsError):
         PositioningExecutor(model_call=None).validate_statement(
             statement("An experienced master ensures a finished product without further actions."), local, {})
+
+
+def test_target_can_describe_audience_needs_using_audience_evidence():
+    text = "Новички хотят освоить основы фотографии."
+    local = {"audience": SimpleNamespace(input_key="target_or_target_hypothesis", value=text)}
+    PositioningExecutor(model_call=None).validate_statement(
+        statement(text, output="target", refs=("audience",)), local, {})
+
+
+NO_PURCHASE = "без необходимости покупать профессиональное оборудование"
+EQUIPMENT_TRUTH = "Для занятий не требуется профессиональное оборудование."
+
+
+@pytest.mark.parametrize("category", ["product_truth", "existing_proof"])
+@pytest.mark.parametrize("text", [
+    f"Курс для начинающих {NO_PURCHASE}.",
+    "Курс без необходимости купить профессиональное оборудование.",
+    "Курс без необходимости приобретать профессиональное оборудование.",
+    "Курс без необходимости приобретения профессионального оборудования.",
+    "Курс без необходимости покупки профессионального оборудования.",
+    "Для курса не нужно приобретать профессиональное оборудование.",
+    "Для курса не требуется покупать профессиональное оборудование.",
+    "Для курса нет необходимости приобрести профессиональное оборудование.",
+])
+def test_no_equipment_purchase_paraphrase_with_cited_product_evidence(text, category):
+    local = {"product": SimpleNamespace(input_key=category, value=EQUIPMENT_TRUTH)}
+    assert not has_product_assurance(text)
+    PositioningExecutor(model_call=None).validate_statement(statement(text, output="target"), local, {})
+
+
+@pytest.mark.parametrize("category", ["product_truth", "existing_proof"])
+@pytest.mark.parametrize("refs,product", [
+    (("audience",), EQUIPMENT_TRUTH),
+    (("audience", "product"), "Курс для начинающих."),
+    (("audience", "product"), "Для занятий требуется профессиональное оборудование."),
+    (("audience", "product"), "Правда ли, что для занятий не требуется профессиональное оборудование?"),
+])
+def test_no_equipment_purchase_requires_support_from_cited_product_evidence(refs, product, category):
+    text = f"Курс для начинающих {NO_PURCHASE}."
+    local = {
+        "product": SimpleNamespace(input_key=category, value=product),
+        "audience": SimpleNamespace(input_key="target_or_target_hypothesis", value=EQUIPMENT_TRUTH),
+    }
+    with pytest.raises(StatementSemanticsError) as caught:
+        PositioningExecutor(model_call=None).validate_statement(
+            statement(text, output="target", refs=refs), local, {})
+    assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
+
+
+@pytest.mark.parametrize("text", [
+    f"Курс {NO_PURCHASE} ведёт профессиональный преподаватель.",
+    f"Курс {NO_PURCHASE}: предоставляем профессиональное оборудование.",
+    f"Курс {NO_PURCHASE} гарантирует результат.",
+    "Для занятий обязательно купить профессиональное оборудование.",
+    "Курс требует покупки профессионального оборудования.",
+    "Курс с необходимостью покупать профессиональное оборудование.",
+])
+def test_equipment_purchase_exception_does_not_mask_affirmative_assurances(text):
+    local = {"product": SimpleNamespace(input_key="product_truth", value=EQUIPMENT_TRUTH)}
+    with pytest.raises(StatementSemanticsError) as caught:
+        PositioningExecutor(model_call=None).validate_statement(statement(text, output="target"), local, {})
+    assert caught.value.rule is SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED
+
+
+def test_exact_rtb_quote_can_contain_equipment_purchase_negation():
+    text = f"Курс для начинающих {NO_PURCHASE}."
+    local = {"product": SimpleNamespace(input_key="existing_proof", value=text)}
+    PositioningExecutor(model_call=None).validate_statement(statement(text, output="RTB"), local, {})
 
 
 def test_rejection_on_dispatch_is_bounded_and_does_not_retry_or_repair(monkeypatch):

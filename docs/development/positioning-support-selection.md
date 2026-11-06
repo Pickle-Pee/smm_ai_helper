@@ -36,3 +36,15 @@ facts; manual business quality review remains required.
 Text now uses explicit disjoint QUALITATIVE/SOURCE modes; see
 [positioning-tagged-text-wire.md](positioning-tagged-text-wire.md). Canonical stored
 strings and source-authority checks retain their existing contracts.
+
+In v5, RTB selects a source key that binds its exact quotation to a local
+product_truth or existing_proof citation. Other outputs still select a primary
+key and any additional sources through support flags.
+
+Target describes the audience, its characteristics and needs. Product features
+and usage conditions generally belong in product-facing outputs. When a product
+condition is essential to defining the audience, the model must explicitly
+select local product truth or proof that directly supports it, separately from
+any audience evidence it uses. An unsupported condition is omitted. This is a
+generation rule. The existing wire, decoder and semantic gates continue to
+validate the submitted selections.

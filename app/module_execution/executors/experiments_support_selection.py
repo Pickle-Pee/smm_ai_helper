@@ -3,17 +3,35 @@ from copy import deepcopy
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
+from typing import get_args
 
 from app.module_execution.errors import ModuleExecutionContractError
-from .experiments_support_wire import WIRE_VERSION as V2_VERSION, decode_strategic_parent_wire
+from .experiments_support_wire import (
+    WIRE_VERSION as V2_VERSION, decode_strategic_parent_wire, QUALITATIVE_DESIGN_PATTERN,
+    STATEMENT_NUMERIC_ASSERTION_DEFINITION,
+)
+from .intelligence_schemas import ExperimentStatement
+from .numeric_quantity import has_numeric_quantity
+from .qualitative_generation import QUALITATIVE_GENERATION_PATTERN
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v3"
+WIRE_VERSION = "experiments.support_selection.v6"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
 STATEMENT_FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids", "strategic_parent_id"}
+EVIDENCE_BASIS_DEFINITION = "EvidenceBasisExperimentStatement"
+GUARDRAILS_DEFINITION = "GuardrailsExperimentStatement"
+OTHER_STATEMENT_DEFINITION = "OtherExperimentStatement"
+EVIDENCE_BASIS_NOTES = (
+    "Основанием для проверки служит принятая стратегическая гипотеза; она задаёт направление эксперимента, но не доказывает его результативность.",
+    "The accepted strategic hypothesis guides the experiment; it does not establish the experiment's effectiveness.",
+)
+GUARDRAIL_NOTES = (
+    "Публичное сообщение должно соответствовать подтверждённому описанию продукта; неподтверждённые свойства и результаты нельзя обещать.",
+    "Public copy must match confirmed owner product descriptions; do not promise unconfirmed features or outcomes.",
+)
 
 
 def _fail():
@@ -41,8 +59,58 @@ def _boolean_map(aliases):
             "required": list(aliases), "additionalProperties": False}
 
 
+def _specialize_policy_statements(definitions):
+    """Close qualitative provenance/policy notes, retaining numeric guardrails."""
+    statement = definitions["ExperimentStatement"]
+    props = statement["properties"]
+    expected_names = list(get_args(ExperimentStatement.model_fields["output_name"].annotation))
+    name = props["output_name"]
+    if (set(name) - {"type", "enum", "title"} or name.get("type") != "string"
+            or name.get("enum") != expected_names or "evidence_basis" not in expected_names):
+        _fail()
+    text = props["text"]
+    qualitative = text
+    if "anyOf" in text:
+        if (set(text) != {"anyOf"} or len(text["anyOf"]) != 2
+                or text["anyOf"][1] != {"$ref": "#/$defs/" + STATEMENT_NUMERIC_ASSERTION_DEFINITION}):
+            _fail()
+        qualitative = text["anyOf"][0]
+        numerical = definitions[STATEMENT_NUMERIC_ASSERTION_DEFINITION]
+        quotes = numerical.get("enum")
+        if (set(numerical) != {"type", "minLength", "maxLength", "enum"}
+                or numerical.get("type") != "string" or numerical.get("minLength") != 1
+                or numerical.get("maxLength") != 4000 or type(quotes) is not list or not quotes
+                or any(type(quote) is not str or not 1 <= len(quote) <= 4000
+                       or not has_numeric_quantity(quote) for quote in quotes)):
+            _fail()
+    if (set(qualitative) - {"type", "minLength", "maxLength", "title", "pattern"}
+            or qualitative.get("type") != "string" or qualitative.get("minLength") != 1
+            or qualitative.get("maxLength") != 4000
+            or qualitative.get("pattern") != QUALITATIVE_DESIGN_PATTERN):
+        _fail()
+    basis, guardrails, other = deepcopy(statement), deepcopy(statement), deepcopy(statement)
+    basis["properties"]["output_name"]["enum"] = ["evidence_basis"]
+    basis["properties"]["text"] = {key: value for key, value in qualitative.items() if key != "pattern"}
+    basis["properties"]["text"]["enum"] = list(EVIDENCE_BASIS_NOTES)
+    guardrails["properties"]["output_name"]["enum"] = ["guardrails"]
+    guardrail_text = {key: value for key, value in qualitative.items() if key != "pattern"}
+    guardrail_text["enum"] = list(GUARDRAIL_NOTES)
+    guardrails["properties"]["text"] = ({"anyOf": [guardrail_text, deepcopy(text["anyOf"][1])]}
+                                        if "anyOf" in text else guardrail_text)
+    other["properties"]["output_name"]["enum"] = [
+        name for name in expected_names if name not in {"evidence_basis", "guardrails"}]
+    definitions[EVIDENCE_BASIS_DEFINITION] = basis
+    definitions[GUARDRAILS_DEFINITION] = guardrails
+    definitions[OTHER_STATEMENT_DEFINITION] = other
+    definitions["ExperimentStatement"] = {"anyOf": [
+        {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
+        {"$ref": "#/$defs/" + GUARDRAILS_DEFINITION},
+        {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
+    ]}
+
+
 def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids, parent_ids):
-    """Replace only raw citation arrays; all V2 content restrictions survive."""
+    """Select citations and bounded policy notes; other V2 content survives."""
     try:
         choices = support_selection_catalog(evidence_ids, parent_ids)
         if (type(expected_output_count) is not int or not 1 <= expected_output_count <= 16
@@ -53,7 +121,10 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
         definitions = schema["$defs"]
         if (schema["properties"]["wire_contract_version"] != {"type": "string", "enum": [V2_VERSION]}
                 or schema["properties"]["outputs"].get("type") != "array"
-                or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP))):
+                or schema["properties"]["outputs"].get("items") != {"$ref": "#/$defs/ExperimentStatement"}
+                or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP,
+                                                        EVIDENCE_BASIS_DEFINITION, GUARDRAILS_DEFINITION,
+                                                        OTHER_STATEMENT_DEFINITION))):
             _fail()
         for family, definition in (("evidence", "AllowedEvidenceId"), ("parents", "AllowedParentClaimId")):
             scoped = definitions.get(definition)
@@ -76,6 +147,7 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
             if not {"output_name", "strategic_parent_id"} <= props.keys():
                 continue
             if (set(node) - {"type", "properties", "required", "additionalProperties", "title"}
+                    or node is not definitions.get("ExperimentStatement")
                     or set(props) != STATEMENT_FIELDS or set(node.get("required", [])) != STATEMENT_FIELDS
                     or node.get("type") != "object" or node.get("additionalProperties") is not False
                     or "anyOf" in node or props["strategic_parent_id"] != {"$ref": "#/$defs/AllowedStrategicParentId"}):
@@ -94,8 +166,14 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
                 props[replacement] = {"$ref": "#/$defs/" + definition}
                 node["required"] = [replacement if name == field else name for name in node["required"]]
             count += 1
-        if not count:
+        if count != 1:
             _fail()
+        _specialize_policy_statements(definitions)
+        # Only free qualitative generation gets the small observed-count
+        # filter. Complete source/numerical enums retain their exact text.
+        for node in nodes(schema):
+            if node.get("pattern") == QUALITATIVE_DESIGN_PATTERN:
+                node["pattern"] = QUALITATIVE_GENERATION_PATTERN
         schema["properties"]["wire_contract_version"]["enum"] = [WIRE_VERSION]
         # References cannot point into removed fields or outside this schema.
         for node in nodes(schema):
@@ -125,6 +203,14 @@ def decode_support_selection_wire(payload, v2_schema, expected_output_count, evi
         if type(payload) is not dict or not Draft202012Validator(schema).is_valid(payload):
             _fail()
         result = deepcopy(payload)
+        basis = [row for row in result["outputs"] if row["output_name"] == "evidence_basis"]
+        if len(basis) > 1 or (expected_output_count == 16 and not basis):
+            _fail()
+        if basis:
+            # The named provenance statement owns structured design evidence.
+            # Move it without copying citations from any other output; partial
+            # requests without it keep their original first-output contract.
+            result["outputs"] = basis + [row for row in result["outputs"] if row["output_name"] != "evidence_basis"]
         result["wire_contract_version"] = V2_VERSION
         for statement in result["outputs"]:
             for family, field, output in (("evidence", "additional_evidence_support", "evidence_ids"),

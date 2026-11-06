@@ -210,6 +210,17 @@ async def restore_snapshot(snapshot, *, run_id, job_id, module_id=None):
         raise DiagnosticError("snapshot_duplicate_identity")
 
     class SnapshotSession:
+        async def get(self, entity, identity):
+            from app.models import MarketingRun
+            if entity is not MarketingRun or identity != run_id:
+                raise DiagnosticError("unexpected_snapshot_query")
+            # v1 diagnostic exports precede durable verification. A marked run
+            # cannot be replayed from a snapshot without its private checkpoint.
+            run_input = snapshot["run"].get("input_json", {})
+            if "positioning_verification" in run_input:
+                raise DiagnosticError("verification_checkpoint_not_in_snapshot")
+            return SimpleNamespace(input_json=run_input)
+
         async def scalar(self, query):
             if query.column_descriptions[0]["entity"] is not OrchestrationPlanRecord:
                 raise DiagnosticError("unexpected_snapshot_query")

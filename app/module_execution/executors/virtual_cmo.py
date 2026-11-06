@@ -19,6 +19,7 @@ from .numeric_grounding import (
     bind_numeric_context_citations,
 )
 from .claim_support import StrategyClaim, StoredNumericContext
+from .downstream_fidelity import FIDELITY_INSTRUCTION
 from .numeric_diagnostics import observe
 from .cmo_provider_contract import cmo_provider_schema
 from .cmo_support_wire import (
@@ -61,7 +62,7 @@ than the field bound must be omitted, never shortened. These are attributed sour
 context, not strategic conclusions or verified facts. Site assertions remain site
 assertions; goals and parent hypotheses remain goals and hypotheses. Use an empty
 numeric_context when none applies. Qualitative resource prioritization is allowed
-without economics."""
+without economics.""" + FIDELITY_INSTRUCTION
     limitation = "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims."
 
     def __init__(self, *, model_call, composer=None, numeric_quote_catalog_enabled=False,
@@ -158,6 +159,18 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         return await self.generate(request, first_party_evidence(request, facts))
 
     def build_result(self, request, output, evidence, parents):
+        from .downstream_fidelity import comparison_quotes, selected_sources, validate_leaf, validate_limitation
+
+        local = {item.record.evidence_id: item for item in evidence}
+        for statement in output.outputs:
+            owner, demo = selected_sources(statement, local)
+            comparisons = comparison_quotes(request, statement)
+            for text in (statement.text, *statement.items):
+                validate_leaf(text, owner=owner, demo=demo, comparisons=comparisons)
+        for text in output.assumptions:
+            validate_leaf(text)
+        for text in output.limitations:
+            validate_limitation(text, local)
         if not any(facts_for(scoped_facts(request), k) for k in ("economics", "unit_economics")):
             output.limitations = list(dict.fromkeys((*output.limitations,
                 "Economics absent: profitability, budget affordability and unit economics are unknown; resource priorities are qualitative.")))
