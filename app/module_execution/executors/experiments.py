@@ -103,9 +103,11 @@ be boolean. True selects support; false does not exclude the mandatory strategic
 parent. Primary UNION additional true choices defines the canonical citation set.
 Select no more than thirty-two distinct sources per family in total. Cite sources
 actually supporting numerical text; a text or numeric assertion does not add a
-citation. The server makes evidence_basis the first canonical output regardless
-of generated array order. Select each local owner/demo source needed by nested
-design leaves on evidence_basis; a selection on another output cannot repair it.
+citation. When evidence_basis is requested, the server makes it the first
+canonical output regardless of generated array order. Partial requests without
+it retain the first generated output as the nested-source owner. Select each
+local owner/demo source needed by nested design leaves on that owner; a selection
+on another output cannot repair it.
 Keep all original grounding, design and exact constraint requirements."""
         self._provider_schema_projection = provider_schema_projection
         self._strategic_parent_wire = strategic_parent_wire
