@@ -28,6 +28,20 @@ from tests.test_strategy_intelligence import IntelligenceModel, valid_request, r
 from tests.test_module_executors import fact, request, FakeModel, dispatch
 from tests.test_cmo_provider_contract import capture, output
 
+RESOURCE_COUNT = "Подготовить один минимальный набор тестовых сообщений для оперативной проверки."
+
+
+@pytest.mark.parametrize("text", [RESOURCE_COUNT, "Prepare one minimal set of test messages."])
+def test_actual_cmo_resource_priorities_rejects_unprovided_minimal_set_count(text):
+    model = IntelligenceModel(use_parents=True)
+    def inject(payload, data):
+        row = next(row for row in payload["outputs"] if row["output_name"] == "resource_priorities")
+        row["items"] = [text]
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(valid_request(ModuleId.VIRTUAL_CMO), inject, model=model)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(model.calls) == 1
+
 
 @pytest.mark.parametrize("text", [
     "Новичок может за один визит попробовать материал и уйти с готовым изделием.",
@@ -64,6 +78,12 @@ def test_unsupplied_design_quantities_in_words_are_rejected(field, value):
     "Запуск двухверсий текстовой коммуникации.", "Compare twoversions.",
     "Compare two versions.", "Сравнить двух версий.", "Compare TWOversions.",
     "Сравнить двухвариантов.", "Использовать двумяверсиями.",
+    RESOURCE_COUNT, "Prepare one minimal set of test messages.",
+    "Prepare one set of messages.", "Сравнить два набора.",
+    "Использовать одним минимальным набором.", "Подготовить один минимальный новый набор.",
+    "Prepare one minimal new set.", "Compare twosets.", "Сравнить двухнаборов.",
+    "Подготовить два минимальных набора.", "Ограничиться одним минимальным набором.",
+    "Ask one minimal question.", "Проверить одну минимальную группу.",
     "Use ٥ questions.", "Use ２ questions.", "Use 3 questions.",
 ])
 def test_detector_recognizes_explicit_counts_and_preserves_unicode_digits(text):
@@ -83,6 +103,11 @@ def test_detector_recognizes_explicit_counts_and_preserves_unicode_digits(text):
     "Twoversionsuffix is a label.", "Pretwoversions is a label.",
     "Someoneversions is a label.", "Двухверсийный ярлык.", "Преддвухверсий ярлык.",
     "One of the versions is unclear.", "Одна из версий требует уточнения.",
+    "One of the sets is unclear.", "Один из наборов требует уточнения.",
+    "Onesetup is a label.", "Preoneset is a label.", "Однонаборный ярлык.",
+    "One. Minimal set preparation follows.", "Один. Минимальный набор подготовить позже.",
+    "One, minimal set of messages.", "Prepare one minimal new paid set.",
+    "Подготовить один минимальный новый платный набор.",
     "Two very short questions.",     # Unlisted adverb is not inferred as an adjective.
 ])
 def test_detector_avoids_idioms_ordinals_pronouns_and_cross_sentence_matching(text):
@@ -164,7 +189,7 @@ def test_word_quantity_context_retains_complete_units_and_separates_assertion_au
 
 @pytest.mark.parametrize("field", ["text", "items"])
 @pytest.mark.parametrize("quote", ["Ask two short questions.", "Compare twoversions.",
-    "Запуск двухверсий текстовой коммуникации."])
+    "Запуск двухверсий текстовой коммуникации.", RESOURCE_COUNT, "Prepare one minimal set of messages."])
 def test_cmo_word_quantity_prose_stays_forbidden_even_when_source_supported(field, quote):
     values = dict(output_name="strategic_diagnosis", text="Validate demand", items=["Compare responses"],
         kind="HYPOTHESIS", confidence="MEDIUM", evidence_ids=["evd_source"], parent_claim_ids=[], numeric_context=[])
@@ -211,13 +236,16 @@ def test_cmo_word_quote_catalog_and_provider_keep_exact_same_source_pairs():
     ("fragment", NumericContextFailureReason.QUOTE_IS_FRAGMENT),
     ("unknown", NumericContextFailureReason.SUPPORT_NOT_FOUND),
 ])
-def test_original_cmo_guard_rejects_wrong_word_quote_identity_and_fragments(mutation, reason):
-    quote = "Ask two short questions, subject to consent."
+@pytest.mark.parametrize("quote,fragment", [
+    ("Ask two short questions, subject to consent.", "Ask two short questions"),
+    (RESOURCE_COUNT, "один минимальный набор"),
+])
+def test_original_cmo_guard_rejects_wrong_word_quote_identity_and_fragments(mutation, reason, quote, fragment):
     local = {"evd_source":SimpleNamespace(value=quote),
              "evd_other":SimpleNamespace(value="The service takes one visit.")}
     identity, text = "evd_source", quote
     if mutation == "cross_pair": identity = "evd_other"
-    if mutation == "fragment": text = "Ask two short questions"
+    if mutation == "fragment": text = fragment
     if mutation == "unknown": identity = "evd_unknown"
     statement = OtherStrategyStatement(output_name="strategic_diagnosis", text="Validate demand", items=["Compare responses"],
         kind="HYPOTHESIS", confidence="MEDIUM", evidence_ids=["evd_other"] if mutation == "uncited" else list(local),
@@ -248,7 +276,7 @@ def test_provider_guidance_words_and_fulfillment_do_not_claim_deterministic_enta
 
 
 @pytest.mark.parametrize("quote", ["Ask two short questions, subject to consent.",
-    "Compare twoversions.", "Запуск двухверсий текстовой коммуникации."])
+    "Compare twoversions.", "Запуск двухверсий текстовой коммуникации.", RESOURCE_COUNT])
 def test_actual_accepted_cmo_word_context_cannot_authorize_experiment_assertion(quote):
     invocation = valid_request(ModuleId.VIRTUAL_CMO)
     invocation = replace(invocation, context_packet=replace(invocation.context_packet,

@@ -264,9 +264,15 @@ the canonical guard's responsibility. It is not a complete quantity ontology.
 An existing operation with a saved response or changed fingerprint cannot be
 resubmitted merely because the wire version changed.
 
-The canonical bounded quantity detector also recognizes listed version units and
+The canonical bounded quantity detector also recognizes listed version/set units and
 exact whole-word cardinal-plus-known-unit concatenations such as `двухверсий`.
 It neither rewrites numbers nor infers arbitrary morphology, prefixes or substrings.
-This closes the observed ceramics design count while retaining exact source and
+Listed EN/RU minimal adjective forms may intervene within the existing two-modifier
+bound. This also detects the observed CMO prescription `один минимальный набор`;
+an unsupported resource count is not exempt because it appears in a recommendation.
+CMO guidance requires qualitative resource preparation without a prescribed count.
+Complete actually supplied quantities still use exact selected-source numeric context.
+The one-of idiom, unknown modifiers and sentence-boundary exclusions remain unchanged.
+This closes observed design/resource counts while retaining exact source and
 citation checks. The small generation pattern remains unchanged; unknown quantity
 words outside the finite detector still require separate content review.

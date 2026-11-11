@@ -30,7 +30,7 @@ sixty seventy eighty ninety hundred thousand single
 _UNITS = frozenset("""
 visit visits session sessions question questions step steps action actions
 participant participants person persons people customer customers client clients
-item items image images photo photos task tasks group groups option options version versions
+item items image images photo photos task tasks group groups option options version versions set sets
 experiment experiments hypothesis hypotheses trial trials cohort cohorts
 minute minutes hour hours day days week weeks month months year years
 ruble rubles rouble roubles dollar dollars euro euros percent percentage points
@@ -51,6 +51,7 @@ ruble rubles rouble roubles dollar dollars euro euros percent percentage points
 группа группы групп группу группам группой группами группе группах
 вариант варианта вариантов варианту вариантам вариантом вариантами варианте вариантах варианты
 версия версии версий версию версиям версией версиею версиями версиях
+набор набора наборов набору наборам набором наборами наборе наборах наборы
 эксперимент эксперимента экспериментов эксперименту экспериментам экспериментом экспериментами эксперименте экспериментах эксперименты
 гипотеза гипотезы гипотез гипотезу гипотезам гипотезой гипотезами гипотезе гипотезах
 поток потока потоков потоку потокам потоком потоками потоке потоках потоки
@@ -68,7 +69,7 @@ _CARDINAL_LENGTHS = tuple(sorted({len(token) for token in _CARDINALS}))
 _MAX_JOINED_LENGTH = max(map(len, _CARDINALS)) + max(map(len, _UNITS))
 
 _MODIFIERS = frozenset("""
-short brief additional new paid initial introductory simple quick small full complete
+short brief additional new paid initial introductory simple quick small full complete minimal
 вводный вводная вводное вводные вводного вводной вводных вводному вводным вводную вводными вводном
 короткий короткая короткое короткие короткого короткой коротких короткому коротким короткую короткими коротком
 краткий краткая краткое краткие краткого краткой кратких краткому кратким краткую краткими кратком
@@ -78,6 +79,7 @@ short brief additional new paid initial introductory simple quick small full com
 простой простая простое простые простого простой простых простому простым простую простыми простом
 быстрый быстрая быстрое быстрые быстрого быстрой быстрых быстрому быстрым быструю быстрыми быстром
 полный полная полное полные полного полной полных полному полным полную полными полном
+минимальный минимальная минимальное минимальные минимального минимальной минимальных минимальному минимальным минимальную минимальными минимальном минимальною
 """.split())
 
 

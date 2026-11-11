@@ -51,6 +51,9 @@ digits, including ages, prices, numbered lists, targets or deadlines. Preserve
 relevant supplied numerical facts separately in numeric_context (at most three).
 Quantities written as words are numbers too: never put invented counts into text
 or items; preserve supplied quantities only as complete numeric_context quotes.
+Keep resource preparation qualitative: do not prescribe counts of test-message
+sets or preparation resources, even a single set. Supplied quantities belong
+only in numeric_context; propose preparing materials without a numerical size.
 For each numeric_context entry:
 support_id must also be cited in this statement's evidence_ids or parent_claim_ids;
 quote must copy a COMPLETE textual source value/leaf verbatim, including qualifiers.
