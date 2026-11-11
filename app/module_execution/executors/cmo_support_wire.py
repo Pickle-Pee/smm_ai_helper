@@ -5,14 +5,31 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
 from app.module_execution.errors import ModuleExecutionContractError
-from .cmo_provider_contract import cmo_provider_schema
+from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
 
-WIRE_VERSION = "virtual_cmo.support_selection.v5"
+WIRE_VERSION = "virtual_cmo.support_selection.v6"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
+RISKS_DEFINITION = "CMORisksStatement"
+RISK_TEXT_NOTES = (
+    "Проверить риск расхождения между ожиданиями аудитории, тестируемым сообщением и подтверждёнными условиями продукта до масштабирования.",
+    "Before scaling, check for mismatches between audience expectations, the tested message and confirmed product terms.",
+)
+RISK_ITEM_NOTES = (
+    "Сопоставить ожидания аудитории с полным подтверждённым описанием продукта; не добавлять неподтверждённые свойства в сообщение.",
+    "До проверки нового формата получить решение владельца; считать предлагаемые изменения неподтверждёнными до согласования.",
+    "Проверить ресурсы и ограничения исполнения перед расширением; не считать масштабирование допустимым без соответствующих данных.",
+    "Compare audience expectations with the complete confirmed owner terms; do not add unconfirmed product features to the message.",
+    "Obtain the owner's decision before testing a new format; keep proposed changes unconfirmed until agreed.",
+    "Check resources and delivery constraints before expanding; do not assume scaling is feasible without supporting data.",
+)
+ASSUMPTION_NOTES = (
+    "Рабочие стратегические гипотезы требуют отдельной проверки перед использованием как подтверждённых выводов.",
+    "Validate working strategic hypotheses before treating them as confirmed conclusions.",
+)
 STATEMENTS = ("MainGrowthConstraintStatement", "OtherStrategyStatement")
 CANONICAL_FIELDS = {"output_name", "text", "items", "kind", "confidence", "evidence_ids", "parent_claim_ids", "numeric_context"}
 SELECTION_FIELDS = {"primary_parent_key", "primary_evidence_key", "additional_parent_support", "additional_evidence_support"}
@@ -44,13 +61,49 @@ def _boolean_map(aliases):
             "required": list(aliases), "additionalProperties": False}
 
 
+def _closed_prose(field, maximum, notes, *, qualitative=False):
+    allowed = {"type", "minLength", "maxLength", "title", "description"}
+    if qualitative:
+        allowed.add("pattern")
+    if (type(field) is not dict or set(field) - allowed or field.get("type") != "string"
+            or field.get("minLength") != 1 or field.get("maxLength") != maximum
+            or (qualitative and field.get("pattern") != QUALITATIVE_PATTERN)):
+        _fail()
+    result = deepcopy(field)
+    result.pop("pattern", None)
+    result["enum"] = list(notes)
+    return result
+
+
+def _install_validation_policies(schema, names):
+    """Bound risk/assumption prose, without granting product or market authority."""
+    assumptions = schema["properties"]["assumptions"]
+    if (set(assumptions) - {"type", "items", "maxItems", "minItems", "title", "description"}
+            or assumptions.get("type") != "array" or assumptions.get("maxItems") != 12
+            or assumptions.get("minItems", 0) != 0):
+        _fail()
+    assumptions["items"] = _closed_prose(assumptions["items"], 4000, ASSUMPTION_NOTES)
+    if "risks" not in names:
+        return
+    risk = deepcopy(schema["$defs"][STATEMENTS[1]])
+    props = risk["properties"]
+    props["text"] = _closed_prose(props["text"], 4000, RISK_TEXT_NOTES, qualitative=True)
+    items = props["items"]
+    if (set(items) - {"type", "items", "maxItems", "minItems", "title", "description"}
+            or items.get("type") != "array" or items.get("minItems") != 1 or items.get("maxItems") != 3):
+        _fail()
+    items["items"] = _closed_prose(items["items"], 300, RISK_ITEM_NOTES, qualitative=True)
+    schema["$defs"][RISKS_DEFINITION] = risk
+
+
 def _outputs(expected_outputs, definitions):
     names = tuple(expected_outputs)
     if not names or any(type(name) is not str for name in names) or len(names) != len(set(names)):
         _fail()
     main = definitions[STATEMENTS[0]]["properties"]["output_name"]
     other = definitions[STATEMENTS[1]]["properties"]["output_name"]
-    if main.get("const") != "main_growth_constraint" or type(other.get("enum")) is not list:
+    if (main.get("const") != "main_growth_constraint" or type(other.get("enum")) is not list
+            or "risks" not in other["enum"]):
         _fail()
     if not set(names) <= {main["const"], *other["enum"]}:
         _fail()
@@ -63,7 +116,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
-        if PARENT_MAP in definitions or EVIDENCE_MAP in definitions or "wire_contract_version" in schema["properties"]:
+        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION))
+                or "wire_contract_version" in schema["properties"]):
             _fail()
         for name, definition_name in (("parents", "AllowedParentClaimId"), ("evidence", "AllowedEvidenceId")):
             if set(definitions.get(definition_name, {}).get("enum", [])) != set(aliases[name].values()):
@@ -94,9 +148,11 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             props["additional_evidence_support"] = {"$ref": "#/$defs/" + EVIDENCE_MAP}
             node["required"] = [field for field in node["required"]
                                 if field not in {"output_name", "evidence_ids", "parent_claim_ids"}] + sorted(SELECTION_FIELDS)
+        _install_validation_policies(schema, names)
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
-                STATEMENTS[0] if name == "main_growth_constraint" else STATEMENTS[1])} for name in names},
+                STATEMENTS[0] if name == "main_growth_constraint" else
+                RISKS_DEFINITION if name == "risks" else STATEMENTS[1])} for name in names},
             "required": list(names), "additionalProperties": False}
         schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [WIRE_VERSION]}
         schema["required"].append("wire_contract_version")

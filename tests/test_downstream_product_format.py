@@ -29,6 +29,55 @@ EXISTING_CONTROL = ('Существующее нейтральное сообщ�
                     'обратной связи, описывающее курс как набор практических заданий и общей поддержки.')
 APPROVED_TREATMENT = ('Вариант сообщения с явным операционным описанием формата; текст и лендинг '
                       'согласованы с владельцем, чтобы не заявлять неподтверждённые эффекты.')
+STANDARDIZED = 'Курс включает стандартизированную письменную обратную связь.'
+CMO_STANDARDIZED_RISK = ('Риск несоответствия: аудитория ожидает персонального разбора вместо '
+                         'стандартизированной письменной обратной связи.')
+
+
+@pytest.mark.parametrize('text',[
+    STANDARDIZED, CMO_STANDARDIZED_RISK,
+    'Гипотеза: сообщение о стандартизированной письменной обратной связи привлечёт больше обращений.',
+    'Письменная обратная связь является стандартизированной.',
+    'Письменная обратная связь стандартизирована.',
+    'Письменная обратная связь будет стандартизирована.',
+    'Обратная связь будет индивидуальной.',
+    'Our course includes standardized written feedback.',
+    'Hypothesis: standardised feedback will increase interest in the course.',
+    'The written feedback is standardized.',
+])
+def test_standardized_delivery_needs_whole_selected_owner_proof_even_in_risks_or_hypotheses(text):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text,owner=(TRUTH,),demo=(DEMO,))
+    validate_leaf(text,owner=(text,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text,demo=(text,))
+
+
+@pytest.mark.parametrize('kind',['HYPOTHESIS','RECOMMENDATION'])
+def test_actual_cmo_risk_cannot_add_a_standardized_current_service(kind):
+    def inject(payload,data):
+        row=next(row for row in payload['outputs'] if row['output_name']=='risks')
+        row.update(items=[CMO_STANDARDIZED_RISK],kind=kind)
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(with_fact(ModuleId.VIRTUAL_CMO),inject)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+@pytest.mark.parametrize('text',[
+    'Проверить, предпочитает ли аудитория стандартизированную письменную обратную связь.',
+    'Цель аудитории — получить стандартизированную обратную связь.',
+    'Уточнить у владельца, включает ли курс стандартизированную обратную связь.',
+    'Не обещать стандартизированную обратную связь без подтверждения владельца.',
+    'Check whether customers prefer standardized written feedback.',
+    'Audience goal: receive standardised feedback.',
+    'Do not promise standardized feedback without owner confirmation.',
+    'Рекомендуется стандартизировать форму обратной связи после согласования с владельцем.',
+    'Propose standardizing the feedback process for owner approval before changing the service.',
+])
+def test_closed_standardized_preferences_and_future_operator_verbs_are_not_existing_delivery(text):
+    validate_leaf(text)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text+' '+STANDARDIZED)
 
 
 @pytest.mark.parametrize('text', [

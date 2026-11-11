@@ -207,14 +207,17 @@ relative demo clause still triggers the original whole-source guard. Product
 or participant future predicates containing the same infinitive do not qualify
 as an operator clause. This is not a general grammatical/entailment classifier.
 
-Recognized personal/individual feedback or review, and assertions that written
+Recognized personal/individual/standardized feedback or review, and assertions that written
 feedback shows/contains particular changes or content, require a complete
 verbatim selected request-local owner source. A demonstration comparison,
 audience wish or accepted parent HYPOTHESIS cannot establish these delivery
 properties. The check also visits nested designs and global fields before
 persistence. Closed whole audience research questions, goals/preferences and
 negative policy warnings remain usable, as do closed whole questions asking the
-owner whether personal feedback is included. A demonstration comparison cannot
+owner whether such feedback is included. Standardized feedback includes the
+listed RU adjective and short passive forms and EN standardized/standardised;
+future proposals to standardize a process do not assert its current format.
+A demonstration comparison cannot
 be labelled an illustration of the written-feedback format without selected
 whole owner truth. EXPERIMENTS explicitly requires exact separate source
 sentences even for nested minimum-input items; wrappers and relative-clause
@@ -225,7 +228,7 @@ and require separate actual-content review. The instruction also explicitly
 treats upstream risk warnings as constraints, not a product-feature catalog.
 Closed operator clauses about avoiding wording mistaken for personal review or
 not promising that format exclude only their captured negative mention from the
-personal-format check. Owner-approval conditions use a bounded complete grammar;
+delivery-format check. Owner-approval conditions use a bounded complete grammar;
 the rest of the leaf is still checked. Relative clauses asserting actual delivery
 and appended positive product claims are not exempt.
 Recognized clause-head existing message/landing assertions and completed owner

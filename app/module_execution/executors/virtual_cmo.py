@@ -82,6 +82,10 @@ keys. True selects additional support; false does not exclude the primary or a
 source explicitly selected by a valid numeric_context support_id/quote pair.
 Those choices jointly define the canonical citation set. Select at most thirty-two
 distinct sources per family in total. Never invent aliases or source/quote pairs.
+When risks is requested, select its text/items from the supplied prospective
+validation policies; do not describe an unconfirmed current delivery format.
+Global assumptions use the supplied hypothesis-validation notes or an empty array;
+these notes do not declare supplied market, resource or economic evidence absent.
 Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):

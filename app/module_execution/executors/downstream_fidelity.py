@@ -22,7 +22,7 @@ existing_proof text as a separate text/item and actually select that evidence ID
 Never paraphrase a sample into proof of course format, recurring service or
 effectiveness. Keep interpretation/validation plans in separate items. Creating
 a new sample or checking its possible value is a proposal, not existing proof.
-Written feedback alone does not establish personal/individual review or regular
+Written feedback alone does not establish personal/individual or standardized review, or regular
 delivery. A demo comparison does not establish the contents of written feedback.
 Do not embed these unconfirmed product attributes inside a HYPOTHESIS. Recognized
 format claims need the same complete selected owner source as product copy.
@@ -109,20 +109,20 @@ _NEGATIVE_DEMO_CLAUSE = (
 _NEGATIVE_DEMO_LIMITATION = re.compile(
     _NEGATIVE_DEMO_CLAUSE + r"(?:\.\s+" + _NEGATIVE_DEMO_CLAUSE + r")?\.?", re.I)
 _NEGATIVE_DEMO_PREFIX = re.compile(_NEGATIVE_DEMO_CLAUSE + r"\b", re.I)
-_RU_PERSONAL_FEEDBACK = (
-    r"(?:персональн[а-яё]*|индивидуальн[а-яё]*)(?:\s*,\s*|\s+(?:и\s+)?)(?:письменн[а-яё]*\s+)?"
+_RU_DELIVERY_FEEDBACK = (
+    r"(?:персональн[а-яё]*|индивидуальн[а-яё]*|стандартизированн[а-яё]*)(?:\s*,\s*|\s+(?:и\s+)?)(?:письменн[а-яё]*\s+)?"
     r"(?:обратн[а-яё]*\s+связ[а-яё]*|отклик[а-яё]*|разбор[а-яё]*|отзыв[а-яё]*|рецензи[а-яё]*)"
 )
-_EN_PERSONAL_FEEDBACK = (
-    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?)(?:\s*,\s*|\s+(?:and\s+)?)(?:written\s+)?"
+_EN_DELIVERY_FEEDBACK = (
+    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?|standardi[sz]ed)(?:\s*,\s*|\s+(?:and\s+)?)(?:written\s+)?"
     r"(?:feedback|reviews?|responses?|critiques?)"
 )
-_PERSONAL_FEEDBACK = re.compile(
-    r"\b(?:" + _RU_PERSONAL_FEEDBACK + r"|" + _EN_PERSONAL_FEEDBACK + r"|"
+_DELIVERY_FEEDBACK = re.compile(
+    r"\b(?:" + _RU_DELIVERY_FEEDBACK + r"|" + _EN_DELIVERY_FEEDBACK + r"|"
     r"(?:письменн[а-яё]*\s+)?обратн[а-яё]*\s+связ[а-яё]*\s+"
-    r"(?:является\s+)?(?:персональн[а-яё]*|индивидуальн[а-яё]*)|"
+    r"(?:(?:является|будет)\s+)?(?:персональн[а-яё]*|индивидуальн[а-яё]*|стандартизирован(?:н[а-яё]*|а|о|ы)?)|"
     r"(?:written\s+)?(?:feedback|reviews?)\s+(?:is|are|will\s+be)\s+"
-    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?))\b", re.I)
+    r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?|standardi[sz]ed))\b", re.I)
 _FEEDBACK_CONTENT = re.compile(
     r"\b(?:(?:(?:письменн[а-яё]*\s+)?обратн[а-яё]*\s+связ[а-яё]*|"
     r"письменн[а-яё]*\s+отклик[а-яё]*)\s*(?:,\s*)?"
@@ -157,39 +157,39 @@ _COMPLETED_COPY_APPROVAL = re.compile(
     r")?\s+(?:is|are|has\s+been|have\s+been)\s+(?:already\s+)?approved\s+by\s+(?:the\s+)?owner\b", re.I)
 _NEGATIVE_FORMAT_MENTION = re.compile(
     r"(?:^|;)\s*(?:в\s+коммуникации\s+)?избегать\s+формулировок,\s*"
-    r"которые\s+можно\s+понять\s+как\s+замену\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
+    r"которые\s+можно\s+понять\s+как\s+замену\s+(?P<format>" + _RU_DELIVERY_FEEDBACK +
     r")(?=\s*(?:[;.!?]|$))", re.I)
 _NEGATIVE_PROMISE_FORMAT_MENTION = re.compile(
-    r"(?:^|;)\s*Не\s+(?:обещать|гарантировать|рекламировать)\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
+    r"(?:^|;)\s*Не\s+(?:обещать|гарантировать|рекламировать)\s+(?P<format>" + _RU_DELIVERY_FEEDBACK +
     r")(?:(?:\s+без\s+подтверждения\s+владельца)|,\s*пока\s+формат\s+обратной\s+связи"
     r"(?:\s+и\s+объ[её]м)?\s+не\s+согласован(?:ы)?\s+с\s+владельцем)?(?=\s*(?:[;.!?]|$))", re.I)
 _EN_NEGATIVE_PROMISE_FORMAT_MENTION = re.compile(
-    r"(?:^|;)\s*Do\s+not\s+(?:promise|guarantee|advertise)\s+(?P<format>" + _EN_PERSONAL_FEEDBACK +
+    r"(?:^|;)\s*Do\s+not\s+(?:promise|guarantee|advertise)\s+(?P<format>" + _EN_DELIVERY_FEEDBACK +
     r")(?:\s+without\s+owner\s+confirmation)?(?=\s*(?:[;.!?]|$))", re.I)
 _FORMAT_RESEARCH_OR_GOAL = re.compile(
     r"(?:(?:(?:Исследовать|Проверить|Выяснить|Спросить),\s*)?"
-    r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"(?:важна|нужна|полезна)\s+ли\s+(?:аудитории|участникам)\s+" + _RU_DELIVERY_FEEDBACK + r"|"
     r"(?:Исследовать|Проверить|Выяснить|Спросить),\s*(?:предпочитает|хочет|ценит)\s+ли\s+"
-    r"аудитория\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"аудитория\s+" + _RU_DELIVERY_FEEDBACK + r"|"
     r"(?:Цель|Потребность|Желание)\s+аудитории\s*[:—-]\s*(?:получить|получать|найти)\s+"
-    + _RU_PERSONAL_FEEDBACK + r"|"
+    + _RU_DELIVERY_FEEDBACK + r"|"
     r"Гипотеза(?:\s+предпочтения\s+аудитории)?:\s*(?:аудитории\s+(?:важна|нужна|полезна)|"
-    r"аудитория\s+(?:предпочитает|ценит|хочет))\s+" + _RU_PERSONAL_FEEDBACK + r"|"
+    r"аудитория\s+(?:предпочитает|ценит|хочет))\s+" + _RU_DELIVERY_FEEDBACK + r"|"
     r"(?:Research|Check|Ask|Explore|Test)\s+(?:whether|if)\s+(?:the\s+)?"
-    r"(?:audience|customers|participants)\s+(?:want|value|prefer|need)\s+" + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:audience|customers|participants)\s+(?:want|value|prefer|need)\s+" + _EN_DELIVERY_FEEDBACK + r"|"
     r"(?:Do|Would)\s+(?:the\s+)?(?:audience|customers|participants)\s+"
-    r"(?:want|value|prefer|need)\s+" + _EN_PERSONAL_FEEDBACK + r"|"
+    r"(?:want|value|prefer|need)\s+" + _EN_DELIVERY_FEEDBACK + r"|"
     r"(?:Customer|Audience|Learning|Desired)\s+goal:\s*(?:receive|get|find|obtain)\s+"
-    + _EN_PERSONAL_FEEDBACK + r"|"
+    + _EN_DELIVERY_FEEDBACK + r"|"
     r"(?:Audience\s+preference\s+hypothesis|Hypothesis):\s*(?:the\s+)?"
     r"(?:audience|customers|participants)\s+(?:want|value|prefer|need)\s+"
-    + _EN_PERSONAL_FEEDBACK + r"|"
-    r"(?:Собрать|Получить)\s+" + _RU_PERSONAL_FEEDBACK +
+    + _EN_DELIVERY_FEEDBACK + r"|"
+    r"(?:Собрать|Получить)\s+" + _RU_DELIVERY_FEEDBACK +
     r"\s+(?:представителей\s+)?аудитории\s+о\s+(?:тестовом\s+)?сообщении|"
-    r"(?:Collect|Gather)\s+" + _EN_PERSONAL_FEEDBACK +
+    r"(?:Collect|Gather)\s+" + _EN_DELIVERY_FEEDBACK +
     r"\s+from\s+(?:the\s+)?audience\s+about\s+(?:the\s+)?(?:test\s+)?message|"
-    r"Уточнить\s+у\s+владельца,\s*включает\s+ли\s+курс\s+" + _RU_PERSONAL_FEEDBACK + r"|"
-    r"Confirm\s+with\s+the\s+owner\s+whether\s+the\s+course\s+includes\s+" + _EN_PERSONAL_FEEDBACK + r")[.?]?", re.I)
+    r"Уточнить\s+у\s+владельца,\s*включает\s+ли\s+курс\s+" + _RU_DELIVERY_FEEDBACK + r"|"
+    r"Confirm\s+with\s+the\s+owner\s+whether\s+the\s+course\s+includes\s+" + _EN_DELIVERY_FEEDBACK + r")[.?]?", re.I)
 _FORMAT_POLICY_WARNINGS = frozenset({
     'Рекомендация перед публикацией — проверить, не подменяет ли сообщение практические задания домашними, а письменную обратную связь персональным разбором; уточнить темы курса и темп освоения у владельца.',
     'Не приравнивать письменную обратную связь к персональному разбору без подтверждения владельца.',
@@ -251,9 +251,9 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     negative_formats = {match.span('format') for pattern in (
         _NEGATIVE_FORMAT_MENTION, _NEGATIVE_PROMISE_FORMAT_MENTION, _EN_NEGATIVE_PROMISE_FORMAT_MENTION)
         for match in pattern.finditer(value)}
-    personal_formats = tuple(match for match in _PERSONAL_FEEDBACK.finditer(value)
+    delivery_formats = tuple(match for match in _DELIVERY_FEEDBACK.finditer(value)
                              if match.span() not in negative_formats)
-    if (personal_formats or _FEEDBACK_CONTENT.search(value)
+    if (delivery_formats or _FEEDBACK_CONTENT.search(value)
             or (_DEMO.search(value) and _DEMO_FEEDBACK_FORMAT.search(value))):
         format_question = (_FORMAT_RESEARCH_OR_GOAL.fullmatch(value)
                            or _CONTENT_RESEARCH_OR_GOAL.fullmatch(value))

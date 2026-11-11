@@ -15,6 +15,7 @@ from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.common import ExecutorOutputError, OutputFailureStage, first_party_evidence, scoped_facts, parent_claims
 from app.module_execution.executors.cmo_support_wire import (
     WIRE_VERSION, support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
+    RISKS_DEFINITION, RISK_TEXT_NOTES, RISK_ITEM_NOTES, ASSUMPTION_NOTES,
 )
 from app.module_execution.executors.intelligence_schemas import StrategyOutput
 from app.module_execution.executors.numeric_grounding import numeric_quote_catalog
@@ -52,7 +53,8 @@ def contracts(req):
 def wire_output(names, choices):
     parents, evidence = choices["parents"], choices["evidence"]
     return {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
-        "outputs":{name:{"text":"Validate supplied demand", "items":["Interview prospective customers"],
+        "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand",
+            "items":[RISK_ITEM_NOTES[0] if name == "risks" else "Interview prospective customers"],
             "kind":"HYPOTHESIS", "confidence":"HIGH", "numeric_context":[],
             "primary_parent_key":next(iter(parents)) if parents else None,
             "primary_evidence_key":None if parents else next(iter(evidence)),
@@ -377,3 +379,98 @@ def test_decoder_does_not_consume_generator_scope_before_validation():
     result=decode_support_selection_wire(payload,canonical,req.expected_outputs,
         (identity for identity in ids),(identity for identity in parents),catalog)
     assert Draft202012Validator(canonical).is_valid(result)
+
+
+def test_risk_policy_only_changes_risks_prose_and_assumption_items():
+    req=scoped_request();canonical,wire,ids,parents,catalog=contracts(req)
+    risk=wire['$defs'][RISKS_DEFINITION]
+    other=wire['$defs']['OtherStrategyStatement']
+    assert risk['required']==other['required'] and risk['additionalProperties'] is False
+    for name,value in other['properties'].items():
+        if name not in {'text','items'}:
+            assert risk['properties'][name]==value
+    assert risk['properties']['text']['minLength']==1
+    assert risk['properties']['text']['maxLength']==4000
+    assert risk['properties']['items']['minItems']==1
+    assert risk['properties']['items']['maxItems']==3
+    assert risk['properties']['items']['items']['maxLength']==300
+    assert risk['properties']['text']['enum']==list(RISK_TEXT_NOTES)
+    assert risk['properties']['items']['items']['enum']==list(RISK_ITEM_NOTES)
+    assert wire['properties']['outputs']['properties']['risks']=={'$ref':'#/$defs/'+RISKS_DEFINITION}
+    from app.module_execution.executors.cmo_provider_contract import QUALITATIVE_PATTERN
+    for name in req.expected_outputs:
+        if name=='risks':continue
+        definition='MainGrowthConstraintStatement' if name=='main_growth_constraint' else 'OtherStrategyStatement'
+        assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
+        props=wire['$defs'][definition]['properties']
+        assert props['text']['pattern']==props['items']['items']['pattern']==QUALITATIVE_PATTERN
+    original=canonical['properties']['assumptions']
+    projected=wire['properties']['assumptions']
+    assert {k:v for k,v in projected.items() if k!='items'}=={k:v for k,v in original.items() if k!='items'}
+    assert projected['items']['enum']==list(ASSUMPTION_NOTES)
+
+
+@pytest.mark.parametrize('language',[0,1])
+def test_closed_risk_and_validation_assumptions_preserve_citations_context_and_gates(language):
+    req=scoped_request()
+    req=replace(req,context_packet=replace(req.context_packet,known_facts=(*req.context_packet.known_facts,
+        fact('economics','Owner economic inputs supplied.'),fact('market_research','Competitor descriptions supplied.'))))
+    async def model(**kwargs):
+        data=json.loads(kwargs['text'])
+        payload=wire_output(req.expected_outputs,data['support_selection_catalog'])
+        risk=payload['outputs']['risks']
+        risk['text']=RISK_TEXT_NOTES[language]
+        risk['items']=[RISK_ITEM_NOTES[language*3]]
+        identity=next(item['evidence_id'] for item in data['local_evidence'] if item['input_key']=='product_truth')
+        risk['numeric_context']=[{'support_id':identity,'quote':PRICE}]
+        payload['assumptions']=[ASSUMPTION_NOTES[language]]
+        assert Draft202012Validator(kwargs['response_schema']).is_valid(payload)
+        return json.dumps(payload)
+    result=asyncio.run(VirtualCMOExecutor(model_call=model,support_selection_wire=True).execute(req))
+    risk=next(row for row in result.payload['outputs'] if row['output_name']=='risks')
+    assert risk['text']==RISK_TEXT_NOTES[language]
+    assert risk['numeric_context'][0]['support_id'] in risk['evidence_ids']
+    assert risk['numeric_context'][0]['quote']==PRICE
+    assert tuple(result.payload['assumptions'])==(ASSUMPTION_NOTES[language],)
+    quality=evaluate_result(req.execution_id,result,req.upstream_results)
+    assert fully_accepted(result,quality['accepted_result_ids'],quality['accepted_claim_ids'])
+    assert result_from_json(result_to_json(result))==result
+
+
+@pytest.mark.parametrize('location,text',[
+    ('risk_text','Основные риски связаны с операционной неплатформенностью процесса обратной связи.'),
+    ('risk_item','Риск несоответствия: аудитория ожидает персонального разбора вместо стандартизированной письменной обратной связи.'),
+    ('risk_item','Our standardized feedback replaces personal review.'),
+    ('assumption','Экономика проекта и ресурсы на обратную связь достаточны для воспроизводимого формата курса.'),
+    ('assumption','Нет существенных конкурентных предложений с аналогичным сочетанием доказанной ценности.'),
+    ('assumption','Аудитория понимает и ценит разницу между практическими заданиями и обычными советами.'),
+    ('assumption',{'text':ASSUMPTION_NOTES[0]}),
+])
+def test_risk_and_assumption_policies_do_not_generate_unsupported_factual_premises(location,text):
+    req=scoped_request();calls=[]
+    async def model(**kwargs):
+        calls.append(True)
+        payload=wire_output(req.expected_outputs,json.loads(kwargs['text'])['support_selection_catalog'])
+        if location=='risk_text':payload['outputs']['risks']['text']=text
+        elif location=='risk_item':payload['outputs']['risks']['items']=[text]
+        else:payload['assumptions']=[text]
+        assert not Draft202012Validator(kwargs['response_schema']).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(VirtualCMOExecutor(model_call=model,support_selection_wire=True).execute(req))
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID and calls==[True]
+
+
+@pytest.mark.parametrize('mutation',['risk_collision','assumption_max','assumption_min','assumption_text_bound','assumption_existing_enum','risk_name'])
+def test_unknown_risk_or_assumption_contract_refuses_without_mutation(mutation):
+    req=scoped_request();canonical,_,ids,parents,catalog=contracts(req)
+    if mutation=='risk_collision':canonical['$defs'][RISKS_DEFINITION]={'type':'string'}
+    elif mutation=='assumption_max':canonical['properties']['assumptions']['maxItems']=13
+    elif mutation=='assumption_min':canonical['properties']['assumptions']['minItems']=1
+    elif mutation=='assumption_text_bound':canonical['properties']['assumptions']['items']['maxLength']=3999
+    elif mutation=='assumption_existing_enum':canonical['properties']['assumptions']['items']['enum']=['unexpected']
+    else:canonical['$defs']['OtherStrategyStatement']['properties']['output_name']['enum'].remove('risks')
+    before=deepcopy(canonical)
+    with pytest.raises(ModuleExecutionContractError):
+        support_selection_wire_schema(canonical,req.expected_outputs,ids,parents,catalog)
+    assert canonical==before

@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v5. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v6. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -40,6 +40,25 @@ inside statements. Shared main/other statement definitions retain original
 text/items/assumptions/limitations/confidence/numeric_context bounds. The main
 growth constraint remains HYPOTHESIS with one item; other statements retain the
 existing HYPOTHESIS/RECOMMENDATION restriction.
+
+Version 6 maps only the `risks` output to a dedicated closed statement definition.
+Its RU/EN text/items describe prospective validation risks: compare audience
+expectations, tested wording and confirmed owner terms; obtain an owner decision
+before testing a proposed format; check resources before expansion. They do not
+invent a personal/standardized/current feedback format, proven market position or
+resource adequacy. Primary source selection, support maps, `numeric_context`,
+kinds/confidence and all original string/array bounds remain unchanged. The other
+eight outputs retain their existing free qualitative text/item schemas and the
+frozen small generation filter.
+
+Global `assumptions` keeps its original optional array and field bounds, but its
+items are closed RU/EN validation prerequisites: validate working strategic
+hypotheses before treating them as confirmed conclusions. This does not declare
+all input evidence absent, deny supplied research/economics, or assume favorable
+competition and available capacity. An empty assumption array remains allowed.
+This is a deliberately narrower provider language; valid free-form risks or
+assumptions outside these policies may reject. Canonical v1 artifacts/history and
+original numerical, source-authority and product-fidelity checks are unchanged.
 
 Canonical evidence_ids and parent_claim_ids arrays are absent and forbidden in
 the wire. Instead each statement requires:
