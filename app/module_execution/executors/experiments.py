@@ -108,6 +108,10 @@ canonical output regardless of generated array order. Partial requests without
 it retain the first generated output as the nested-source owner. Select each
 local owner/demo source needed by nested design leaves on that owner; a selection
 on another output cannot repair it.
+For any control, treatment and intervention fields you provide, use the declared
+new-message preparation plans, not statements that assets already exist or owner
+approval is complete. Choose an intervention recipe consistent with the
+case-specific hypothesis, test_method and target_metric.
 Keep all original grounding, design and exact constraint requirements."""
         self._provider_schema_projection = provider_schema_projection
         self._strategic_parent_wire = strategic_parent_wire

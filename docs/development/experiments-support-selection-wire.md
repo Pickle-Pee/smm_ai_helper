@@ -18,7 +18,7 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The current version is experiments.support_selection.v6. It is built on the existing
+The current version is experiments.support_selection.v7. It is built on the existing
 V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
@@ -108,6 +108,31 @@ source and complete exact assertion; an allowed enum is not an implicit citation
 Other quantities and unlisted languages remain subject to canonical validation.
 The wire version changes the request fingerprint, never the durable operation ID
 or the prohibition on repeating a completed/unknown provider operation.
+
+Version 7 gives `control` and `treatment` disjoint operator-plan branches. Closed
+RU/EN notes require preparing new messages from confirmed owner facts and the
+explicitly selected strategic hypothesis, then obtaining owner approval before
+testing. They do not claim current messages, landing pages, service properties or
+completed approval. Complete supplied numerical assertions retain their original
+alternative and actual selected-source checks; numerical text cannot manufacture
+authority for an unconfirmed asset or delivery claim.
+
+Nested `intervention` chooses a complete recipe within its existing 300-character
+bound: prepare/approve and compare new messages, or prepare/approve and research
+them in qualitative audience interviews. Both recipes have RU/EN variants. The
+separate selected design hypothesis supplies the actual experimental focus;
+metrics, expected signals, falsifiers, sizing/stops, input requirements and all
+twelve other output text contracts retain their prior authority and bounds.
+Exact supplied numerical intervention assertions remain available through the
+original source enum. Free-form fragments or presumed existing assets do not.
+
+This is a deliberately bounded communication/message-validation generation
+subset, not an equivalent replacement for every possible EXPERIMENTS plan. It
+preserves complete useful operator steps instead of truncated ad-copy fragments.
+Other valid free-form control, treatment or intervention prose can reject with
+this opt-in wire. Canonical v1 history, source selection, first-basis design
+ownership and durable operation IDs remain unchanged. Earlier accepted artifacts
+and failed diagnostic responses are never rewritten by a new wire version.
 
 ## Bounded generation overhead
 

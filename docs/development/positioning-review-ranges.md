@@ -171,14 +171,19 @@ retain the existing source checks; appending a promise or positive assertion to
 the negative clause does not match the limitation grammar. Other safe free-form
 limitations outside this bounded grammar can still reject.
 
-EXPERIMENTS support-selection v6 constrains `evidence_basis` to a closed
+EXPERIMENTS support-selection v7 constrains `evidence_basis` to a closed
 RU/EN provenance note: the explicitly selected accepted strategic hypothesis
 guides a test and does not establish effectiveness. It cannot generate a mixed
 demo-proof assertion there. Qualitative `guardrails` selects a closed owner-truth
 publication-policy note; the complete supplied-number alternative remains
 available with its original exact selected-source checks. This is a deliberately
-bounded generation subset. All fourteen other outputs, including experiment-specific
-stop/scale decisions, and nested design failure conditions remain unchanged.
+bounded generation subset. Control and treatment are new-message preparation
+plans using confirmed facts and the selected strategic hypothesis, with owner
+approval still to obtain. Nested intervention selects a complete communication
+comparison or qualitative-interview recipe within its existing length bound.
+This is a message-validation subset, not finished advertising copy or equivalence
+with every possible experiment. All twelve other outputs, including case-specific
+stop/scale decisions, and other design fields remain unchanged.
 The source IDs, array shape and canonical payload remain compatible.
 After complete wire validation, the decoder places the unique `evidence_basis`
 first. Its explicit sources alone witness the nested designs attached to that
@@ -223,6 +228,12 @@ not promising that format exclude only their captured negative mention from the
 personal-format check. Owner-approval conditions use a bounded complete grammar;
 the rest of the leaf is still checked. Relative clauses asserting actual delivery
 and appended positive product claims are not exempt.
+Recognized clause-head existing message/landing assertions and completed owner
+approval statements in control/treatment require a complete selected owner quote.
+They cannot acquire authority from HYPOTHESIS labels, a demonstration, or an
+appended source. New preparation plans and pending approval remain usable. This
+check is bounded to those copy fields and recognized forms, not general asset
+existence inference across arbitrary prose.
 
 ## CMO qualitative generation and spelled quantities
 
@@ -234,8 +245,8 @@ count forms two/два/две/двух/двум/двумя in qualitative text/i
 canonical guard remains authoritative for all other counts. Numeric context
 still permits complete request-scoped source quotes,
 including quantities spelled as words. Canonical quantity/provenance validation,
-persisted DTOs and durable operation IDs are unchanged. EXPERIMENTS/POSITIONING
-generation schemas are unaffected by this CMO-specific constraint.
+persisted DTOs and durable operation IDs are unchanged. POSITIONING generation
+is unaffected; EXPERIMENTS v6+ reuses the small pattern within its own protocol.
 
 The small regular pattern uses a trie complement with explicit RU/EN case
 pairs/boundaries and anchors only outside the expression. The prior lookahead
@@ -249,3 +260,10 @@ arbitrary semantic quantities remain
 the canonical guard's responsibility. It is not a complete quantity ontology.
 An existing operation with a saved response or changed fingerprint cannot be
 resubmitted merely because the wire version changed.
+
+The canonical bounded quantity detector also recognizes listed version units and
+exact whole-word cardinal-plus-known-unit concatenations such as `двухверсий`.
+It neither rewrites numbers nor infers arbitrary morphology, prefixes or substrings.
+This closes the observed ceramics design count while retaining exact source and
+citation checks. The small generation pattern remains unchanged; unknown quantity
+words outside the finite detector still require separate content review.

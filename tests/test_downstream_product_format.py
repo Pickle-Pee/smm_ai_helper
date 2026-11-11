@@ -25,6 +25,50 @@ EXP_MECHANISM = ('Практические задания дают явный к
 POLICY = ('Рекомендация перед публикацией — проверить, не подменяет ли сообщение практические '
           'задания домашними, а письменную обратную связь персональным разбором; уточнить темы '
           'курса и темп освоения у владельца.')
+EXISTING_CONTROL = ('Существующее нейтральное сообщение курса без явного акцента на письменной '
+                    'обратной связи, описывающее курс как набор практических заданий и общей поддержки.')
+APPROVED_TREATMENT = ('Вариант сообщения с явным операционным описанием формата; текст и лендинг '
+                      'согласованы с владельцем, чтобы не заявлять неподтверждённые эффекты.')
+
+
+@pytest.mark.parametrize('text', [
+    EXISTING_CONTROL, APPROVED_TREATMENT, 'Текущий лендинг описывает курс.',
+    'Использовать существующее контрольное сообщение.',
+    'Existing neutral message describing general course support.',
+    'Use the current landing page.', 'Text and landing page have been approved by the owner.',
+    'The copy is approved by the owner.',
+])
+def test_copy_asset_and_completed_approval_claims_need_selected_whole_owner_truth(text):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text, copy_field=True)
+    validate_leaf(text, copy_field=True, owner=(text,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text, copy_field=True, demo=(text,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text+' '+TRUTH, copy_field=True, owner=(TRUTH,))
+
+
+@pytest.mark.parametrize('name,text', [('control',EXISTING_CONTROL),('treatment',APPROVED_TREATMENT)])
+@pytest.mark.parametrize('kind',['HYPOTHESIS','RECOMMENDATION'])
+def test_actual_executor_rejects_saved_existing_copy_and_approval_premises(name,text,kind):
+    def inject(payload,data):
+        row=next(row for row in payload['outputs'] if row['output_name']==name)
+        row.update(text=text,kind=kind)
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(valid_request(ModuleId.EXPERIMENTS),inject)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+@pytest.mark.parametrize('text',[
+    'Подготовить новое нейтральное сообщение по подтверждённым сведениям владельца; согласовать до теста.',
+    'Текст должен быть согласован с владельцем до запуска теста.',
+    'Если существует нейтральное сообщение, проверить его у владельца перед использованием.',
+    'Prepare a new control message using confirmed owner facts; obtain owner approval before testing.',
+    'The copy must be approved by the owner before the test.',
+    'If an existing message is available, confirm its content before using it.',
+])
+def test_proposed_copy_and_pending_owner_approval_are_not_completed_state_assertions(text):
+    validate_leaf(text,copy_field=True)
 
 
 @pytest.mark.parametrize('text', [

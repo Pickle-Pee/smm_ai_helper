@@ -142,6 +142,19 @@ _FEEDBACK_CONTENT = re.compile(
 _DEMO_FEEDBACK_FORMAT = re.compile(
     r"(?:это\s+иллюстраци[а-яё]*\s+формат[а-яё]*\s+(?:письменной\s+)?обратной\s+связи|"
     r"(?:illustrates?|demonstrates?|shows?)\s+(?:the\s+)?(?:written\s+)?feedback\s+format)", re.I)
+_EXISTING_COPY_ASSET = re.compile(
+    r"(?:^|;)\s*(?:(?:Использовать|Взять)\s+)?(?:существующ[а-яё]*|текущ[а-яё]*)\s+"
+    r"(?:(?:нейтральн[а-яё]*|контрольн[а-яё]*)\s+)?"
+    r"(?:сообщени[а-яё]*|текст[а-яё]*|лендинг[а-яё]*|объявлени[а-яё]*|посадочн[а-яё]*\s+страниц[а-яё]*)\b|"
+    r"(?:^|;)\s*(?:Use\s+)?(?:the\s+)?(?:existing|current)\s+(?:(?:neutral|control)\s+)?"
+    r"(?:message|copy|text|landing(?:\s+page)?|ad(?:vertisement)?|campaign)\b", re.I)
+_RU_COPY_ASSET = r"(?:текст|сообщение|лендинг|объявление|посадочная\s+страница)"
+_EN_COPY_ASSET = r"(?:text|copy|message|landing(?:\s+page)?|ad)"
+_COMPLETED_COPY_APPROVAL = re.compile(
+    r"(?:^|;)\s*" + _RU_COPY_ASSET + r"(?:\s+и\s+" + _RU_COPY_ASSET + r")?\s+"
+    r"(?:уже\s+)?согласован(?:а|о|ы)?\s+с\s+владельцем\b|"
+    r"(?:^|;)\s*(?:the\s+)?" + _EN_COPY_ASSET + r"(?:\s+and\s+(?:the\s+)?" + _EN_COPY_ASSET +
+    r")?\s+(?:is|are|has\s+been|have\s+been)\s+(?:already\s+)?approved\s+by\s+(?:the\s+)?owner\b", re.I)
 _NEGATIVE_FORMAT_MENTION = re.compile(
     r"(?:^|;)\s*(?:в\s+коммуникации\s+)?избегать\s+формулировок,\s*"
     r"которые\s+можно\s+понять\s+как\s+замену\s+(?P<format>" + _RU_PERSONAL_FEEDBACK +
@@ -232,6 +245,9 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     value = text.strip()
     if value in comparisons or _COUNTERFACTUAL.fullmatch(value):
         return
+    if (copy_field and (_EXISTING_COPY_ASSET.search(value) or _COMPLETED_COPY_APPROVAL.search(value))
+            and not _verbatim_leaf(value, owner)):
+        raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
     negative_formats = {match.span('format') for pattern in (
         _NEGATIVE_FORMAT_MENTION, _NEGATIVE_PROMISE_FORMAT_MENTION, _EN_NEGATIVE_PROMISE_FORMAT_MENTION)
         for match in pattern.finditer(value)}

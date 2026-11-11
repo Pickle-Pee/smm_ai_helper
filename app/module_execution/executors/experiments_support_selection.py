@@ -8,7 +8,7 @@ from typing import get_args
 from app.module_execution.errors import ModuleExecutionContractError
 from .experiments_support_wire import (
     WIRE_VERSION as V2_VERSION, decode_strategic_parent_wire, QUALITATIVE_DESIGN_PATTERN,
-    STATEMENT_NUMERIC_ASSERTION_DEFINITION,
+    STATEMENT_NUMERIC_ASSERTION_DEFINITION, NUMERIC_ASSERTION_DEFINITION,
 )
 from .intelligence_schemas import ExperimentStatement
 from .numeric_quantity import has_numeric_quantity
@@ -16,13 +16,15 @@ from .qualitative_generation import QUALITATIVE_GENERATION_PATTERN
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v6"
+WIRE_VERSION = "experiments.support_selection.v7"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
 STATEMENT_FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids", "strategic_parent_id"}
 EVIDENCE_BASIS_DEFINITION = "EvidenceBasisExperimentStatement"
 GUARDRAILS_DEFINITION = "GuardrailsExperimentStatement"
+CONTROL_DEFINITION = "ControlExperimentStatement"
+TREATMENT_DEFINITION = "TreatmentExperimentStatement"
 OTHER_STATEMENT_DEFINITION = "OtherExperimentStatement"
 EVIDENCE_BASIS_NOTES = (
     "Основанием для проверки служит принятая стратегическая гипотеза; она задаёт направление эксперимента, но не доказывает его результативность.",
@@ -31,6 +33,20 @@ EVIDENCE_BASIS_NOTES = (
 GUARDRAIL_NOTES = (
     "Публичное сообщение должно соответствовать подтверждённому описанию продукта; неподтверждённые свойства и результаты нельзя обещать.",
     "Public copy must match confirmed owner product descriptions; do not promise unconfirmed features or outcomes.",
+)
+CONTROL_NOTES = (
+    "Подготовить новое нейтральное контрольное сообщение только по подтверждённому описанию продукта, без тестируемого акцента; согласовать текст с владельцем до запуска проверки.",
+    "Prepare a new neutral control message using only confirmed owner product terms, without the tested emphasis; obtain the owner's approval before starting the test.",
+)
+TREATMENT_NOTES = (
+    "Подготовить новое тестовое сообщение с акцентом из выбранной стратегической гипотезы, сохраняя подтверждённые факты о продукте; до запуска получить согласование владельца.",
+    "Prepare a new test message emphasizing the selected strategic hypothesis while preserving confirmed product facts; obtain the owner's approval before the test.",
+)
+INTERVENTION_RECIPES = (
+    "Подготовить новые контрольное и тестовое сообщения по выбранной гипотезе, согласовать их с владельцем, затем сравнить отклик сопоставимой аудитории. Контроль описывает подтверждённые факты; тест меняет только проверяемый акцент.",
+    "Prepare new control and test messages for the selected hypothesis, obtain owner approval, then compare responses from comparable audiences. The control states confirmed facts; the test changes only the selected emphasis.",
+    "Подготовить и согласовать с владельцем новые нейтральное и тестовое сообщения по выбранной гипотезе. Показать их целевой аудитории в качественных интервью; собрать понимание, причины предпочтения и сомнения без заявления о причинном эффекте.",
+    "Prepare new neutral and test messages for the selected hypothesis and obtain owner approval. Show them to the target audience in qualitative interviews; collect understanding, reasons for preference and doubts without claiming a causal effect.",
 )
 
 
@@ -59,54 +75,62 @@ def _boolean_map(aliases):
             "required": list(aliases), "additionalProperties": False}
 
 
+def _policy_text(text, definitions, notes, *, maximum, numeric_definition, preserve_numeric=True):
+    """Replace only a proved qualitative alternative; never expand numerical text."""
+    qualitative = text
+    if "anyOf" in text:
+        if (set(text) != {"anyOf"} or len(text["anyOf"]) != 2
+                or text["anyOf"][1] != {"$ref": "#/$defs/" + numeric_definition}):
+            _fail()
+        qualitative = text["anyOf"][0]
+        numerical = definitions[numeric_definition]
+        quotes = numerical.get("enum")
+        if (set(numerical) != {"type", "minLength", "maxLength", "enum"}
+                or numerical.get("type") != "string" or numerical.get("minLength") != 1
+                or numerical.get("maxLength") != maximum or type(quotes) is not list or not quotes
+                or any(type(quote) is not str or not 1 <= len(quote) <= maximum
+                       or not has_numeric_quantity(quote) for quote in quotes)):
+            _fail()
+    if (set(qualitative) - {"type", "minLength", "maxLength", "title", "pattern"}
+            or qualitative.get("type") != "string" or qualitative.get("minLength") != 1
+            or qualitative.get("maxLength") != maximum
+            or qualitative.get("pattern") != QUALITATIVE_DESIGN_PATTERN):
+        _fail()
+    policy = {key: value for key, value in qualitative.items() if key != "pattern"}
+    policy["enum"] = list(notes)
+    return ({"anyOf": [policy, deepcopy(text["anyOf"][1])]}
+            if preserve_numeric and "anyOf" in text else policy)
+
+
 def _specialize_policy_statements(definitions):
-    """Close qualitative provenance/policy notes, retaining numeric guardrails."""
+    """Close provenance/publication and operator plans, preserving other fields."""
     statement = definitions["ExperimentStatement"]
     props = statement["properties"]
     expected_names = list(get_args(ExperimentStatement.model_fields["output_name"].annotation))
     name = props["output_name"]
     if (set(name) - {"type", "enum", "title"} or name.get("type") != "string"
-            or name.get("enum") != expected_names or "evidence_basis" not in expected_names):
+            or name.get("enum") != expected_names):
         _fail()
-    text = props["text"]
-    qualitative = text
-    if "anyOf" in text:
-        if (set(text) != {"anyOf"} or len(text["anyOf"]) != 2
-                or text["anyOf"][1] != {"$ref": "#/$defs/" + STATEMENT_NUMERIC_ASSERTION_DEFINITION}):
-            _fail()
-        qualitative = text["anyOf"][0]
-        numerical = definitions[STATEMENT_NUMERIC_ASSERTION_DEFINITION]
-        quotes = numerical.get("enum")
-        if (set(numerical) != {"type", "minLength", "maxLength", "enum"}
-                or numerical.get("type") != "string" or numerical.get("minLength") != 1
-                or numerical.get("maxLength") != 4000 or type(quotes) is not list or not quotes
-                or any(type(quote) is not str or not 1 <= len(quote) <= 4000
-                       or not has_numeric_quantity(quote) for quote in quotes)):
-            _fail()
-    if (set(qualitative) - {"type", "minLength", "maxLength", "title", "pattern"}
-            or qualitative.get("type") != "string" or qualitative.get("minLength") != 1
-            or qualitative.get("maxLength") != 4000
-            or qualitative.get("pattern") != QUALITATIVE_DESIGN_PATTERN):
-        _fail()
-    basis, guardrails, other = deepcopy(statement), deepcopy(statement), deepcopy(statement)
-    basis["properties"]["output_name"]["enum"] = ["evidence_basis"]
-    basis["properties"]["text"] = {key: value for key, value in qualitative.items() if key != "pattern"}
-    basis["properties"]["text"]["enum"] = list(EVIDENCE_BASIS_NOTES)
-    guardrails["properties"]["output_name"]["enum"] = ["guardrails"]
-    guardrail_text = {key: value for key, value in qualitative.items() if key != "pattern"}
-    guardrail_text["enum"] = list(GUARDRAIL_NOTES)
-    guardrails["properties"]["text"] = ({"anyOf": [guardrail_text, deepcopy(text["anyOf"][1])]}
-                                        if "anyOf" in text else guardrail_text)
+    policies = (("evidence_basis", EVIDENCE_BASIS_DEFINITION, EVIDENCE_BASIS_NOTES),
+                ("guardrails", GUARDRAILS_DEFINITION, GUARDRAIL_NOTES),
+                ("control", CONTROL_DEFINITION, CONTROL_NOTES),
+                ("treatment", TREATMENT_DEFINITION, TREATMENT_NOTES))
+    for output_name, definition, notes in policies:
+        branch = deepcopy(statement)
+        branch["properties"]["output_name"]["enum"] = [output_name]
+        branch["properties"]["text"] = _policy_text(props["text"], definitions, notes, maximum=4000,
+            numeric_definition=STATEMENT_NUMERIC_ASSERTION_DEFINITION, preserve_numeric=output_name != "evidence_basis")
+        definitions[definition] = branch
+    other = deepcopy(statement)
     other["properties"]["output_name"]["enum"] = [
-        name for name in expected_names if name not in {"evidence_basis", "guardrails"}]
-    definitions[EVIDENCE_BASIS_DEFINITION] = basis
-    definitions[GUARDRAILS_DEFINITION] = guardrails
+        name for name in expected_names if name not in {row[0] for row in policies}]
     definitions[OTHER_STATEMENT_DEFINITION] = other
     definitions["ExperimentStatement"] = {"anyOf": [
-        {"$ref": "#/$defs/" + EVIDENCE_BASIS_DEFINITION},
-        {"$ref": "#/$defs/" + GUARDRAILS_DEFINITION},
-        {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
-    ]}
+        {"$ref": "#/$defs/" + definition} for _, definition, _ in policies
+    ] + [{"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION}]}
+    design = definitions["ExperimentDesign"]["properties"]
+    design["intervention"] = _policy_text(design["intervention"], definitions, INTERVENTION_RECIPES,
+        maximum=300, numeric_definition=NUMERIC_ASSERTION_DEFINITION)
 
 
 def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids, parent_ids):
@@ -124,6 +148,7 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
                 or schema["properties"]["outputs"].get("items") != {"$ref": "#/$defs/ExperimentStatement"}
                 or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP,
                                                         EVIDENCE_BASIS_DEFINITION, GUARDRAILS_DEFINITION,
+                                                        CONTROL_DEFINITION, TREATMENT_DEFINITION,
                                                         OTHER_STATEMENT_DEFINITION))):
             _fail()
         for family, definition in (("evidence", "AllowedEvidenceId"), ("parents", "AllowedParentClaimId")):
