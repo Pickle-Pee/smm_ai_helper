@@ -278,7 +278,7 @@ This closes observed design/resource counts while retaining exact source and
 citation checks. The small generation pattern remains unchanged; unknown quantity
 words outside the finite detector still require separate content review.
 
-CMO support-selection wire v7 adds a shared generation subset across free
+CMO support-selection wire v8 retains a shared generation subset across free
 statement text/items and free global prose. Explicit RU personal/individual and
 standardized adjective prefixes and listed EN adjective tokens are excluded from
 free generation. This also excludes some legitimate audience questions or
@@ -294,12 +294,15 @@ demo, audience, external or parent hypotheses owner authority. No substrings,
 assembled leaves, inferred source roles or quotation repair are allowed. Global
 prose has no statement source selection and receives no owner-quotation escape.
 
-The compact regular generation grammar requires each free word to end in a
-separator, normally sentence punctuation. Exact owner quotations retain their
-original ending. This restriction is not applied to canonical history and is
-never implemented by appending punctuation on the server. The original
-959-character count pattern remains byte-identical for its existing consumers;
-the new CMO grammar reuses the shared trie construction with a bounded attribute
-vocabulary. Regex validity and local tests do not prove provider completion:
+The v7 candidate required trailing punctuation/whitespace and returned an
+incomplete real provider response; reported usage did not establish exhaustion
+of the requested token budget. Version 8 restores the original outer regular-expression
+structure, allowing ordinary word endings, and shares bounded prose
+definitions to reduce repeated schema text. It retains the same excluded
+attribute vocabulary and source-selection requirements. No output repair or
+canonical/history restriction is introduced. The original 959-character count
+pattern remains byte-identical for its existing consumers. Representation changes
+are a capability hypothesis, not a proven diagnosis of provider internals.
+Regex validity and local tests do not prove provider completion:
 fresh normal-executor, Quality Gate and actual-content evidence remain required.
 Unlisted attributes and other factual inventions still require content review.

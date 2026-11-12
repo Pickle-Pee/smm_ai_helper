@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from types import SimpleNamespace
+from itertools import product
 
 from jsonschema import Draft202012Validator
 import pytest
@@ -14,11 +15,11 @@ from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.common import EvidenceSourceClass, ExecutorOutputError, first_party_evidence, scoped_facts
 from app.module_execution.executors.cmo_generation_policy import (
     CMO_GENERATION_PATTERN, FORMAT_WORDS, FORMAT_PREFIXES, contains_format_word,
-    owner_quote_catalog, validate_owner_catalog, generation_field,
+    owner_quote_catalog, validate_owner_catalog, generation_field, PROSE_DEFINITIONS,
 )
 from app.module_execution.executors.cmo_support_wire import support_selection_wire_schema, support_selection_catalog, decode_support_selection_wire
 from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
-from app.module_execution.executors.regular_word_generation import allowed_word_pattern
+from app.module_execution.executors.regular_word_generation import allowed_word_pattern, SEPARATOR
 from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
 from tests.test_cmo_support_wire import scoped_request, contracts, wire_output
 from tests.test_module_executors import fact
@@ -61,18 +62,85 @@ def test_case_specific_qualitative_prose_remains_open(text):
     assert PATTERN.fullmatch(text)
 
 
-def test_one_trie_regular_outer_anchors_and_generation_only_terminal_separator():
-    assert len(CMO_GENERATION_PATTERN) < 5000
+def test_two_word_wrapper_uses_only_outer_anchors_and_allows_word_endings():
+    assert len(CMO_GENERATION_PATTERN) < 9000
     assert CMO_GENERATION_PATTERN.count("$") == 1
     assert re.sub(r"\[\^", "[", CMO_GENERATION_PATTERN).count("^") == 1
     for forbidden in ("(?=", "(?!", "(?<=", "(?<!", "(?i", r"\b", r"\w", r"\d"):
         assert forbidden not in CMO_GENERATION_PATTERN
-    assert not PATTERN.fullmatch("ordinary word")
+    assert PATTERN.fullmatch("ordinary word")
     assert PATTERN.fullmatch("ordinary word.")
     assert re.fullmatch(QUALITATIVE_GENERATION_PATTERN, "ordinary word")
     for text in (("Проверить реакцию. " * 250)[:3999] + ".", "." * 4000, "a" * 3999 + "."):
         assert PATTERN.fullmatch(text)
         assert not PATTERN.fullmatch(text[:-1] + "2")
+
+
+def test_v7_to_v8_language_difference_is_only_optional_terminal_separator():
+    from app.module_execution.executors.cmo_generation_policy import _WORD_PATTERN
+    old = re.compile("^" + SEPARATOR + "*(?:" + _WORD_PATTERN + SEPARATOR + "+)*$")
+    tokens = ("word", "обратная", "практика", "two", "два", "personal", "стандартизована", "twofold")
+    for left, separator, right, ending in product(tokens, (" ", "-", "\n", ""), tokens, ("", ".", " ", "\n")):
+        text = left + separator + right + ending
+        new_valid = bool(PATTERN.fullmatch(text))
+        old_valid = bool(old.fullmatch(text))
+        assert not old_valid or new_valid
+        assert old_valid == (new_valid and not re.fullmatch(r"[A-Za-zА-Яа-яЁё]", text[-1:]))
+
+
+@pytest.mark.parametrize("with_owner", [False, True])
+def test_shared_prose_definitions_are_exactly_two_and_keep_annotations_and_bounds(with_owner):
+    req = owner_request() if with_owner else scoped_request()
+    canonical, _, ids, parents, numeric = contracts(req)
+    owner = owner_quote_catalog(first_party_evidence(req, scoped_facts(req))) if with_owner else []
+    schema = support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, numeric, owner)
+    def patterns(value):
+        if isinstance(value, dict):
+            return int(value.get("pattern") == CMO_GENERATION_PATTERN) + sum(patterns(v) for v in value.values())
+        return sum(patterns(v) for v in value) if isinstance(value, list) else 0
+    assert patterns(schema) == 2
+    def bare_refs(value):
+        if isinstance(value, dict):
+            if "$ref" in value:
+                assert set(value) == {"$ref"}
+            for child in value.values():
+                bare_refs(child)
+        elif isinstance(value, list):
+            for child in value:
+                bare_refs(child)
+    bare_refs(schema)
+    provider = VirtualCMOExecutor(model_call=None, support_selection_wire=True).provider_schema_for(req, schema)
+    assert provider == schema
+    bare_refs(provider)
+    for maximum, name in PROSE_DEFINITIONS.items():
+        assert schema["$defs"][name] == {"type": "string", "minLength": 1,
+                                         "maxLength": maximum, "pattern": CMO_GENERATION_PATTERN}
+    props = schema["$defs"]["OtherStrategyStatement"]["properties"]
+    original = canonical["$defs"]["OtherStrategyStatement"]["properties"]
+    for field in ("text",):
+        assert props[field].get("description") == original[field].get("description")
+        assert props[field].get("title") == original[field].get("title")
+    global_field = schema["properties"]["limitations"]["items"]
+    ref = global_field["anyOf"][0] if "anyOf" in global_field else global_field
+    assert ref == {"$ref": "#/$defs/" + PROSE_DEFINITIONS[4000]}
+    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
+    value["outputs"]["trade_offs"]["text"] = "a" * 4000
+    value["outputs"]["trade_offs"]["items"] = ["b" * 300]
+    assert Draft202012Validator(schema).is_valid(value)
+    value["outputs"]["trade_offs"]["items"] = ["b" * 301]
+    assert not Draft202012Validator(schema).is_valid(value)
+    value["outputs"]["trade_offs"]["items"] = ["b"]
+    value["outputs"]["trade_offs"]["text"] = "a" * 4001
+    assert not Draft202012Validator(schema).is_valid(value)
+
+
+@pytest.mark.parametrize("name", list(PROSE_DEFINITIONS.values()))
+def test_reserved_prose_definition_collisions_reject_before_model(name):
+    req = scoped_request()
+    canonical, _, ids, parents, numeric = contracts(req)
+    canonical["$defs"][name] = {"type": "string"}
+    with pytest.raises(ModuleExecutionContractError):
+        support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, numeric)
 
 
 def evidence(identity="evd_owner", text=OWNER_QUOTE, key="product_truth", source=EvidenceSourceClass.FIRST_PARTY):
@@ -163,7 +231,7 @@ def test_all_free_outputs_and_globals_reject_saved_failure_and_preserve_bounds(f
         assert not Draft202012Validator(schema).is_valid(value)
 
 
-@pytest.mark.parametrize("quote", ["Prefix " + OWNER_QUOTE, OWNER_QUOTE + ". Appended claim.", OWNER_QUOTE[:20]])
+@pytest.mark.parametrize("quote", ["Prefix " + OWNER_QUOTE, OWNER_QUOTE + ". Appended claim.", OWNER_QUOTE[:OWNER_QUOTE.index(" разбор")]])
 def test_owner_enum_does_not_allow_paraphrase_prefix_suffix_or_fragments(quote):
     req = owner_request()
     canonical, _, ids, parents, numeric = contracts(req)

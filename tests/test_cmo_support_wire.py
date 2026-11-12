@@ -325,6 +325,14 @@ def test_actual_http_adapter_and_duplicate_json_key_rejection(monkeypatch,duplic
         quality=evaluate_result(req.execution_id,result,req.upstream_results)
         assert fully_accepted(result,quality["accepted_result_ids"],quality["accepted_claim_ids"])
     assert len(calls)==1 and calls[0]["max_output_tokens"]==16000
+    transmitted = calls[0]["text"]["format"]["schema"]
+    assert transmitted == contracts(req)[1]
+    from app.module_execution.executors.provider_schema import nodes
+    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN
+    for node in nodes(transmitted):
+        if "$ref" in node:
+            assert set(node) == {"$ref"}
+    assert sum(node.get("pattern") == CMO_GENERATION_PATTERN for node in nodes(transmitted)) == 2
 
 
 def test_numeric_context_parent_pair_is_an_explicit_additional_parent_citation():
@@ -397,13 +405,16 @@ def test_risk_policy_only_changes_risks_prose_and_assumption_items():
     assert risk['properties']['text']['enum']==list(RISK_TEXT_NOTES)
     assert risk['properties']['items']['items']['enum']==list(RISK_ITEM_NOTES)
     assert wire['properties']['outputs']['properties']['risks']=={'$ref':'#/$defs/'+RISKS_DEFINITION}
-    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN
+    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN, PROSE_DEFINITIONS
     for name in req.expected_outputs:
         if name=='risks':continue
         definition='MainGrowthConstraintStatement' if name=='main_growth_constraint' else 'OtherStrategyStatement'
         assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
         props=wire['$defs'][definition]['properties']
-        assert props['text']['pattern']==props['items']['items']['pattern']==CMO_GENERATION_PATTERN
+        for field, maximum in ((props['text'], 4000), (props['items']['items'], 300)):
+            ref = field['anyOf'][0] if 'anyOf' in field else field
+            assert ref=={'$ref':'#/$defs/'+PROSE_DEFINITIONS[maximum]}
+            assert wire['$defs'][PROSE_DEFINITIONS[maximum]]['pattern']==CMO_GENERATION_PATTERN
     original=canonical['properties']['assumptions']
     projected=wire['properties']['assumptions']
     assert {k:v for k,v in projected.items() if k!='items'}=={k:v for k,v in original.items() if k!='items'}

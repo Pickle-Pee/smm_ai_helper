@@ -8,9 +8,12 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
-from .cmo_generation_policy import generation_field, validate_owner_catalog, validate_owner_quote_selection
+from .cmo_generation_policy import (
+    generation_field, validate_owner_catalog, validate_owner_quote_selection,
+    PROSE_DEFINITIONS, prose_definitions,
+)
 
-WIRE_VERSION = "virtual_cmo.support_selection.v7"
+WIRE_VERSION = "virtual_cmo.support_selection.v8"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -120,7 +123,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         validate_owner_catalog(owner_catalog, set(aliases["evidence"].values()))
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
-        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION))
+        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION,
+                                                  *PROSE_DEFINITIONS.values()))
                 or "wire_contract_version" in schema["properties"]):
             _fail()
         for name, definition_name in (("parents", "AllowedParentClaimId"), ("evidence", "AllowedEvidenceId")):
@@ -153,6 +157,7 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             node["required"] = [field for field in node["required"]
                                 if field not in {"output_name", "evidence_ids", "parent_claim_ids"}] + sorted(SELECTION_FIELDS)
         _install_validation_policies(schema, names)
+        definitions.update(prose_definitions())
         for definition in STATEMENTS:
             props = definitions[definition]["properties"]
             props["text"] = generation_field(props["text"], 4000, owner_catalog,

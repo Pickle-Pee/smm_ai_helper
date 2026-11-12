@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v7. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v8. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -144,11 +144,11 @@ transport. Legacy uncited numerical context remains rejected. Two clean final
 Telegram strategy workflows and qualitative acceptance remain separate gates.
 
 
-## Version 7: source-aware format generation subset
+## Versions 7 and 8: source-aware format generation subset
 
 A completed response moved an unconfirmed standardized-feedback premise from
 `risks` into free `trade_offs` prose. The canonical owner guard correctly rejected
-it. Version 7 keeps the eight non-risk outputs case-specific, but restricts their
+it. Versions 7 and 8 keep the eight non-risk outputs case-specific, but restrict their
 free text/items and global limitations with a small regular generation language.
 It excludes the observed RU personal/individual/standardized descriptor families
 and EN personal/personalized/personalised, individual/individualized/individualised,
@@ -157,13 +157,16 @@ adjective questions and negative warnings: rephrase those using other qualitativ
 words. It is not general factuality checking or a canonical ban.
 
 The shared finite trie complements exact words and prefix families without
-lookaround, backreferences, Unicode shorthand or internal anchors. The CMO-only
-language uses one trie copy and requires generated words to finish with a
-separator, normally punctuation. The model must supply that ending; the server
-does not append punctuation or repair source flags. The original two-count
-language used by legacy CMO and EXP stays exactly 959 characters with UTF8 SHA256
+lookaround, backreferences, Unicode shorthand or internal anchors. Version 7 used one trie copy and required generated words to finish with a
+separator. Its actual full CMO response was incomplete; the captured unfinished
+leaf could still be completed locally, so a causal decoder explanation is not
+established. Version 8 restores the established outer-only two-word wrapper over
+the same attribute/count trie: generated prose may end in an ordinary word.
+This changes only the provider generation subset, not canonical history.
+The server does not append punctuation or repair source flags. The original
+two-count language used by legacy CMO and EXP stays exactly 959 characters with UTF8 SHA256
 `8cfe49afdb10b8f2319c466edc169619c93b7bb5a01aa4f0a88400cab042103c`.
-Canonical validation/history do not acquire the terminal-separator restriction.
+Canonical validation/history never acquired the v7 terminal-separator restriction.
 
 An alternative enum permits complete actual owner quotations that contain a
 filtered descriptor. Its catalog comes only from the executor's request-local
@@ -189,3 +192,29 @@ Local contract checks do not prove provider completion. Before another full grap
 a fresh bounded normal CMO diagnostic must complete all nine outputs and pass
 wire, canonical, semantic, quality and independent content review. HTTP 200,
 schema acceptance alone, empty or partial output are not successful proof.
+
+
+Version 8 also stores the 8457-character/10875-byte CMO pattern exactly twice in
+reserved bounded string definitions: CMOQualitativeText (1..4000 characters) and
+CMOQualitativeItem (1..300). Free statement fields reference these definitions;
+owner-quote enums remain separate anyOf alternatives, and global limitations
+reference the same text definition without a quote alternative. Field title and
+description annotations remain at the original field location. Each `$ref` node
+is bare. When a field has annotations but no owner quote alternative, a one-branch
+`anyOf` surrounds the reference and holds those annotations; owner-enabled fields
+already use an outer `anyOf`. No `$ref` siblings rely on SDK normalization or
+cause implicit inlining of the shared patterns. Definition name
+collisions, unknown source shapes and existing aggregate schema-budget overflow
+fail before provider I/O. This avoids five repeated copies of the larger regex,
+even when owner quotes are available. Fewer schema bytes do not establish reduced
+provider decoder complexity or completion. V8 is a joint representation candidate,
+not a proven root cause or successful provider fix; the failed v7 receipt stays
+immutable, and a fresh full normal CMO capability/content proof is still required.
+
+The support-branch collapse occurs before v8 prose references are installed.
+`VirtualCMOExecutor.provider_schema_for` copies the completed wire schema;
+`production_model_call` passes it as `response_format.schema`, and `chat` places
+that same schema into `text.format.schema` before `httpx.AsyncClient.post`.
+There is no later single-anyOf collapse, SDK schema normalization or reference
+expansion on this manual HTTP path. Mock-transport regression coverage inspects
+the actual transmitted schema for equality, exactly two patterns and bare refs.

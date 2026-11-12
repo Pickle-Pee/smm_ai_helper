@@ -90,8 +90,8 @@ When risks is requested, select its text/items from the supplied prospective
 validation policies; do not describe an unconfirmed current delivery format.
 Global assumptions use the supplied hypothesis-validation notes or an empty array;
 these notes do not declare supplied market, resource or economic evidence absent.
-Free text/items and limitations must end with punctuation or whitespace and avoid
-personal/individual/standardized delivery descriptors. Use other qualitative words
+Free text/items and limitations must avoid personal/individual/standardized
+delivery descriptors. Use other qualitative words
 for audience questions, warnings and proposals; do not infer new product formats.
 The statement schema may separately permit an exact complete supplied owner quote:
 keep that quote unchanged and explicitly select its owner evidence alias. A quote

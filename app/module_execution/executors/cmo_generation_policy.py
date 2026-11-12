@@ -16,11 +16,22 @@ MAX_OWNER_QUOTE_BYTES = 16384
 _WORDS = re.compile(f"[{LETTERS}]+")
 _WORD_PATTERN = allowed_word_pattern(GENERATION_COUNT_WORDS | FORMAT_WORDS,
                                      prefixes=FORMAT_PREFIXES)
-# One copy of the trie, outer anchors only. Every generated word must finish
-# with a separator. This is a generation restriction, never canonical policy;
-# whole owner quotations may retain their original ending through an enum.
-CMO_GENERATION_PATTERN = "^" + SEPARATOR + "*(?:" + _WORD_PATTERN + SEPARATOR + "+)*$"
+# Retain the proven outer-only two-word wrapper. Words are maximal and may end
+# directly at the string boundary. The preceding one-word candidate imposed a
+# terminal separator and returned an incomplete provider response; causation is
+# unproved. Shared bounded definitions avoid repeating this larger pattern.
+CMO_GENERATION_PATTERN = (
+    "^" + SEPARATOR + "*(?:" + _WORD_PATTERN
+    + "(?:" + SEPARATOR + "+" + _WORD_PATTERN + ")*)?" + SEPARATOR + "*$"
+)
 _PROSE = re.compile(CMO_GENERATION_PATTERN)
+PROSE_DEFINITIONS = {4000: "CMOQualitativeText", 300: "CMOQualitativeItem"}
+
+
+def prose_definitions():
+    return {name: {"type": "string", "minLength": 1, "maxLength": maximum,
+                   "pattern": CMO_GENERATION_PATTERN}
+            for maximum, name in PROSE_DEFINITIONS.items()}
 
 
 def _fail():
@@ -79,17 +90,21 @@ def generation_field(field, maximum, catalog, *, original_pattern=None):
     allowed = {"type", "minLength", "maxLength", "title", "description"}
     if original_pattern is not None:
         allowed.add("pattern")
-    if (type(field) is not dict or set(field) - allowed or field.get("type") != "string"
+    if (maximum not in PROSE_DEFINITIONS or type(field) is not dict
+            or set(field) - allowed or field.get("type") != "string"
             or field.get("minLength") != 1 or field.get("maxLength") != maximum
             or (original_pattern is not None and field.get("pattern") != original_pattern)):
         _fail()
-    prose = {**field, "pattern": CMO_GENERATION_PATTERN}
+    prose = {"$ref": "#/$defs/" + PROSE_DEFINITIONS[maximum]}
+    annotations = {key: field[key] for key in ("title", "description") if key in field}
     quotes = sorted({row["exact_quote"] for row in catalog if len(row["exact_quote"]) <= maximum})
     if not quotes:
-        return prose
-    quote = {key: value for key, value in field.items() if key != "pattern"}
+        # Keep references bare: strict provider serializers may inline a $ref
+        # with siblings. Annotations belong to the outer supported anyOf node.
+        return {"anyOf": [prose], **annotations} if annotations else prose
+    quote = {"type": "string", "minLength": 1, "maxLength": maximum}
     quote["enum"] = quotes
-    return {"anyOf": [prose, quote]}
+    return {"anyOf": [prose, quote], **annotations}
 
 
 def validate_owner_quote_selection(statement, catalog, selected_evidence):
