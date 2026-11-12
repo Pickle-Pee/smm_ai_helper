@@ -32,6 +32,8 @@ APPROVED_TREATMENT = ('Вариант сообщения с явным опер�
 STANDARDIZED = 'Курс включает стандартизированную письменную обратную связь.'
 CMO_STANDARDIZED_RISK = ('Риск несоответствия: аудитория ожидает персонального разбора вместо '
                          'стандартизированной письменной обратной связи.')
+CMO_STANDARDIZED_TRADEOFF = ('Риск переформулировать письменную обратную связь как индивидуальный '
+                           'разбор вместо стандартизованной обратной связи.')
 
 
 @pytest.mark.parametrize('text',[
@@ -40,6 +42,9 @@ CMO_STANDARDIZED_RISK = ('Риск несоответствия: аудитор�
     'Письменная обратная связь является стандартизированной.',
     'Письменная обратная связь стандартизирована.',
     'Письменная обратная связь будет стандартизирована.',
+    'Курс включает стандартизованную письменную обратную связь.',
+    'Письменная обратная связь стандартизована.',
+    'Письменная обратная связь будет стандартизована.',
     'Обратная связь будет индивидуальной.',
     'Our course includes standardized written feedback.',
     'Hypothesis: standardised feedback will increase interest in the course.',
@@ -58,6 +63,16 @@ def test_actual_cmo_risk_cannot_add_a_standardized_current_service(kind):
     def inject(payload,data):
         row=next(row for row in payload['outputs'] if row['output_name']=='risks')
         row.update(items=[CMO_STANDARDIZED_RISK],kind=kind)
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(with_fact(ModuleId.VIRTUAL_CMO),inject)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+@pytest.mark.parametrize('kind',['HYPOTHESIS','RECOMMENDATION'])
+def test_actual_cmo_tradeoff_cannot_presuppose_a_standardized_current_service(kind):
+    def inject(payload,data):
+        row=next(row for row in payload['outputs'] if row['output_name']=='trade_offs')
+        row.update(items=[CMO_STANDARDIZED_TRADEOFF],kind=kind)
     with pytest.raises(ExecutorOutputError) as caught:
         run(with_fact(ModuleId.VIRTUAL_CMO),inject)
     assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID

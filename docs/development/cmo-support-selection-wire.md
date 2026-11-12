@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v6. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v7. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -142,3 +142,50 @@ confidence/attribution, default-off wiring and bytes, immutable schemas, provide
 mutation, schema budgets/refusal, and the production HTTP adapter with mock
 transport. Legacy uncited numerical context remains rejected. Two clean final
 Telegram strategy workflows and qualitative acceptance remain separate gates.
+
+
+## Version 7: source-aware format generation subset
+
+A completed response moved an unconfirmed standardized-feedback premise from
+`risks` into free `trade_offs` prose. The canonical owner guard correctly rejected
+it. Version 7 keeps the eight non-risk outputs case-specific, but restricts their
+free text/items and global limitations with a small regular generation language.
+It excludes the observed RU personal/individual/standardized descriptor families
+and EN personal/personalized/personalised, individual/individualized/individualised,
+standardized/standardised words. This deliberately also narrows legitimate
+adjective questions and negative warnings: rephrase those using other qualitative
+words. It is not general factuality checking or a canonical ban.
+
+The shared finite trie complements exact words and prefix families without
+lookaround, backreferences, Unicode shorthand or internal anchors. The CMO-only
+language uses one trie copy and requires generated words to finish with a
+separator, normally punctuation. The model must supply that ending; the server
+does not append punctuation or repair source flags. The original two-count
+language used by legacy CMO and EXP stays exactly 959 characters with UTF8 SHA256
+`8cfe49afdb10b8f2319c466edc169619c93b7bb5a01aa4f0a88400cab042103c`.
+Canonical validation/history do not acquire the terminal-separator restriction.
+
+An alternative enum permits complete actual owner quotations that contain a
+filtered descriptor. Its catalog comes only from the executor's request-local
+FIRST_PARTY `product_truth`/`confirmed_business_fact` evidence, using complete
+string values exactly as the canonical owner witness does. No structured leaf
+extraction, partial quote, ordinary-prose escape or role inference is allowed.
+Numerical values stay solely in numeric_context. Whole values over 4000
+characters are omitted; the item enum includes only complete values up to 300.
+At most 64 entries and 16384 UTF8 JSON bytes are allowed; overflow rejects rather
+than silently truncating. Existing schema-wide limits apply as well.
+
+Schema generation and decoding reconstruct the identical catalog from the same
+request evidence. When a leaf uses the owner-quote alternative, decoding requires
+an explicit already-selected evidence ID for that exact quote. It never adds a
+citation or changes a flag. The normal canonical owner/demo/numeric guards still
+run afterwards. Demo, audience, external and HYPOTHESIS sources do not authorize
+this enum; unscoped assumptions/limitations never receive an owner alternative.
+Closed risk and assumption policies remain unchanged. Numeric-context selection,
+source bounds, mandatory parent selection, partial-output scope, canonical v1 and
+persisted artifacts remain unchanged.
+
+Local contract checks do not prove provider completion. Before another full graph,
+a fresh bounded normal CMO diagnostic must complete all nine outputs and pass
+wire, canonical, semantic, quality and independent content review. HTTP 200,
+schema acceptance alone, empty or partial output are not successful proof.

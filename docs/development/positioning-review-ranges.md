@@ -215,7 +215,8 @@ properties. The check also visits nested designs and global fields before
 persistence. Closed whole audience research questions, goals/preferences and
 negative policy warnings remain usable, as do closed whole questions asking the
 owner whether such feedback is included. Standardized feedback includes the
-listed RU adjective and short passive forms and EN standardized/standardised;
+listed RU стандартизированный/стандартизованный adjective and short passive
+forms and EN standardized/standardised;
 future proposals to standardize a process do not assert its current format.
 A demonstration comparison cannot
 be labelled an illustration of the written-feedback format without selected
@@ -276,3 +277,29 @@ The one-of idiom, unknown modifiers and sentence-boundary exclusions remain unch
 This closes observed design/resource counts while retaining exact source and
 citation checks. The small generation pattern remains unchanged; unknown quantity
 words outside the finite detector still require separate content review.
+
+CMO support-selection wire v7 adds a shared generation subset across free
+statement text/items and free global prose. Explicit RU personal/individual and
+standardized adjective prefixes and listed EN adjective tokens are excluded from
+free generation. This also excludes some legitimate audience questions or
+negative warnings; they must be expressed without those tokens in this wire.
+Canonical validation and historical artifacts retain their existing contracts.
+The eight ordinary strategic output roles remain case-specific prose.
+
+An exact complete, nonnumerical request-local FIRST_PARTY product_truth or
+confirmed_business_fact string containing an excluded attribute can instead be
+selected as an owner quotation within the original field bounds. Its source must
+already be explicitly selected; enum availability never adds citations or makes
+demo, audience, external or parent hypotheses owner authority. No substrings,
+assembled leaves, inferred source roles or quotation repair are allowed. Global
+prose has no statement source selection and receives no owner-quotation escape.
+
+The compact regular generation grammar requires each free word to end in a
+separator, normally sentence punctuation. Exact owner quotations retain their
+original ending. This restriction is not applied to canonical history and is
+never implemented by appending punctuation on the server. The original
+959-character count pattern remains byte-identical for its existing consumers;
+the new CMO grammar reuses the shared trie construction with a bounded attribute
+vocabulary. Regex validity and local tests do not prove provider completion:
+fresh normal-executor, Quality Gate and actual-content evidence remain required.
+Unlisted attributes and other factual inventions still require content review.

@@ -8,8 +8,9 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
+from .cmo_generation_policy import generation_field, validate_owner_catalog, validate_owner_quote_selection
 
-WIRE_VERSION = "virtual_cmo.support_selection.v6"
+WIRE_VERSION = "virtual_cmo.support_selection.v7"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -110,10 +111,13 @@ def _outputs(expected_outputs, definitions):
     return names
 
 
-def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
+def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
+                                  owner_catalog=None):
     """Generate full closed boolean selections, not model-owned citation arrays."""
     try:
         aliases = support_selection_catalog(evidence_ids, parent_ids)
+        owner_catalog = [] if owner_catalog is None else owner_catalog
+        validate_owner_catalog(owner_catalog, set(aliases["evidence"].values()))
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
         if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION))
@@ -149,6 +153,18 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             node["required"] = [field for field in node["required"]
                                 if field not in {"output_name", "evidence_ids", "parent_claim_ids"}] + sorted(SELECTION_FIELDS)
         _install_validation_policies(schema, names)
+        for definition in STATEMENTS:
+            props = definitions[definition]["properties"]
+            props["text"] = generation_field(props["text"], 4000, owner_catalog,
+                                              original_pattern=QUALITATIVE_PATTERN)
+            props["items"]["items"] = generation_field(props["items"]["items"], 300, owner_catalog,
+                                                        original_pattern=QUALITATIVE_PATTERN)
+        limitations = schema["properties"]["limitations"]
+        if (set(limitations) - {"type", "items", "maxItems", "minItems", "title", "description"}
+                or limitations.get("type") != "array" or limitations.get("maxItems") != 12
+                or limitations.get("minItems", 0) != 0):
+            _fail()
+        limitations["items"] = generation_field(limitations["items"], 4000, [])
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
                 STATEMENTS[0] if name == "main_growth_constraint" else
@@ -163,7 +179,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         _fail()
 
 
-def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
+def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
+                                  owner_catalog=None):
     """Decode explicit typed source sets, including explicitly selected quote pairs.
 
     Canonical arrays are absent and forbidden in wire input. Overlapping explicit
@@ -174,7 +191,9 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         evidence_ids, parent_ids = tuple(evidence_ids), tuple(parent_ids)
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         names = tuple(expected_outputs)
-        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog)
+        owner_catalog = [] if owner_catalog is None else owner_catalog
+        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog,
+                                                    owner_catalog)
         if type(payload) is not dict or not Draft202012Validator(wire_schema).is_valid(payload):
             _fail()
         if type(payload["outputs"]) is not dict or set(payload["outputs"]) != set(names):
@@ -213,6 +232,8 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
                 if identity not in aliases[family].values():
                     _fail()
                 selected[family].add(identity)
+            if name != "risks":
+                validate_owner_quote_selection(statement, owner_catalog, selected["evidence"])
             canonical = {key: deepcopy(value) for key, value in statement.items() if key not in SELECTION_FIELDS}
             canonical.update(output_name=name, evidence_ids=sorted(selected["evidence"]),
                              parent_claim_ids=sorted(selected["parents"]))

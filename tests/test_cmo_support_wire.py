@@ -53,8 +53,8 @@ def contracts(req):
 def wire_output(names, choices):
     parents, evidence = choices["parents"], choices["evidence"]
     return {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
-        "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand",
-            "items":[RISK_ITEM_NOTES[0] if name == "risks" else "Interview prospective customers"],
+        "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand.",
+            "items":[RISK_ITEM_NOTES[0] if name == "risks" else "Interview prospective customers."],
             "kind":"HYPOTHESIS", "confidence":"HIGH", "numeric_context":[],
             "primary_parent_key":next(iter(parents)) if parents else None,
             "primary_evidence_key":None if parents else next(iter(evidence)),
@@ -234,7 +234,7 @@ def test_legacy_uncited_numeric_pair_is_still_rejected():
 
 
 @pytest.mark.parametrize("field",["text","items"])
-@pytest.mark.parametrize("text,provider_valid",[("Compare 2 choices",False),("Compare \u0662 choices",True)])
+@pytest.mark.parametrize("text,provider_valid",[("Compare 2 choices.",False),("Compare \u0662 choices.",True)])
 def test_prose_patterns_and_unicode_server_guard_remain_authoritative(field,text,provider_valid):
     req=scoped_request()
     async def model(**kwargs):
@@ -397,13 +397,13 @@ def test_risk_policy_only_changes_risks_prose_and_assumption_items():
     assert risk['properties']['text']['enum']==list(RISK_TEXT_NOTES)
     assert risk['properties']['items']['items']['enum']==list(RISK_ITEM_NOTES)
     assert wire['properties']['outputs']['properties']['risks']=={'$ref':'#/$defs/'+RISKS_DEFINITION}
-    from app.module_execution.executors.cmo_provider_contract import QUALITATIVE_PATTERN
+    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN
     for name in req.expected_outputs:
         if name=='risks':continue
         definition='MainGrowthConstraintStatement' if name=='main_growth_constraint' else 'OtherStrategyStatement'
         assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
         props=wire['$defs'][definition]['properties']
-        assert props['text']['pattern']==props['items']['items']['pattern']==QUALITATIVE_PATTERN
+        assert props['text']['pattern']==props['items']['items']['pattern']==CMO_GENERATION_PATTERN
     original=canonical['properties']['assumptions']
     projected=wire['properties']['assumptions']
     assert {k:v for k,v in projected.items() if k!='items'}=={k:v for k,v in original.items() if k!='items'}
