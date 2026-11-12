@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v9. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v10. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -187,3 +187,66 @@ not change. A changed generation fingerprint never authorizes repeating a prior
 POST. Independent code review and one fresh full normal CMO capability/content
 proof are required before another full graph; HTTP 200, partial output, or old
 successful responses do not substitute for that proof.
+
+
+## Version 10: explicit whole-source selections
+
+A completed v9 response appended interpretation to a demonstration assertion and
+selected no local demo evidence on that output. Canonical fidelity correctly
+rejected it. More prose guidance does not make source copying deterministic.
+V10 gives free statement text/items a small explicit SOURCE:eNNN alternative.
+The other alternative is the exact existing bounded 959-pattern string schema.
+Markers contain ASCII digits, so these alternatives are disjoint without a new
+regex or wrapping ordinary prose in mode objects. Schema enums contain only
+marker keys; the model input separately labels complete supplied text, evidence
+alias and source role. Source text remains untrusted data, never instructions.
+
+The request-local CMO adapter uses the existing eNNN alias bijection. Eligibility
+queries canonical typed_literal_sources, the pure implementation used unchanged
+by selected_sources: FIRST_PARTY product_truth/confirmed_business_fact are owner
+sources; FIRST_PARTY existing_proof is demo evidence. Audience/external/parent
+hypotheses are not selector sources. No POSITIONING product/RTB catalog authority
+is imported. Only complete nonempty string values up to 4000 characters that
+contain no canonical numerical quantity or reserved SOURCE namespace are offered.
+No structured-value extraction, sentence splitting, trimming or truncation occurs.
+Outer-whitespace-padded values are omitted/refused, never trimmed: the existing
+canonical Pydantic policy strips outer whitespace, so such a value could not
+remain an exact accepted source quotation. Interior spacing/newlines stay exact.
+The complete expanded value must also match the frozen qualitative language;
+SOURCE never bypasses its observed-count-word restriction. This deliberately
+omits even supplied unlisted-unit `two principles` or a brand containing the
+standalone word `Two`, without claiming general quantity entailment or repairing
+the source. The original canonical numeric detector remains independent.
+Item enums include only markers whose full expanded value fits 300 characters.
+Numerical values remain exclusively in the original numeric_context mechanism.
+At most 64 selector entries and 16384 UTF8 JSON bytes are allowed; overflow fails
+before model I/O. Original aggregate schema/source limits apply independently.
+
+Encoding, model input and decoding materialize the same evidence tuple and
+reconstruct the same scoped catalog and aliases. Decoding validates wire JSON,
+then resolves only an exact explicit marker to one complete source value and
+adds that actual evidence ID to the SAME output's canonical selected set. This
+is declared explicit selection, like primary/additional/numeric_context choices:
+a false additional flag does not veto a SOURCE choice. Raw booleans/input are
+never changed. Ordinary prose is never matched to source text, shortened, split
+or repaired. Rendering happens once; supplied source values containing reserved
+syntax are omitted/refused, not recursively interpreted. All canonical schema,
+Pydantic, kind, owner/demo/equipment/numeric, 32-source and QG checks still run.
+A demo selector cannot authorize an owner-format claim, and a source selected on
+another output cannot repair a missing witness here.
+
+Only free statement fields receive selectors. Closed risk fields, trade-off
+items and global assumptions/limitations never render them. The SOURCE:
+namespace is case-insensitively reserved: unknown/malformed, concatenated,
+wrong-size or out-of-scope markers reject instead of leaking as literal prose.
+There is no fallback source lookup or fuzzy correction. The schema and decoder
+retain original 4000/300 bounds and partial-name scope. The canonical payload is
+still v1 with plain text and actual source IDs; no selector or catalog persists.
+
+The producer can quote via SOURCE and place interpretation in another free leaf.
+It may still choose unsafe ordinary prose, which must continue failing canonical
+validation. The original nu FAIL stays immutable. Offline known-response and
+mock-HTTP tests establish the explicit rendering contract only; independent code
+review and a fresh complete nine-output normal capability/QG/content check are
+required before another full graph. A provider POST is never replayed because a
+wire version or instruction fingerprint changed.

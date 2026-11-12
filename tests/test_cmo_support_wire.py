@@ -20,6 +20,7 @@ from app.module_execution.executors.cmo_support_wire import (
 )
 from app.module_execution.executors.intelligence_schemas import StrategyOutput
 from app.module_execution.executors.numeric_grounding import numeric_quote_catalog
+from app.module_execution.executors.cmo_source_selection import source_selection_catalog
 from app.module_execution.executors.support_schema import support_response_schema, SupportRequirement
 from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
 from app.module_registry import ModuleId
@@ -47,7 +48,8 @@ def contracts(req):
     canonical = support_response_schema(StrategyOutput, ids, parents,
         requirement=VirtualCMOExecutor(model_call=None).support_requirement_for(req))
     catalog = numeric_quote_catalog({e.record.evidence_id:e for e in evidence}, parents)
-    wire = support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, catalog)
+    source_choices = source_selection_catalog(evidence, support_selection_catalog(ids, parents)["evidence"])
+    wire = support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, catalog, source_choices)
     return canonical, wire, ids, parents, catalog
 
 
@@ -67,7 +69,9 @@ def wire_output(names, choices):
 
 def decode(req, payload):
     canonical, _, ids, parents, catalog = contracts(req)
-    return decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, catalog)
+    evidence = first_party_evidence(req, scoped_facts(req))
+    source_choices = source_selection_catalog(evidence, support_selection_catalog(ids, parents)["evidence"])
+    return decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, catalog, source_choices)
 
 
 def test_legacy_provider_allows_duplicate_arrays_but_new_wire_forbids_array_fields():

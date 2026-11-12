@@ -8,8 +8,9 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
+from .cmo_source_selection import source_text_schema, validate_source_catalog, render_source_leaf, reject_reserved_marker
 
-WIRE_VERSION = "virtual_cmo.support_selection.v9"
+WIRE_VERSION = "virtual_cmo.support_selection.v10"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -127,10 +128,13 @@ def _outputs(expected_outputs, definitions):
     return names
 
 
-def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
+def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
+                                  source_choices=None):
     """Generate full closed boolean selections, not model-owned citation arrays."""
     try:
         aliases = support_selection_catalog(evidence_ids, parent_ids)
+        source_choices = {} if source_choices is None else source_choices
+        validate_source_catalog(source_choices, aliases["evidence"])
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
         if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION, TRADEOFFS_DEFINITION))
@@ -166,6 +170,11 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             node["required"] = [field for field in node["required"]
                                 if field not in {"output_name", "evidence_ids", "parent_claim_ids"}] + sorted(SELECTION_FIELDS)
         _install_validation_policies(schema, names)
+        for definition in (*STATEMENTS, *((TRADEOFFS_DEFINITION,) if "trade_offs" in names else ())):
+            props = definitions[definition]["properties"]
+            props["text"] = source_text_schema(props["text"], 4000, source_choices)
+            if definition != TRADEOFFS_DEFINITION:
+                props["items"]["items"] = source_text_schema(props["items"]["items"], 300, source_choices)
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
                 STATEMENTS[0] if name == "main_growth_constraint" else
@@ -181,7 +190,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         _fail()
 
 
-def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
+def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
+                                  source_choices=None):
     """Decode explicit typed source sets, including explicitly selected quote pairs.
 
     Canonical arrays are absent and forbidden in wire input. Overlapping explicit
@@ -192,7 +202,8 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         evidence_ids, parent_ids = tuple(evidence_ids), tuple(parent_ids)
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         names = tuple(expected_outputs)
-        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog)
+        source_choices = {} if source_choices is None else source_choices
+        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog, source_choices)
         if type(payload) is not dict or not Draft202012Validator(wire_schema).is_valid(payload):
             _fail()
         if type(payload["outputs"]) is not dict or set(payload["outputs"]) != set(names):
@@ -200,6 +211,9 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         pairs = {(row["support_id"], row["exact_quote"]) for row in catalog}
         result = {key: deepcopy(value) for key, value in payload.items()
                   if key not in {"wire_contract_version", "outputs"}}
+        for field in ("assumptions", "limitations"):
+            for text in result[field]:
+                reject_reserved_marker(text)
         outputs = []
         for name in names:
             statement = payload["outputs"][name]
@@ -232,6 +246,18 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
                     _fail()
                 selected[family].add(identity)
             canonical = {key: deepcopy(value) for key, value in statement.items() if key not in SELECTION_FIELDS}
+            canonical["text"], source_id = render_source_leaf(statement["text"], 4000, source_choices,
+                                                             allowed=name != "risks")
+            if source_id is not None:
+                selected["evidence"].add(source_id)
+            items = []
+            for text in statement["items"]:
+                rendered, source_id = render_source_leaf(text, 300, source_choices,
+                                                         allowed=name not in {"risks", "trade_offs"})
+                items.append(rendered)
+                if source_id is not None:
+                    selected["evidence"].add(source_id)
+            canonical["items"] = items
             canonical.update(output_name=name, evidence_ids=sorted(selected["evidence"]),
                              parent_claim_ids=sorted(selected["parents"]))
             outputs.append(canonical)

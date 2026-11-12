@@ -29,6 +29,13 @@ from tests.test_cmo_support_wire import scoped_request, contracts, wire_output
 from tests.test_cmo_provider_contract import PRICE
 from tests.test_module_executors import fact
 from tests.test_strategy_intelligence import upstream, positioning
+from app.module_execution.executors.cmo_source_selection import (
+    source_selection_catalog, validate_source_catalog, source_text_schema, render_source_leaf,
+)
+from app.module_execution.executors.common import EvidenceSourceClass
+from app.module_execution.executors.downstream_fidelity import typed_literal_sources, selected_sources
+from types import SimpleNamespace
+import httpx
 
 OWNER = "Курс включает стандартизированную письменную обратную связь."
 BAD_COMPARISON = "Риск переформулировать письменную обратную связь как индивидуальный разбор вместо стандартизованной обратной связи."
@@ -195,3 +202,254 @@ def test_tradeoff_policy_projection_and_existing_context_bounds_fail_closed(chan
             row["numeric_context"] = [{"support_id": ids[0], "quote": "Invented 2 versions."}]
         with pytest.raises(ModuleExecutionContractError):
             decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric)
+
+
+DEMO_SOURCE = "Демонстрационный образец показывает сравнение снимков."
+
+
+def source_request(role="existing_proof", text=DEMO_SOURCE, names=None):
+    req = scoped_request(outputs=names)
+    facts = req.context_packet.known_facts
+    if any(item.label == role for item in facts):
+        facts = tuple(replace(item, value=text) if item.label == role else item for item in facts)
+    else:
+        facts = (*facts, fact(role, text))
+    return replace(req, context_packet=replace(req.context_packet,
+        known_facts=facts))
+
+
+def source_contracts(req):
+    canonical, schema, ids, parents, numeric = contracts(req)
+    evidence = first_party_evidence(req, scoped_facts(req))
+    choices = source_selection_catalog(evidence, support_selection_catalog(ids, parents)["evidence"])
+    return canonical, schema, ids, parents, numeric, choices
+
+
+@pytest.mark.parametrize("field", ["text", "items"])
+@pytest.mark.parametrize("role,text", [("existing_proof", DEMO_SOURCE),
+    ("product_truth", OWNER), ("confirmed_business_fact", OWNER),
+    ("confirmed_business_fact", "Курс  включает стандартизированную\nписьменную обратную связь.")])
+def test_explicit_source_choice_alone_renders_whole_source_selects_id_same_output_and_passes_qg(field, role, text):
+    req = source_request(role, text)
+    observed = []
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        choices = data["cmo_source_selection_catalog"]
+        marker = next(key for key, row in choices.items() if row["input_key"] == role)
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        row = payload["outputs"]["strategic_diagnosis"]
+        row[field] = marker if field == "text" else [marker]
+        assert not any(row["additional_evidence_support"].values())
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        observed.append((deepcopy(payload), choices[marker]["evidence_id"]))
+        return json.dumps(payload)
+    result = asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
+    row = next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_diagnosis")
+    assert row[field] == (text if field == "text" else (text,))
+    assert observed[0][1] in row["evidence_ids"]
+    assert all(observed[0][1] not in other["evidence_ids"] for other in result.payload["outputs"] if other["output_name"] != "strategic_diagnosis")
+    assert not any(observed[0][0]["outputs"]["strategic_diagnosis"]["additional_evidence_support"].values())
+    quality = evaluate_result(req.execution_id, result, req.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+    assert result_from_json(result_to_json(result)) == result
+
+
+@pytest.mark.parametrize("prose", [DEMO_SOURCE, DEMO_SOURCE[:-1] + " и может служить иллюстрацией акцента."])
+def test_ordinary_demo_prose_stays_unrepaired_and_source_in_another_output_does_not_authorize_it(prose):
+    req = source_request()
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        marker = next(iter(data["cmo_source_selection_catalog"]))
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload["outputs"]["strategic_diagnosis"]["items"] = [prose]
+        payload["outputs"]["strategic_bets"]["text"] = marker
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_demo_source_selection_does_not_grant_owner_product_authority():
+    req = source_request("existing_proof", OWNER)
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload["outputs"]["strategic_diagnosis"]["text"] = next(iter(data["cmo_source_selection_catalog"]))
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+@pytest.mark.parametrize("where", ["risks.text", "risks.items", "trade_offs.items", "assumptions", "limitations"])
+def test_closed_or_global_locations_never_render_or_leak_reserved_markers(where):
+    req = source_request()
+    canonical, _, ids, parents, numeric, choices = source_contracts(req)
+    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
+    marker = next(iter(choices))
+    if "." in where:
+        name, field = where.split(".")
+        value["outputs"][name][field] = marker if field == "text" else [marker]
+    else:
+        value[where] = [marker]
+    with pytest.raises(ModuleExecutionContractError):
+        decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, choices)
+
+
+@pytest.mark.parametrize("text", ["SOURCE:e999", "SOURCE:p000", "source:e000", "SOURCE:unknown",
+    "SOURCE:e000 plus interpretation", "Prefix SOURCE:e000", "SOURCE:", "Source:unknown",
+    "prefixSOURCE:e000suffix", "Resource:e000", "xsource:e000y"])
+def test_unknown_malformed_concatenated_namespace_is_never_literal_fallback(text):
+    req = source_request(names=("strategic_diagnosis",))
+    canonical, _, ids, parents, numeric, choices = source_contracts(req)
+    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
+    value["outputs"]["strategic_diagnosis"]["text"] = text
+    with pytest.raises(ModuleExecutionContractError):
+        decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, choices)
+
+
+def test_partial_scope_field_sizes_no_recursive_source_and_original_schema_shapes():
+    req = source_request(text="Owner condition " + "x" * 300, role="confirmed_business_fact", names=("trade_offs", "strategic_diagnosis"))
+    canonical, schema, ids, parents, numeric, choices = source_contracts(req)
+    marker = next(iter(choices))
+    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
+    value["outputs"]["trade_offs"]["text"] = marker
+    assert Draft202012Validator(schema).is_valid(value)
+    decoded = decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, choices)
+    assert decoded["outputs"][0]["text"] == choices[marker]["text"]
+    value["outputs"]["strategic_diagnosis"]["items"] = [marker]
+    assert not Draft202012Validator(schema).is_valid(value)
+    with pytest.raises(ModuleExecutionContractError):
+        decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, choices)
+    field = {"type": "string", "minLength": 1, "maxLength": 300, "pattern": QUALITATIVE_GENERATION_PATTERN}
+    assert source_text_schema(field, 300, choices) == field
+    with pytest.raises(ModuleExecutionContractError):
+        source_text_schema({**field, "unknown": True}, 300, {})
+
+
+def fake_source(identity, text, role="product_truth", source_class=EvidenceSourceClass.FIRST_PARTY):
+    return SimpleNamespace(record=SimpleNamespace(evidence_id=identity, source_class=source_class), value=text, input_key=role)
+
+
+def test_catalog_eligibility_uses_same_canonical_role_function_with_extra_generation_bounds():
+    foreign = next(value for value in EvidenceSourceClass if value is not EvidenceSourceClass.FIRST_PARTY)
+    rows = [fake_source("owner", OWNER), fake_source("demo", DEMO_SOURCE, "existing_proof"),
+        fake_source("confirmed", OWNER, "confirmed_business_fact"), fake_source("audience", OWNER, "target_audience"),
+        fake_source("foreign", OWNER, source_class=foreign), fake_source("numeric", "Price is 20 dollars."),
+        fake_source("structured", {"text": OWNER}), fake_source("empty", "   "),
+        fake_source("long", "x" * 4001), fake_source("reserved", "This is SOURCE:another literal")]
+    aliases = support_selection_catalog((row.record.evidence_id for row in rows), ())["evidence"]
+    choices = source_selection_catalog(iter(rows), aliases)
+    assert {row["evidence_id"] for row in choices.values()} == {"owner", "demo", "confirmed"}
+    local = {row.record.evidence_id: row for row in rows}
+    for row in rows:
+        identity = row.record.evidence_id
+        statement = SimpleNamespace(evidence_ids=(identity,))
+        assert selected_sources(statement, local) == typed_literal_sources((identity,), local)
+    # Existing canonical Pydantic strips outer whitespace: omit, never trim a
+    # source that cannot survive as a complete byte-exact accepted value.
+    assert source_selection_catalog([fake_source("padded", "  " + OWNER + "  ")], {"e000": "padded"}) == {}
+
+
+@pytest.mark.parametrize("failure", ["duplicate_id", "wrong_scope", "count_cap", "byte_cap"])
+def test_catalog_scope_collision_and_byte_count_caps_fail_without_truncation(failure):
+    if failure == "duplicate_id":
+        rows, aliases = [fake_source("same", OWNER), fake_source("same", DEMO_SOURCE)], {"e000": "same"}
+    elif failure == "wrong_scope":
+        rows, aliases = [fake_source("actual", OWNER)], {"e000": "other"}
+    elif failure == "count_cap":
+        rows = [fake_source(f"id_{i}", OWNER) for i in range(65)]
+        aliases = support_selection_catalog((row.record.evidence_id for row in rows), ())["evidence"]
+    else:
+        rows = [fake_source(f"id_{i}", "x" * 3900) for i in range(5)]
+        aliases = support_selection_catalog((row.record.evidence_id for row in rows), ())["evidence"]
+    with pytest.raises(ModuleExecutionContractError):
+        source_selection_catalog(rows, aliases)
+
+
+def test_unrecognized_or_numeric_or_reserved_catalog_rows_fail_validation():
+    choices = source_selection_catalog([fake_source("owner", OWNER)], {"e000": "owner"})
+    for update in ({"evidence_id": "different"}, {"input_key": "target_audience"},
+                   {"text": "Price is 2 dollars."}, {"text": "SOURCE:again"},
+                   {"text": "  " + OWNER + "  "}, {"text": "We teach two principles."},
+                   {"text": "Studio Two offers practice."}, {"extra": True}):
+        malformed = deepcopy(choices)
+        malformed["SOURCE:e000"].update(update)
+        with pytest.raises(ModuleExecutionContractError):
+            validate_source_catalog(malformed, {"e000": "owner"})
+
+
+def test_numeric_owner_source_remains_only_numeric_context_and_selectors_preserve_empty_catalog():
+    req = source_request("product_truth", "There are two versions of the course.")
+    _, schema, ids, parents, numeric, choices = source_contracts(req)
+    assert not choices
+    assert "anyOf" not in schema["$defs"][STATEMENTS[0]]["properties"]["text"]
+    assert any(row["exact_quote"] == "There are two versions of the course." for row in numeric)
+
+
+def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatch):
+    from tests.test_graph_model_adapter import install_transport
+    from app.orchestration_runtime.model_adapter import production_model_call
+    req = source_request()
+    calls = []
+    def respond(wire):
+        body = json.loads(wire.content)
+        calls.append(body)
+        data = json.loads(body["input"][1]["content"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload["outputs"]["strategic_diagnosis"]["items"] = [next(iter(data["cmo_source_selection_catalog"]))]
+        return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
+    install_transport(monkeypatch, respond)
+    result = asyncio.run(VirtualCMOExecutor(model_call=production_model_call, support_selection_wire=True).execute(req))
+    assert len(calls) == 1
+    schema = calls[0]["text"]["format"]["schema"]
+    branch = schema["$defs"][STATEMENTS[0]]["properties"]["text"]["anyOf"]
+    assert branch[0]["pattern"] == QUALITATIVE_GENERATION_PATTERN
+    assert all(not re.fullmatch(QUALITATIVE_GENERATION_PATTERN, key) for key in branch[1]["enum"])
+    assert next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_diagnosis")["items"] == (DEMO_SOURCE,)
+
+
+def test_explicit_source_union_cannot_bypass_original_selected_source_count_bound():
+    req = source_request()
+    extra = tuple(fact("known_business_context.source_" + str(i), "Supplied business context") for i in range(30))
+    req = replace(req, context_packet=replace(req.context_packet, known_facts=(*req.context_packet.known_facts, *extra)))
+    async def model(**kwargs):
+        data = json.loads(kwargs["text"])
+        marker, source = next(iter(data["cmo_source_selection_catalog"].items()))
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        row = payload["outputs"]["strategic_diagnosis"]
+        row["text"] = marker
+        other = [key for key in row["additional_evidence_support"] if key != source["evidence_key"]]
+        assert len(other) >= 32
+        for key in other[:32]:
+            row["additional_evidence_support"][key] = True
+        assert row["additional_evidence_support"][source["evidence_key"]] is False
+        assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
+        return json.dumps(payload)
+    with pytest.raises(ExecutorOutputError):
+        asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
+
+
+@pytest.mark.parametrize("text", ["Resource: prepare interviews.", "Resources: prepare interviews.",
+                                  "A resource: owner description."])
+def test_resource_words_are_not_reserved_namespace_in_plain_prose_or_source_literals(text):
+    req = source_request("confirmed_business_fact", text)
+    canonical, _, ids, parents, numeric, choices = source_contracts(req)
+    assert any(row["text"] == text for row in choices.values())
+    payload = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
+    payload["outputs"]["strategic_diagnosis"]["text"] = text
+    decoded = decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, numeric, choices)
+    row = next(row for row in decoded["outputs"] if row["output_name"] == "strategic_diagnosis")
+    assert row["text"] == text and not row["evidence_ids"]
+    marker, source = next((key, row) for key, row in choices.items() if row["text"] == text)
+    payload["outputs"]["strategic_diagnosis"]["text"] = marker
+    decoded = decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, numeric, choices)
+    row = next(row for row in decoded["outputs"] if row["output_name"] == "strategic_diagnosis")
+    assert row["text"] == text and source["evidence_id"] in row["evidence_ids"]
+
+
+@pytest.mark.parametrize("text", ["We teach two principles.", "Studio Two offers practice."])
+def test_source_is_not_an_escape_from_existing_generation_count_word_language(text):
+    assert not has_numeric_quantity(text)
+    assert re.fullmatch(QUALITATIVE_GENERATION_PATTERN, text) is None
+    assert source_selection_catalog([fake_source("owner", text)], {"e000": "owner"}) == {}

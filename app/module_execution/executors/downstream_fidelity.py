@@ -239,9 +239,9 @@ _CONTENT_RESEARCH_OR_GOAL = re.compile(
     r"Audience\s+goal:\s*receive\s+written\s+feedback\s+that\s+shows\s+concrete\s+changes\s+in\s+photos)[.?]?", re.I)
 
 
-def selected_sources(statement, local):
+def typed_literal_sources(evidence_ids, local):
     """Only explicit request-local typed witnesses confer product/demo proof."""
-    selected = [local[identity] for identity in statement.evidence_ids if identity in local]
+    selected = [local[identity] for identity in evidence_ids if identity in local]
     owner = tuple(item.value for item in selected
                   if item.input_key in {"product_truth", "confirmed_business_fact"}
                   and item.record.source_class is EvidenceSourceClass.FIRST_PARTY
@@ -250,6 +250,10 @@ def selected_sources(statement, local):
                  and item.record.source_class is EvidenceSourceClass.FIRST_PARTY
                  and isinstance(item.value, str) and item.value.strip())
     return owner, demo
+
+
+def selected_sources(statement, local):
+    return typed_literal_sources(statement.evidence_ids, local)
 
 
 def comparison_quotes(request, statement):

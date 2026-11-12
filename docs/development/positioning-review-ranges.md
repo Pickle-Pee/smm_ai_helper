@@ -306,6 +306,39 @@ that field. They do not prove the premise cannot appear in a free summary or
 another output. Canonical guards must continue to reject it, and fresh complete
 normal-executor, Quality Gate and actual-content proofs remain required.
 
+CMO wire v10 adds an explicit `SOURCE:eNNN` alternative to free statement text
+and items. Its ASCII digits make it disjoint from the unchanged 959 prose
+branch. The request-local catalog contains complete FIRST_PARTY string values
+eligible for the same canonical owner/demo roles: product_truth or
+confirmed_business_fact for owner conditions, existing_proof for demos. Neither
+external/audience data nor parent HYPOTHESIS becomes owner proof. Classification
+is shared with canonical source extraction, not inferred from model prose.
+
+Only an exact chosen selector renders the complete source and selects that
+bound evidence ID on the same output. False additional-support flags do not
+veto this explicit choice, just as they do not veto explicit numeric context.
+The required strategic parent and original source limits still apply. Ordinary
+prose is never matched to a source to repair citations, and another output's
+source cannot rescue it. Input flags, array order and count remain unchanged;
+canonical validation and Quality Gates run after rendering.
+
+Catalog limits are 64 values and 16384 UTF-8 JSON bytes. Text/item choices must
+expand within the existing 4000/300 bounds; no slicing, joining or truncation.
+Recognized numerical values stay in numeric_context. Values outside the frozen
+959 language are also omitted, including some harmless names containing "Two".
+Outer-padded strings are omitted rather than trimmed because canonical string
+normalization cannot preserve those bytes. Eligible Unicode and interior
+whitespace remain intact. These are deliberate generation-subset limits.
+
+Reserved SOURCE syntax is case-insensitive, but only exact catalog tokens are
+accepted. Malformed, unknown, combined or global markers reject; ordinary
+Resource/Resources prose is not the namespace. Reserved syntax in source values
+is excluded and rendering is never recursive. Closed risks, trade-off items and
+global fields receive no SOURCE alternative. No selector persists as a public
+text or changes canonical v1 history. Source mode guarantees exact copy only
+when actually chosen; invalid free prose still rejects and fresh content proof
+remains required.
+
 Downstream recognized equipment-absence conditions require the same complete
 selected request-local owner quotation boundary. A source saying professional
 equipment is not required cannot authorize an unqualified "without equipment"
