@@ -1,5 +1,6 @@
 """Observed product-format premises cannot hide inside downstream hypotheses."""
 from dataclasses import replace
+import hashlib
 from types import SimpleNamespace
 
 import pytest
@@ -427,3 +428,174 @@ def test_foreign_attribution_is_not_owner_authority_for_our_personal_feedback():
         validate_leaf(PERSONAL, comparisons=(foreign,))
     with pytest.raises(StatementSemanticsError):
         validate_leaf(foreign + ' ' + PERSONAL, comparisons=(foreign,))
+
+
+def test_saved_mu_equipment_qualifier_loss_requires_complete_owner_truth():
+    qualified = TRUTH + ' Для занятий не требуется профессиональное оборудование.'
+    text = ('Рабочая ставка — если аудитория ценит письменную обратную связь как ориентир, акцент на этом '
+            'усилит релевантность и обращения; альтернативная ставка — акцент на практику и доступность '
+            'без оборудования окажется более убедительным.')
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, owner=(qualified,))
+    assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
+
+
+EQUIPMENT_TRUTH = TRUTH + ' Для занятий не требуется профессиональное оборудование.'
+EQUIPMENT_SAFE = (
+    'Проверить, предпочитает ли аудитория обучение без профессионального оборудования.',
+    'Цель аудитории — заниматься без оборудования.',
+    'Уточнить у владельца, возможно ли обучение без профессионального оборудования.',
+    'Проверить, возможно ли обучение без оборудования.',
+    'Исследовать интерес аудитории к обучению без профессионального оборудования.',
+    'Проверить возможность обучения без оборудования и согласовать условия с владельцем до публикации.',
+    'Не обещать обучение без оборудования без подтверждения владельца.',
+    'Check whether customers prefer learning without professional equipment.',
+    'Audience goal: learn without equipment.',
+    'Audience goal: learn without any equipment.',
+    'Check whether customers prefer learning without any professional gear.',
+    'Confirm with the owner whether learning without professional gear is possible.',
+    'Check whether learning without equipment is possible.',
+    'Research audience interest in learning without professional equipment.',
+    'Test whether learning without equipment is feasible before asking the owner to approve it.',
+    'Do not promise learning without equipment without owner confirmation.',
+)
+
+
+@pytest.mark.parametrize('text', [
+    'Без оборудования.', 'Обучение без профессионального оборудования доступно.',
+    'Для занятий не требуется профессиональное оборудование.', 'Оборудование не требуется.',
+    'Профессиональное оборудование не потребуется.', 'Не нужно покупать оборудование.',
+    'Без необходимости приобретения оборудования.',
+    'Акцент на доступности без оборудования снизит барьер.',
+    'Hypothesis: the course is accessible without equipment.',
+    'Learning without professional gear.', 'No equipment required.',
+    'Professional equipment is not required.', 'No need to buy professional equipment.',
+    'The course does not require equipment.', 'You do not need professional gear.',
+])
+def test_all_recognized_equipment_absence_needs_whole_selected_owner_source(text):
+    from app.module_execution.executors.positioning_assurance import equipment_absence_spans
+    assert equipment_absence_spans(text)
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, owner=(EQUIPMENT_TRUTH,), demo=(text,))
+    assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
+    validate_leaf(text, owner=(text,))
+
+
+def test_equipment_exact_qualified_and_independently_unqualified_sources_keep_their_own_scope():
+    validate_leaf(EQUIPMENT_TRUTH, owner=(EQUIPMENT_TRUTH,))
+    validate_leaf('«' + EQUIPMENT_TRUTH + '»', owner=(EQUIPMENT_TRUTH,))
+    unqualified = 'Для занятий не требуется оборудование.'
+    validate_leaf(unqualified, owner=(unqualified,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(unqualified, owner=(EQUIPMENT_TRUTH,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf('Для занятий не требуется профессиональное оборудование.', owner=(EQUIPMENT_TRUTH,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(EQUIPMENT_TRUTH + ' ' + unqualified, owner=(EQUIPMENT_TRUTH, unqualified))
+
+
+@pytest.mark.parametrize('text', EQUIPMENT_SAFE)
+def test_equipment_closed_questions_goals_and_future_plans_do_not_assert_current_conditions(text):
+    validate_leaf(text)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text, copy_field=True)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf('«' + text + '»')
+
+
+@pytest.mark.parametrize('text', EQUIPMENT_SAFE)
+@pytest.mark.parametrize('suffix', [
+    ' Курс доступен без оборудования.', ' Курс включает персональный разбор.',
+    ' The course requires no equipment.', ' The feedback shows concrete changes.',
+    ' Text and landing page have been approved by the owner.',
+    ' You will learn without equipment.',
+])
+def test_equipment_safe_whole_leaf_cannot_launder_appended_claims(text, suffix):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text + suffix, owner=(EQUIPMENT_TRUTH,))
+
+
+@pytest.mark.parametrize('text', [
+    'Проверить, почему курс доступен без оборудования.',
+    'Проверить, насколько доступен курс без профессионального оборудования.',
+    'Проверить интерес к курсу, который не требует оборудования.',
+    'Hypothesis: students value learning without equipment which our course provides.',
+    'Check how the course works without equipment.',
+    'Audience goal: learn without equipment; our course meets that goal.',
+    'Уточнить у владельца, возможно ли обучение без оборудования, которое уже доступно.',
+])
+def test_equipment_question_or_hypothesis_prefix_does_not_hide_presupposition(text):
+    # Some synonyms remain outside the deliberately finite detector; these
+    # concrete cases contain recognized absence phrases and must not be waived.
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text)
+
+
+@pytest.mark.parametrize('module,name', [(ModuleId.VIRTUAL_CMO, 'strategic_bets'),
+                                         (ModuleId.EXPERIMENTS, 'mechanism')])
+@pytest.mark.parametrize('kind', ['HYPOTHESIS', 'RECOMMENDATION'])
+@pytest.mark.parametrize('source', ['selected', 'unselected', 'demo', 'hyp_parent'])
+def test_normal_downstream_equipment_source_boundary(module, name, kind, source):
+    req = valid_request(module)
+    if source == 'hyp_parent':
+        from app.marketing_orchestrator.quality_gates.contracts import ClaimType
+        from app.orchestration_runtime.serialization import result_to_json
+        from tests.test_strategy_intelligence import positioning, upstream
+        parent = positioning()
+        parent = replace(parent, payload=result_to_json(parent)['payload'],
+            normalized_result=replace(parent.normalized_result, claims=tuple(
+                replace(claim, value=EQUIPMENT_TRUTH, claim_type=ClaimType.HYPOTHESIS)
+                for claim in parent.normalized_result.claims)))
+        req = replace(req, upstream_results=upstream(parent))
+    else:
+        role = 'existing_proof' if source == 'demo' else 'confirmed_business_fact'
+        req = replace(req, context_packet=replace(req.context_packet,
+            known_facts=(*req.context_packet.known_facts, fact(role, EQUIPMENT_TRUTH))))
+    def inject(payload, data):
+        row = next(row for row in payload['outputs'] if row['output_name'] == name)
+        row.update(text=EQUIPMENT_TRUTH, kind=kind)
+        if source in {'selected', 'demo'}:
+            row['evidence_ids'] = [item['evidence_id'] for item in data['local_evidence'] if item['input_key'] == role]
+        else:
+            row['evidence_ids'] = []
+    if source == 'selected':
+        result = run(req, inject)
+        assert next(row for row in result.payload['outputs'] if row['output_name'] == name)['text'] == EQUIPMENT_TRUTH
+        from app.module_execution.acceptance import fully_accepted
+        from app.orchestration_runtime.service import evaluate_result
+        quality = evaluate_result(hashlib.sha256(req.execution_id.encode()).hexdigest()[:32], result, req.upstream_results)
+        assert fully_accepted(result, quality['accepted_result_ids'], quality['accepted_claim_ids'])
+    else:
+        with pytest.raises(ExecutorOutputError) as caught:
+            run(req, inject)
+        assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_equipment_detection_does_not_change_positioning_assurance_or_truth_authority():
+    from app.module_execution.executors.positioning_assurance import (
+        equipment_absence_spans, has_product_assurance, supports_no_equipment_purchase,
+    )
+    assert equipment_absence_spans('Обучение без профессионального оборудования.')
+    assert not has_product_assurance('Обучение без профессионального оборудования.')
+    assert has_product_assurance('Курс без профессионального оборудования ведёт профессиональный преподаватель.')
+    assert supports_no_equipment_purchase(EQUIPMENT_TRUTH)
+    assert not supports_no_equipment_purchase('Для занятий не требуется оборудование.')
+    assert not supports_no_equipment_purchase('Обучение без профессионального оборудования доступно.')
+
+
+@pytest.mark.parametrize('text', [
+    'The course requires no equipment.',
+    'Learning without any equipment.',
+    'The classes require no equipment.',
+    'The course requires no professional equipment.',
+    'Learning without any professional gear.',
+    'There is no need to buy any equipment.',
+    'You do not need any professional equipment.',
+    'The course does not require any equipment.',
+    "Students don't need any equipment.",
+])
+def test_english_equipment_absence_standalone_cannot_drop_owner_qualifier(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, owner=(EQUIPMENT_TRUTH,))
+    assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
+    validate_leaf(text, owner=(text,))

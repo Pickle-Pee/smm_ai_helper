@@ -305,3 +305,21 @@ Closed trade-off items prevent the observed unsupported comparative premise in
 that field. They do not prove the premise cannot appear in a free summary or
 another output. Canonical guards must continue to reject it, and fresh complete
 normal-executor, Quality Gate and actual-content proofs remain required.
+
+Downstream recognized equipment-absence conditions require the same complete
+selected request-local owner quotation boundary. A source saying professional
+equipment is not required cannot authorize an unqualified "without equipment"
+premise. A neighboring correctly qualified item does not repair a broader
+summary. Qualified equipment conditions also stay in a separate complete owner
+quotation; strategic interpretation can refer to the supplied accent without
+restating its product conditions. Numeric context and source roles are unchanged.
+
+The equipment predicate is lexical recognition only, adjacent to the existing
+POSITIONING assurance grammar. Existing POSITIONING support/assurance decisions
+are unchanged; no equipment-support boolean is used to authorize a stronger
+claim. Bounded whole audience goals/preferences/research, owner questions and
+prospective operator/negative-publication policies can remain usable. They bypass
+only this equipment check, not the other leaf checks, and cannot authorize
+appended current product claims. The finite RU/EN families and closed exceptions
+are not a general semantic qualifier parser. Unknown forms still require content
+review. Generation schema and the productive 959 pattern are unchanged.

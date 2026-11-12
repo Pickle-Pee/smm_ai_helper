@@ -7,6 +7,7 @@ intelligence executors, including their structured leaf text.
 import re
 
 from .common import EvidenceSourceClass, SemanticRule, StatementSemanticsError, factual_competitor_parents
+from .positioning_assurance import equipment_absence_spans
 
 FIDELITY_INSTRUCTION = """
 Preserve the epistemic status of upstream positioning. A possible audience goal
@@ -30,7 +31,40 @@ Treat upstream risk warnings as constraints, never as extra product capabilities
 Audience preferences/goals and testable value hypotheses may remain open without
 asserting new delivery features; confirm proposed product changes with the owner.
 These requirements also apply to nested designs, assumptions and limitations.
+Preserve equipment qualifiers exactly: no professional equipment required does
+not mean no equipment required. If mentioning an equipment-absence condition,
+copy the COMPLETE actual selected local product_truth/confirmed_business_fact
+as a separate text/item, preserving every sentence and qualifier. Put strategic
+interpretation in another leaf without repeating the equipment condition.
+Otherwise omit that condition. Closed audience goals, preference/feasibility
+research, owner clarification and future validation/publication plans describe
+questions or intentions, never established product conditions or public promises.
 """
+
+
+# Only the equipment span is replaced by this marker. Whole-leaf finite contexts
+# may bypass the new equipment check, never any other promise/format/demo guard.
+_EQUIPMENT_MARKER = "EQUIPMENT_CONDITION"
+_EQUIPMENT_RESEARCH_OR_PLAN = re.compile(
+    r"(?:Проверить,\s+предпочитает\s+ли\s+аудитория\s+обучение\s+EQUIPMENT_CONDITION"
+    r"|Цель\s+аудитории\s*[—-]\s*заниматься\s+EQUIPMENT_CONDITION"
+    r"|(?:Уточнить\s+у\s+владельца,\s+возможно\s+ли|Проверить,\s+возможно\s+ли)\s+"
+    r"обучение\s+EQUIPMENT_CONDITION"
+    r"|Исследовать\s+интерес\s+аудитории\s+к\s+обучению\s+EQUIPMENT_CONDITION"
+    r"|Проверить\s+возможность\s+обучения\s+EQUIPMENT_CONDITION\s+и\s+согласовать\s+"
+    r"условия\s+с\s+владельцем\s+до\s+публикации"
+    r"|Не\s+обещать\s+(?:обучение|доступность)\s+EQUIPMENT_CONDITION\s+"
+    r"без\s+подтверждения\s+владельца"
+    r"|Check\s+whether\s+customers\s+prefer\s+learning\s+EQUIPMENT_CONDITION"
+    r"|Audience\s+goal:\s*learn\s+EQUIPMENT_CONDITION"
+    r"|(?:Confirm\s+with\s+the\s+owner\s+whether|Check\s+whether)\s+learning\s+"
+    r"EQUIPMENT_CONDITION\s+is\s+possible"
+    r"|Research\s+audience\s+interest\s+in\s+learning\s+EQUIPMENT_CONDITION"
+    r"|Test\s+whether\s+learning\s+EQUIPMENT_CONDITION\s+is\s+feasible\s+before\s+"
+    r"asking\s+the\s+owner\s+to\s+approve\s+it"
+    r"|Do\s+not\s+promise\s+(?:learning|accessibility)\s+EQUIPMENT_CONDITION\s+"
+    r"without\s+owner\s+confirmation)[.!?]?", re.I,
+)
 
 
 _OUTCOME = re.compile(
@@ -248,6 +282,15 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     if (copy_field and (_EXISTING_COPY_ASSET.search(value) or _COMPLETED_COPY_APPROVAL.search(value))
             and not _verbatim_leaf(value, owner)):
         raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
+    equipment = equipment_absence_spans(value)
+    if equipment:
+        equipment_question = False
+        if len(equipment) == 1 and not copy_field and not any(mark in value for mark in ('«', '»', '"', "'")):
+            start, end = equipment[0]
+            context = value[:start] + _EQUIPMENT_MARKER + value[end:]
+            equipment_question = bool(_EQUIPMENT_RESEARCH_OR_PLAN.fullmatch(context))
+        if not (equipment_question or _verbatim_leaf(value, owner)):
+            raise StatementSemanticsError(SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
     negative_formats = {match.span('format') for pattern in (
         _NEGATIVE_FORMAT_MENTION, _NEGATIVE_PROMISE_FORMAT_MENTION, _EN_NEGATIVE_PROMISE_FORMAT_MENTION)
         for match in pattern.finditer(value)}
