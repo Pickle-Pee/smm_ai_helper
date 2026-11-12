@@ -8,16 +8,21 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
-from .cmo_generation_policy import (
-    generation_field, validate_owner_catalog, validate_owner_quote_selection,
-    PROSE_DEFINITIONS, prose_definitions,
-)
 
-WIRE_VERSION = "virtual_cmo.support_selection.v8"
+WIRE_VERSION = "virtual_cmo.support_selection.v9"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
 RISKS_DEFINITION = "CMORisksStatement"
+TRADEOFFS_DEFINITION = "CMOTradeoffsStatement"
+TRADEOFF_ITEM_NOTES = (
+    "Уравновесить скорость проверки и точность описания продукта: не сокращать подтверждённые условия ради более быстрого теста.",
+    "Выбирать между дальнейшим изучением ожиданий аудитории и ограниченной проверкой сообщения по результатам исследования; не считать эффективность акцента доказанной заранее.",
+    "Сравнивать предлагаемые акценты с сохранением подтверждённых условий продукта; учитывать компромисс между ясностью сообщения и полнотой описания.",
+    "Balance validation speed against faithful product description; do not shorten confirmed owner terms merely to run a faster test.",
+    "Choose further audience research or a bounded communication test based on research results; do not presume an emphasis is effective.",
+    "Compare proposed emphases while preserving confirmed product terms; weigh message clarity against completeness of description.",
+)
 RISK_TEXT_NOTES = (
     "Проверить риск расхождения между ожиданиями аудитории, тестируемым сообщением и подтверждёнными условиями продукта до масштабирования.",
     "Before scaling, check for mismatches between audience expectations, the tested message and confirmed product terms.",
@@ -87,6 +92,14 @@ def _install_validation_policies(schema, names):
             or assumptions.get("minItems", 0) != 0):
         _fail()
     assumptions["items"] = _closed_prose(assumptions["items"], 4000, ASSUMPTION_NOTES)
+    if "trade_offs" in names:
+        tradeoffs = deepcopy(schema["$defs"][STATEMENTS[1]])
+        items = tradeoffs["properties"]["items"]
+        if (set(items) - {"type", "items", "maxItems", "minItems", "title", "description"}
+                or items.get("type") != "array" or items.get("minItems") != 1 or items.get("maxItems") != 3):
+            _fail()
+        items["items"] = _closed_prose(items["items"], 300, TRADEOFF_ITEM_NOTES, qualitative=True)
+        schema["$defs"][TRADEOFFS_DEFINITION] = tradeoffs
     if "risks" not in names:
         return
     risk = deepcopy(schema["$defs"][STATEMENTS[1]])
@@ -114,17 +127,13 @@ def _outputs(expected_outputs, definitions):
     return names
 
 
-def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
-                                  owner_catalog=None):
+def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
     """Generate full closed boolean selections, not model-owned citation arrays."""
     try:
         aliases = support_selection_catalog(evidence_ids, parent_ids)
-        owner_catalog = [] if owner_catalog is None else owner_catalog
-        validate_owner_catalog(owner_catalog, set(aliases["evidence"].values()))
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
-        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION,
-                                                  *PROSE_DEFINITIONS.values()))
+        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION, TRADEOFFS_DEFINITION))
                 or "wire_contract_version" in schema["properties"]):
             _fail()
         for name, definition_name in (("parents", "AllowedParentClaimId"), ("evidence", "AllowedEvidenceId")):
@@ -157,22 +166,10 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             node["required"] = [field for field in node["required"]
                                 if field not in {"output_name", "evidence_ids", "parent_claim_ids"}] + sorted(SELECTION_FIELDS)
         _install_validation_policies(schema, names)
-        definitions.update(prose_definitions())
-        for definition in STATEMENTS:
-            props = definitions[definition]["properties"]
-            props["text"] = generation_field(props["text"], 4000, owner_catalog,
-                                              original_pattern=QUALITATIVE_PATTERN)
-            props["items"]["items"] = generation_field(props["items"]["items"], 300, owner_catalog,
-                                                        original_pattern=QUALITATIVE_PATTERN)
-        limitations = schema["properties"]["limitations"]
-        if (set(limitations) - {"type", "items", "maxItems", "minItems", "title", "description"}
-                or limitations.get("type") != "array" or limitations.get("maxItems") != 12
-                or limitations.get("minItems", 0) != 0):
-            _fail()
-        limitations["items"] = generation_field(limitations["items"], 4000, [])
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
                 STATEMENTS[0] if name == "main_growth_constraint" else
+                TRADEOFFS_DEFINITION if name == "trade_offs" else
                 RISKS_DEFINITION if name == "risks" else STATEMENTS[1])} for name in names},
             "required": list(names), "additionalProperties": False}
         schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [WIRE_VERSION]}
@@ -184,8 +181,7 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         _fail()
 
 
-def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
-                                  owner_catalog=None):
+def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog):
     """Decode explicit typed source sets, including explicitly selected quote pairs.
 
     Canonical arrays are absent and forbidden in wire input. Overlapping explicit
@@ -196,9 +192,7 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         evidence_ids, parent_ids = tuple(evidence_ids), tuple(parent_ids)
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         names = tuple(expected_outputs)
-        owner_catalog = [] if owner_catalog is None else owner_catalog
-        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog,
-                                                    owner_catalog)
+        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog)
         if type(payload) is not dict or not Draft202012Validator(wire_schema).is_valid(payload):
             _fail()
         if type(payload["outputs"]) is not dict or set(payload["outputs"]) != set(names):
@@ -237,8 +231,6 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
                 if identity not in aliases[family].values():
                     _fail()
                 selected[family].add(identity)
-            if name != "risks":
-                validate_owner_quote_selection(statement, owner_catalog, selected["evidence"])
             canonical = {key: deepcopy(value) for key, value in statement.items() if key not in SELECTION_FIELDS}
             canonical.update(output_name=name, evidence_ids=sorted(selected["evidence"]),
                              parent_claim_ids=sorted(selected["parents"]))

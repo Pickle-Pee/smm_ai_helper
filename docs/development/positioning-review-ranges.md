@@ -278,31 +278,30 @@ This closes observed design/resource counts while retaining exact source and
 citation checks. The small generation pattern remains unchanged; unknown quantity
 words outside the finite detector still require separate content review.
 
-CMO support-selection wire v8 retains a shared generation subset across free
-statement text/items and free global prose. Explicit RU personal/individual and
-standardized adjective prefixes and listed EN adjective tokens are excluded from
-free generation. This also excludes some legitimate audience questions or
-negative warnings; they must be expressed without those tokens in this wire.
-Canonical validation and historical artifacts retain their existing contracts.
-The eight ordinary strategic output roles remain case-specific prose.
+CMO support-selection wire v9 restores the productive 959-character generation
+pattern. The v7 enlarged attribute grammar and v8 shared-definition variant both
+returned incomplete real provider responses. Locally valid continuations and
+reported usage below the requested budget did not establish the provider cause.
+The failed generation-only attribute catalog, enlarged grammar and reference
+plumbing are removed rather than retained as another runtime implementation.
 
-An exact complete, nonnumerical request-local FIRST_PARTY product_truth or
-confirmed_business_fact string containing an excluded attribute can instead be
-selected as an owner quotation within the original field bounds. Its source must
-already be explicitly selected; enum availability never adds citations or makes
-demo, audience, external or parent hypotheses owner authority. No substrings,
-assembled leaves, inferred source roles or quotation repair are allowed. Global
-prose has no statement source selection and receives no owner-quotation escape.
+Version 9 retains the existing closed prospective risk/assumption policies and
+narrows only `trade_offs.items` to prospective comparison/validation choices.
+These choices must not assume existing delivery formats, prepared assets,
+completed approval, resources or comparative efficacy. `trade_offs.text` stays
+case-specific free qualitative prose; the other seven outputs keep free text
+and items. The original item bounds remain one to three entries of at most
+300 characters, with source maps and exact numeric context unchanged.
 
-The v7 candidate required trailing punctuation/whitespace and returned an
-incomplete real provider response; reported usage did not establish exhaustion
-of the requested token budget. Version 8 restores the original outer regular-expression
-structure, allowing ordinary word endings, and shares bounded prose
-definitions to reduce repeated schema text. It retains the same excluded
-attribute vocabulary and source-selection requirements. No output repair or
-canonical/history restriction is introduced. The original 959-character count
-pattern remains byte-identical for its existing consumers. Representation changes
-are a capability hypothesis, not a proven diagnosis of provider internals.
-Regex validity and local tests do not prove provider completion:
-fresh normal-executor, Quality Gate and actual-content evidence remain required.
-Unlisted attributes and other factual inventions still require content review.
+This is a deliberately narrower generation language: even valid owner-backed
+free comparison detail must use the trade-off summary or other suitable fields.
+Canonical owner proof still requires a complete selected request-local
+FIRST_PARTY product_truth or confirmed_business_fact string for recognized
+delivery assertions. Demo, audience and parent hypotheses cannot supply that
+authority; no source inference, citation repair or negative-clause waiver is
+added. Canonical v1 artifacts/history and numerical checks are unchanged.
+
+Closed trade-off items prevent the observed unsupported comparative premise in
+that field. They do not prove the premise cannot appear in a free summary or
+another output. Canonical guards must continue to reject it, and fresh complete
+normal-executor, Quality Gate and actual-content proofs remain required.

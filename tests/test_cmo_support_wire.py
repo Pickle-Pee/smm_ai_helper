@@ -16,6 +16,7 @@ from app.module_execution.executors.common import ExecutorOutputError, OutputFai
 from app.module_execution.executors.cmo_support_wire import (
     WIRE_VERSION, support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
     RISKS_DEFINITION, RISK_TEXT_NOTES, RISK_ITEM_NOTES, ASSUMPTION_NOTES,
+    TRADEOFFS_DEFINITION, TRADEOFF_ITEM_NOTES,
 )
 from app.module_execution.executors.intelligence_schemas import StrategyOutput
 from app.module_execution.executors.numeric_grounding import numeric_quote_catalog
@@ -53,8 +54,9 @@ def contracts(req):
 def wire_output(names, choices):
     parents, evidence = choices["parents"], choices["evidence"]
     return {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
-        "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand.",
-            "items":[RISK_ITEM_NOTES[0] if name == "risks" else "Interview prospective customers."],
+        "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand",
+            "items":[RISK_ITEM_NOTES[0] if name == "risks" else
+                     TRADEOFF_ITEM_NOTES[0] if name == "trade_offs" else "Interview prospective customers"],
             "kind":"HYPOTHESIS", "confidence":"HIGH", "numeric_context":[],
             "primary_parent_key":next(iter(parents)) if parents else None,
             "primary_evidence_key":None if parents else next(iter(evidence)),
@@ -234,7 +236,7 @@ def test_legacy_uncited_numeric_pair_is_still_rejected():
 
 
 @pytest.mark.parametrize("field",["text","items"])
-@pytest.mark.parametrize("text,provider_valid",[("Compare 2 choices.",False),("Compare \u0662 choices.",True)])
+@pytest.mark.parametrize("text,provider_valid",[("Compare 2 choices",False),("Compare \u0662 choices",True)])
 def test_prose_patterns_and_unicode_server_guard_remain_authoritative(field,text,provider_valid):
     req=scoped_request()
     async def model(**kwargs):
@@ -325,14 +327,6 @@ def test_actual_http_adapter_and_duplicate_json_key_rejection(monkeypatch,duplic
         quality=evaluate_result(req.execution_id,result,req.upstream_results)
         assert fully_accepted(result,quality["accepted_result_ids"],quality["accepted_claim_ids"])
     assert len(calls)==1 and calls[0]["max_output_tokens"]==16000
-    transmitted = calls[0]["text"]["format"]["schema"]
-    assert transmitted == contracts(req)[1]
-    from app.module_execution.executors.provider_schema import nodes
-    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN
-    for node in nodes(transmitted):
-        if "$ref" in node:
-            assert set(node) == {"$ref"}
-    assert sum(node.get("pattern") == CMO_GENERATION_PATTERN for node in nodes(transmitted)) == 2
 
 
 def test_numeric_context_parent_pair_is_an_explicit_additional_parent_citation():
@@ -405,16 +399,18 @@ def test_risk_policy_only_changes_risks_prose_and_assumption_items():
     assert risk['properties']['text']['enum']==list(RISK_TEXT_NOTES)
     assert risk['properties']['items']['items']['enum']==list(RISK_ITEM_NOTES)
     assert wire['properties']['outputs']['properties']['risks']=={'$ref':'#/$defs/'+RISKS_DEFINITION}
-    from app.module_execution.executors.cmo_generation_policy import CMO_GENERATION_PATTERN, PROSE_DEFINITIONS
+    from app.module_execution.executors.cmo_provider_contract import QUALITATIVE_PATTERN
     for name in req.expected_outputs:
         if name=='risks':continue
-        definition='MainGrowthConstraintStatement' if name=='main_growth_constraint' else 'OtherStrategyStatement'
+        definition=('MainGrowthConstraintStatement' if name=='main_growth_constraint' else
+                    TRADEOFFS_DEFINITION if name=='trade_offs' else 'OtherStrategyStatement')
         assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
         props=wire['$defs'][definition]['properties']
-        for field, maximum in ((props['text'], 4000), (props['items']['items'], 300)):
-            ref = field['anyOf'][0] if 'anyOf' in field else field
-            assert ref=={'$ref':'#/$defs/'+PROSE_DEFINITIONS[maximum]}
-            assert wire['$defs'][PROSE_DEFINITIONS[maximum]]['pattern']==CMO_GENERATION_PATTERN
+        assert props['text']['pattern']==QUALITATIVE_PATTERN
+        if name=='trade_offs':
+            assert props['items']['items']['enum']==list(TRADEOFF_ITEM_NOTES)
+        else:
+            assert props['items']['items']['pattern']==QUALITATIVE_PATTERN
     original=canonical['properties']['assumptions']
     projected=wire['properties']['assumptions']
     assert {k:v for k,v in projected.items() if k!='items'}=={k:v for k,v in original.items() if k!='items'}

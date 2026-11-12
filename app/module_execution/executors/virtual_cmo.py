@@ -22,7 +22,6 @@ from .claim_support import StrategyClaim, StoredNumericContext
 from .downstream_fidelity import FIDELITY_INSTRUCTION
 from .numeric_diagnostics import observe
 from .cmo_provider_contract import cmo_provider_schema
-from .cmo_generation_policy import owner_quote_catalog
 from .cmo_support_wire import (
     WIRE_VERSION, support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
 )
@@ -90,12 +89,10 @@ When risks is requested, select its text/items from the supplied prospective
 validation policies; do not describe an unconfirmed current delivery format.
 Global assumptions use the supplied hypothesis-validation notes or an empty array;
 these notes do not declare supplied market, resource or economic evidence absent.
-Free text/items and limitations must avoid personal/individual/standardized
-delivery descriptors. Use other qualitative words
-for audience questions, warnings and proposals; do not infer new product formats.
-The statement schema may separately permit an exact complete supplied owner quote:
-keep that quote unchanged and explicitly select its owner evidence alias. A quote
-never selects evidence for you. Numerical owner facts remain in numeric_context.
+When trade_offs is requested, choose its items from the supplied prospective
+trade-off policies. Keep its text specific to the supported strategic compromise;
+do not presume a current delivery format, effective emphasis, available assets
+or completed owner approval.
 Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):
@@ -125,7 +122,7 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         parents = parent_claims(request)
         catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
         return support_selection_wire_schema(validation_schema, request.expected_outputs,
-            (e.record.evidence_id for e in evidence), parents, catalog, owner_quote_catalog(evidence))
+            (e.record.evidence_id for e in evidence), parents, catalog)
 
     def decode_wire_payload(self, request, payload, evidence):
         evidence = tuple(evidence)
@@ -135,7 +132,7 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
             parents, requirement=self.support_requirement_for(request))
         catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
         return decode_support_selection_wire(payload, canonical, request.expected_outputs,
-            evidence_ids, parents, catalog, owner_quote_catalog(evidence))
+            evidence_ids, parents, catalog)
 
     def provider_schema_for(self, request, validation_schema):
         if self._support_selection_wire:
