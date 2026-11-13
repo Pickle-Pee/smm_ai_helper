@@ -57,7 +57,7 @@ demonstrations remain RTB-only. Nonfactual strategy uses a positive closed
 prospective-language contract (`positioning_strategy.py`), supplied to generation.
 Other wording fails closed, including valid paraphrases outside that contract.
 When durable verification and support selection are enabled together, generation
-uses `positioning.support_selection.v10`: each strategic output selects an opaque
+uses `positioning.support_selection.v11`: each strategic output selects an opaque
 request-scoped STRATEGY key. The server renders its exact proposal and binds all
 required evidence IDs. Offer/RTB select complete SOURCE assertions. Free prose,
 another output's key and unknown keys fail schema validation. The same catalogue
@@ -65,6 +65,17 @@ builder supplies generation and review; a model's harmless paraphrase cannot
 accidentally disagree with the positive proof contract. The historical v9 wire
 remains available while this rollout is disabled. No new public configuration
 flag, canonical schema or migration is introduced.
+The v11 producer schema also excludes demonstration primary keys outside RTB
+and keeps their required additional-support flags explicitly false. RTB retains
+the complete source map. The shared source-role rule is independently enforced
+against immutable canonical citations during review; the decoder still unions
+explicit primary, additional and chosen-strategy dependencies without repair.
+An unavailable eligible primary or a strategy dependency on a prohibited
+demonstration rejects before generation. The nonstrategy v9 wire is unchanged.
+Raw v10 responses and saved approvals are not upgraded: changing a selected
+source creates a different immutable draft and requires a new bound review.
+Persisted canonical v1 artifacts remain readable without a migration or semantic
+rerating. The failed 651d19e course checkpoint remains rejected.
 Strategic selections permit only HYPOTHESIS/RECOMMENDATION, preventing a producer
 from promoting a proposed demand, value or distinction to factual INFERENCE.
 Production string identities enable request-scoped proposals for the actual

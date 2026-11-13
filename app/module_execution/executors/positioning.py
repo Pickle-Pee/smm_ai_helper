@@ -246,6 +246,10 @@ RTB cannot use QUALITATIVE mode or paraphrase proof;
 other positioning/offer text can stay useful without repeating its duration.
 The numeric enum is an explicit generation alternative, not independent evidence;
 every numerical statement still requires its actually selected cited source."""
+        if strategy_selection:
+            self.instruction += """\nThe strategy wire excludes demonstration primary keys outside RTB. Its non-RTB
+demonstration support flags are required false; false never cancels a primary
+selection. Keep RTB's separate source and additional-support choices explicit."""
 
     def model_input_for(self, request, data, evidence, parents):
         from .positioning_strategy import STRATEGY_OPTIONS, build_strategy_choices, strategy_evidence, strategy_selection_catalog

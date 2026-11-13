@@ -12,11 +12,13 @@ from .product_support import PRODUCT_CATEGORIES, PRODUCT_OUTPUTS, product_suppor
 from .support_schema import support_response_schema, check_schema_bounds
 from .experiments_support_wire import assertion_text_schema
 from .common import plain
+from .positioning_strategy import STRATEGY_SOURCE_ROLES, citation_role_allowed
 
 WIRE_VERSION = "positioning.support_selection.v9"
-STRATEGY_WIRE_VERSION = "positioning.support_selection.v10"
+STRATEGY_WIRE_VERSION = "positioning.support_selection.v11"
 FIELDS = {"output_name", "text", "kind", "confidence", "evidence_ids", "parent_claim_ids"}
 MAPS = {"evidence": "PositioningEvidenceSelection", "parents": "PositioningParentSelection"}
+NON_RTB_EVIDENCE_MAP = "PositioningNonRTBEvidenceSelection"
 SUPPORTED_ASSERTION = "AllowedPositioningSupportedAssertion"
 QUALITATIVE_ASSERTION = "PositioningQualitativeAssertion"
 TEXT_SELECTION = "PositioningTextSelection"
@@ -85,6 +87,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
         definitions = {}
         from .positioning_strategy import strategy_selection_catalog
         strategy_catalog = strategy_selection_catalog(evidence) if strategy_selection else {}
+        source_roles = {item.record.evidence_id: STRATEGY_SOURCE_ROLES.get(item.input_key) for item in evidence}
+        if strategy_selection and any(
+            not citation_role_allowed(name, source_roles.get(identity))
+            for name in names for choice in strategy_catalog.get(name, {}).values()
+            for identity in choice["required_source_ids"]
+        ):
+            _fail()
         local_assertions = _local_assertions(evidence)
         assertions = tuple(value for _, value in local_assertions) + tuple(parent_assertions)
         if any(type(value) is not str for value in assertions):
@@ -112,6 +121,13 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
             definitions[definition] = {"type": "object",
                 "properties": {key: {"type": "boolean"} for key in choices[family]},
                 "required": list(choices[family]), "additionalProperties": False}
+        restricted_aliases = [key for key, identity in choices["evidence"].items()
+                              if not citation_role_allowed("offer", source_roles.get(identity))]
+        if strategy_selection and restricted_aliases and any(name != "RTB" for name in names):
+            restricted = deepcopy(definitions[MAPS["evidence"]])
+            for key in restricted_aliases:
+                restricted["properties"][key] = {"type": "boolean", "enum": [False]}
+            definitions[NON_RTB_EVIDENCE_MAP] = restricted
         schema = deepcopy(canonical)
         statements = [canonical["$defs"][v["$ref"].rsplit("/", 1)[-1]]
                       for v in canonical["properties"]["outputs"]["items"]["anyOf"]]
@@ -219,10 +235,15 @@ def support_selection_wire_schema(canonical, output_type, names, evidence, paren
                 props.pop(field)
             if name != "RTB":
                 keys = product_keys if name in PRODUCT_OUTPUTS else all_keys
+                if strategy_selection:
+                    keys = [key for key in keys if citation_role_allowed(
+                        name, source_roles.get(choices["evidence"].get(key)))]
                 if not keys:
                     _fail()
                 props["primary_support_key"] = {"type": "string", "enum": keys}
-            props["evidence_support"] = {"$ref": "#/$defs/" + MAPS["evidence"]}
+            evidence_map = (NON_RTB_EVIDENCE_MAP if strategy_selection and name != "RTB"
+                            and NON_RTB_EVIDENCE_MAP in definitions else MAPS["evidence"])
+            props["evidence_support"] = {"$ref": "#/$defs/" + evidence_map}
             props["parent_support"] = {"$ref": "#/$defs/" + MAPS["parents"]}
             statement["required"] = sorted(props)
             definition = "PositioningSelectedStatement" + str(index)

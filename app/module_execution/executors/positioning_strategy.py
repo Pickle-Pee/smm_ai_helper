@@ -17,6 +17,11 @@ STRATEGY_SOURCE_ROLES = {
 }
 
 
+def citation_role_allowed(output_name, role):
+    """Keep demonstrations RTB-only; other source authority is checked separately."""
+    return role != "demonstration" or output_name == "RTB"
+
+
 def strategy_evidence(evidence):
     """Use the same source-role mapping for generation and verification choices."""
     return {item.record.evidence_id: {"role": STRATEGY_SOURCE_ROLES[item.input_key], "text": item.value}

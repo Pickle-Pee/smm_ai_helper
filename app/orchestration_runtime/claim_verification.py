@@ -12,6 +12,7 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .claim_premises import factual_premise_ranges, asserts_no_follow_up, source_follow_up
 from app.module_execution.executors.positioning_strategy import (
     safe_strategy_statement, build_strategy_choices, STRATEGY_SOURCE_ROLES, source_fact_units, POSITIONING_OUTPUT_PURPOSES,
+    citation_role_allowed,
 )
 
 
@@ -91,7 +92,7 @@ _REJECTED = {ClaimStatus.UNSUPPORTED, ClaimStatus.CONTRADICTED, ClaimStatus.UNVE
 def eligible_source(output_name, category, source):
     """Model-selected categories cannot change the subject of a source."""
     if source.role == "demonstration":
-        return output_name == "RTB" and category in {"product", "outcome", "fulfillment"}
+        return citation_role_allowed(output_name, source.role) and category in {"product", "outcome", "fulfillment"}
     if source.role == "product_identity":
         return output_name in {"category", "frame_of_reference"} and category == "product"
     if source.role not in _ALLOWED_ROLES[category]:
@@ -214,8 +215,7 @@ def verify_claim_review(
                 if not any(f.output_name == review.output_name for f in findings):
                     findings.append(Finding(review.output_name, 0, ClaimStatus.UNVERIFIABLE, "unverified_factual_premise"))
                 break
-        if (review.output_name != "RTB"
-                and any(evidence[identity].role == "demonstration"
+        if (any(not citation_role_allowed(review.output_name, evidence[identity].role)
                         for identity in row.evidence_ids if identity in evidence)
                 and not any(f.output_name == review.output_name for f in findings)):
             findings.append(Finding(review.output_name, 0, ClaimStatus.UNVERIFIABLE,
