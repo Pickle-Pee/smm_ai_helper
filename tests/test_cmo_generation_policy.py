@@ -231,25 +231,26 @@ def source_contracts(req):
     ("product_truth", OWNER), ("confirmed_business_fact", OWNER),
     ("confirmed_business_fact", "Курс  включает стандартизированную\nписьменную обратную связь.")])
 def test_explicit_source_choice_alone_renders_whole_source_selects_id_same_output_and_passes_qg(field, role, text):
-    req = source_request(role, text, names=("strategic_diagnosis", "strategic_priorities"))
+    name = "strategic_priorities" if role == "existing_proof" else "strategic_diagnosis"
+    req = source_request(role, text, names=(name, "resource_priorities"))
     observed = []
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         choices = data["cmo_source_selection_catalog"]
         marker = next(key for key, row in choices.items() if row["input_key"] == role)
         payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
-        row = payload["outputs"]["strategic_diagnosis"]
+        row = payload["outputs"][name]
         row[field] = marker if field == "text" else [marker]
         assert not any(row["additional_evidence_support"].values())
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
         observed.append((deepcopy(payload), choices[marker]["evidence_id"]))
         return json.dumps(payload)
     result = asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
-    row = next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_diagnosis")
+    row = next(row for row in result.payload["outputs"] if row["output_name"] == name)
     assert row[field] == (text if field == "text" else (text,))
     assert observed[0][1] in row["evidence_ids"]
-    assert all(observed[0][1] not in other["evidence_ids"] for other in result.payload["outputs"] if other["output_name"] != "strategic_diagnosis")
-    assert not any(observed[0][0]["outputs"]["strategic_diagnosis"]["additional_evidence_support"].values())
+    assert all(observed[0][1] not in other["evidence_ids"] for other in result.payload["outputs"] if other["output_name"] != name)
+    assert not any(observed[0][0]["outputs"][name]["additional_evidence_support"].values())
     quality = evaluate_result(req.execution_id, result, req.upstream_results)
     assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
     assert result_from_json(result_to_json(result)) == result
@@ -262,7 +263,7 @@ def test_ordinary_demo_prose_stays_unrepaired_and_source_in_another_output_does_
         data = json.loads(kwargs["text"])
         marker = next(iter(data["cmo_source_selection_catalog"]))
         payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
-        payload["outputs"]["strategic_diagnosis"]["items"] = [prose]
+        payload["outputs"]["strategic_priorities"]["items"] = [prose]
         payload["outputs"]["strategic_bets"]["text"] = marker
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:
@@ -275,7 +276,7 @@ def test_demo_source_selection_does_not_grant_owner_product_authority():
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
-        payload["outputs"]["strategic_diagnosis"]["text"] = next(iter(data["cmo_source_selection_catalog"]))
+        payload["outputs"]["strategic_priorities"]["text"] = next(iter(data["cmo_source_selection_catalog"]))
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:
         asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
@@ -301,10 +302,10 @@ def test_closed_or_global_locations_never_render_or_leak_reserved_markers(where)
     "SOURCE:e000 plus interpretation", "Prefix SOURCE:e000", "SOURCE:", "Source:unknown",
     "prefixSOURCE:e000suffix", "Resource:e000", "xsource:e000y"])
 def test_unknown_malformed_concatenated_namespace_is_never_literal_fallback(text):
-    req = source_request(names=("strategic_diagnosis",))
+    req = source_request(names=("strategic_priorities",))
     canonical, _, ids, parents, numeric, choices = source_contracts(req)
     value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
-    value["outputs"]["strategic_diagnosis"]["text"] = text
+    value["outputs"]["strategic_priorities"]["text"] = text
     with pytest.raises(ModuleExecutionContractError):
         decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, choices)
 
@@ -398,7 +399,7 @@ def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatc
         calls.append(body)
         data = json.loads(body["input"][1]["content"])
         payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
-        payload["outputs"]["strategic_diagnosis"]["items"] = [next(iter(data["cmo_source_selection_catalog"]))]
+        payload["outputs"]["strategic_priorities"]["items"] = [next(iter(data["cmo_source_selection_catalog"]))]
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
     install_transport(monkeypatch, respond)
     result = asyncio.run(VirtualCMOExecutor(model_call=production_model_call, support_selection_wire=True).execute(req))
@@ -418,7 +419,7 @@ def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatc
         items = schema["$defs"][definition]["properties"]["items"]
         assert "anyOf" not in items["items"]
         assert items["description"] != SOURCE_ITEMS_DESCRIPTION
-    assert next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_diagnosis")["items"] == (DEMO_SOURCE,)
+    assert next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_priorities")["items"] == (DEMO_SOURCE,)
 
 
 def test_explicit_source_union_cannot_bypass_original_selected_source_count_bound():
@@ -429,7 +430,7 @@ def test_explicit_source_union_cannot_bypass_original_selected_source_count_boun
         data = json.loads(kwargs["text"])
         marker, source = next(iter(data["cmo_source_selection_catalog"].items()))
         payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
-        row = payload["outputs"]["strategic_diagnosis"]
+        row = payload["outputs"]["strategic_priorities"]
         row["text"] = marker
         other = [key for key in row["additional_evidence_support"] if key != source["evidence_key"]]
         assert len(other) >= 32

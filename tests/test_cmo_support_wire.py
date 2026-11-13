@@ -70,6 +70,13 @@ def wire_output(names, choices, source_choices=None):
     if 'strategic_bets' in names and bets:
         value['outputs']['strategic_bets'].update(text=BET_INTROS[0], confidence='UNKNOWN',
             items=[{'source_choice':next(iter(bets)), 'test_relation':'audience_value_ru'}])
+    from app.module_execution.executors.cmo_source_diagnoses import (
+        DIAGNOSIS_INTROS, DIAGNOSIS_RELATIONS, demo_diagnosis_choices,
+    )
+    diagnoses = demo_diagnosis_choices(source_choices or {})
+    if 'strategic_diagnosis' in names and diagnoses:
+        value['outputs']['strategic_diagnosis'].update(text=DIAGNOSIS_INTROS[0], confidence='UNKNOWN',
+            items=[{'source_choice':next(iter(diagnoses)), 'diagnostic_relation':next(iter(DIAGNOSIS_RELATIONS))}])
     return value
 
 

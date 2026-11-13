@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v11. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v12. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -299,3 +299,48 @@ can still fail; the recipe is not a guarantee of full response acceptance.
 Canonical virtual_cmo.payload.v1 history and serialization are unchanged; only
 new provider requests use wirev11. Old raw wirev10 is rejected, not rewritten or
 replayed. No extra model call, database migration or stored-artifact update occurs.
+
+## v12: bounded demonstration-scope diagnosis
+
+The 14e7257 course response selected its actual demonstration source but appended
+an unsupported effect interpretation to a paraphrased sample assertion in
+`strategic_diagnosis.items`. Normal validation correctly rejected that whole
+leaf. The response and failed run remain immutable; neither source availability
+nor an adjacent caveat turns the new interpretation into supported proof.
+
+When `strategic_diagnosis` is requested and the already validated source catalog
+contains a complete FIRST_PARTY `existing_proof` value of at most300 characters,
+only this output uses `CMOSourceBoundDiagnosisStatement`. Its summary states a
+possible gap between the supplied sample and audience understanding, expressly
+requiring validation. Kind is HYPOTHESIS and confidence UNKNOWN. One raw item
+selects an exact demonstration SOURCE token and a closed prospective relation:
+audience understanding, connection to the proposed message, or relevance to the
+audience's reasons for interest. Each relation remains a question to investigate,
+not an established audience gap, product effect or demonstration of effectiveness.
+
+The decoder renders two distinct canonical items: the unchanged complete source
+and the chosen prospective diagnostic hypothesis. The explicit source selection
+binds its actual local evidence to this output even when its additional flag is
+false. It does not infer citations, copy another output's support, extract a
+source fragment or repair model prose. Parent-primary requirements, source-family
+limits, numeric context and every existing canonical and semantic check remain.
+
+This eligible lane intentionally narrows strategic diagnosis to sample scope and
+audience/message understanding. It cannot express arbitrary unrelated diagnoses
+in this output. The other eight output schemas retain their capabilities, and
+free prose elsewhere can still fail validation. The restriction avoids another
+optional free-prose alternative that could repeat the captured blending failure;
+it does not pretend to provide unrestricted model-generated diagnostic creativity.
+
+Source eligibility is unchanged: numeric, whitespace, reserved-marker and long
+source rules still belong to the existing catalog. No eligible demo, a source
+longer than the item bound, or a request without diagnosis keeps the preceding
+diagnosis/output shape; nothing is truncated and no empty enum is introduced.
+The productive959 pattern, source roles and downstream fidelity guards are frozen.
+
+Canonical `virtual_cmo.payload.v1` history remains readable without migration or
+rerating. New requests use wirev12; old raw v11 is rejected without conversion.
+No failed response, saved approval or provider operation is reused as new
+acceptance evidence. Offline recipes and mock HTTP prove the boundary only;
+fresh model behavior, complete content quality and release acceptance remain
+separate gates.

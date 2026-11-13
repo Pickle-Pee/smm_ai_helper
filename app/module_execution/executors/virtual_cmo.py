@@ -116,6 +116,11 @@ and selects the owner evidence on this output. The hypothesis concerns the full
 provided terms, not an isolated equipment condition or a proven marketing effect.
 Use HYPOTHESIS and UNKNOWN confidence. Do not paraphrase source facts into prose.
 Other outputs and bet requests without an eligible owner source keep their schema.
+When strategic_diagnosis has a source-bound diagnosis schema, select an eligible
+demo SOURCE token and a diagnostic_relation. The server renders the complete
+sample assertion and a separate prospective audience/message question. Use the
+declared diagnostic intro, HYPOTHESIS and UNKNOWN confidence; neither a sample
+nor the selected relation establishes a product effect or a current audience gap.
 Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):

@@ -13,8 +13,11 @@ from .cmo_source_selection import (
     SOURCE_ITEMS_DESCRIPTION,
 )
 from .cmo_source_bets import BET_DEFINITION, owner_bet_choices, source_bet_statement_schema, render_source_bet
+from .cmo_source_diagnoses import (
+    DIAGNOSIS_DEFINITION, demo_diagnosis_choices, source_diagnosis_statement_schema, render_source_diagnosis,
+)
 
-WIRE_VERSION = "virtual_cmo.support_selection.v11"
+WIRE_VERSION = "virtual_cmo.support_selection.v12"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -141,7 +144,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         validate_source_catalog(source_choices, aliases["evidence"])
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
-        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION, TRADEOFFS_DEFINITION, BET_DEFINITION))
+        if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION, TRADEOFFS_DEFINITION,
+                                                BET_DEFINITION, DIAGNOSIS_DEFINITION))
                 or "wire_contract_version" in schema["properties"]):
             _fail()
         for name, definition_name in (("parents", "AllowedParentClaimId"), ("evidence", "AllowedEvidenceId")):
@@ -184,11 +188,15 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         bets = owner_bet_choices(source_choices) if "strategic_bets" in names else {}
         if bets:
             definitions[BET_DEFINITION] = source_bet_statement_schema(definitions[STATEMENTS[1]], bets)
+        diagnoses = demo_diagnosis_choices(source_choices) if "strategic_diagnosis" in names else {}
+        if diagnoses:
+            definitions[DIAGNOSIS_DEFINITION] = source_diagnosis_statement_schema(definitions[STATEMENTS[1]], diagnoses)
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
                 STATEMENTS[0] if name == "main_growth_constraint" else
                 TRADEOFFS_DEFINITION if name == "trade_offs" else
                 RISKS_DEFINITION if name == "risks" else
+                DIAGNOSIS_DEFINITION if name == "strategic_diagnosis" and diagnoses else
                 BET_DEFINITION if name == "strategic_bets" and bets else STATEMENTS[1])} for name in names},
             "required": list(names), "additionalProperties": False}
         schema["properties"]["wire_contract_version"] = {"type": "string", "enum": [WIRE_VERSION]}
@@ -215,6 +223,7 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         source_choices = {} if source_choices is None else source_choices
         wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog, source_choices)
         bets = owner_bet_choices(source_choices) if "strategic_bets" in names else {}
+        diagnoses = demo_diagnosis_choices(source_choices) if "strategic_diagnosis" in names else {}
         if type(payload) is not dict or not Draft202012Validator(wire_schema).is_valid(payload):
             _fail()
         if type(payload["outputs"]) is not dict or set(payload["outputs"]) != set(names):
@@ -262,10 +271,14 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
             if source_id is not None:
                 selected["evidence"].add(source_id)
             items = []
-            if name == "strategic_bets" and bets:
+            if name == "strategic_diagnosis" and diagnoses:
+                items, source_id = render_source_diagnosis(statement["items"][0], diagnoses)
+                selected["evidence"].add(source_id)
+            elif name == "strategic_bets" and bets:
                 items, source_id = render_source_bet(statement["items"][0], bets)
                 selected["evidence"].add(source_id)
-            for text in (() if name == "strategic_bets" and bets else statement["items"]):
+            structured_items = (name == "strategic_bets" and bets or name == "strategic_diagnosis" and diagnoses)
+            for text in (() if structured_items else statement["items"]):
                 rendered, source_id = render_source_leaf(text, 300, source_choices,
                                                          allowed=name not in {"risks", "trade_offs"})
                 items.append(rendered)
