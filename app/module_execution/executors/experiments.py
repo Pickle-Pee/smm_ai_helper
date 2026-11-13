@@ -112,6 +112,10 @@ For any control, treatment and intervention fields you provide, use the declared
 new-message preparation plans, not statements that assets already exist or owner
 approval is complete. Choose an intervention recipe consistent with the
 case-specific hypothesis, test_method and target_metric.
+For qualitative test_method text, choose a complete plan from the same supplied
+recipes and keep it consistent with the intervention. Do not invent counts of
+messages, variants or versions, including counts embedded in compound adjectives.
+Supplied numerical text still requires its original complete quote and support.
 Keep all original grounding, design and exact constraint requirements."""
         self._provider_schema_projection = provider_schema_projection
         self._strategic_parent_wire = strategic_parent_wire

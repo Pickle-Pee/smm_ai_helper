@@ -18,7 +18,7 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The current version is experiments.support_selection.v7. It is built on the existing
+The current version is experiments.support_selection.v8. It is built on the existing
 V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
@@ -26,6 +26,27 @@ other bounds. Canonical evidence_ids and parent_claim_ids are absent and forbidd
 in the support-selection wire input. Instead each statement returns additional_evidence_support and
 additional_parent_support: closed objects containing every source alias as a
 required strictly boolean property.
+
+In v8, qualitative `test_method` text uses a fifth specialized statement branch
+and the same authoritative INTERVENTION_RECIPES as nested intervention plans.
+The complete prospective plans require preparation and owner agreement, and
+describe a control/test comparison or qualitative interviews. This narrows method
+choice; eleven other output texts retain their case-specific free prose.
+Hypothesis, population, metrics, sample/duration logic and decisions remain
+case-specific. No existing asset or completed approval is inferred.
+
+The method's original whole-source numerical quotation alternative and4000-text
+bound remain separate from the nested intervention's300-text bound. Exact source
+selection and provenance remain required; fragments and foreign quotes reject.
+Old raw v7 is rejected rather than rewritten; canonical experiments.payload.v1
+history and readers remain unchanged. The regular959 generation pattern, source
+family caps, primary-parent requirement and evidence_basis ownership are intact.
+
+The numeric detector explicitly recognizes variant(s) and listed Russian
+вариантный adjective inflections as units following a cardinal, including exact
+whole-word joins such as двевариантные. The existing modifier/gap/substring rules
+are unchanged; this is not general morphological or numerical inference. Having
+control/treatment slots creates no exemption for new cardinal counts in prose.
 
 experiments_support_selection_catalog maps sorted complete authorized sources to
 e000/p000 aliases. Evidence comes from the same request-local evidence passed to

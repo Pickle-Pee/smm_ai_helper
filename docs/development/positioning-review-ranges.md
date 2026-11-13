@@ -387,3 +387,9 @@ question must match the bounded form; it does not establish that format as a
 current feature or a positive validation target. Appended product/demo assertions
 remain outside that exception. Equipment conditions still require their own
 explicit selected owner witness under the existing whole-source contract.
+
+The finite quantity-unit catalog includes variant(s) and listed Russian
+вариантный inflections. Exact cardinal+unit joins such as двевариантные are
+quantities, even when control/test fields structurally suggest a comparison.
+No structural-count exemption is inferred. Cardinal, modifier, gap and substring
+rules remain unchanged; unknown morphology still requires content review.

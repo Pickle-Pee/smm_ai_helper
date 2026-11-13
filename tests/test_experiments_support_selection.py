@@ -17,6 +17,7 @@ from app.module_execution.executors.experiments_support_selection import (
     WIRE_VERSION, EVIDENCE_BASIS_NOTES, EVIDENCE_BASIS_DEFINITION, OTHER_STATEMENT_DEFINITION,
     GUARDRAIL_NOTES, GUARDRAILS_DEFINITION,
     CONTROL_NOTES, CONTROL_DEFINITION, TREATMENT_NOTES, TREATMENT_DEFINITION, INTERVENTION_RECIPES,
+    TEST_METHOD_DEFINITION,
 )
 from app.orchestration_runtime.serialization import result_to_json, result_from_json
 from app.orchestration_runtime.service import evaluate_result
@@ -36,6 +37,8 @@ def typed_payload(data, schema):
             statement["text"] = CONTROL_NOTES[0]
         elif statement["output_name"] == "treatment":
             statement["text"] = TREATMENT_NOTES[0]
+        elif statement["output_name"] == "test_method":
+            statement["text"] = INTERVENTION_RECIPES[0]
         statement.pop("evidence_ids");statement.pop("parent_claim_ids")
         statement["additional_evidence_support"] = {key:False for key in choices["evidence"]}
         statement["additional_parent_support"] = {key:False for key in choices["parents"]}
@@ -243,6 +246,7 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
         {"$ref": "#/$defs/" + GUARDRAILS_DEFINITION},
         {"$ref": "#/$defs/" + CONTROL_DEFINITION},
         {"$ref": "#/$defs/" + TREATMENT_DEFINITION},
+        {"$ref": "#/$defs/" + TEST_METHOD_DEFINITION},
         {"$ref": "#/$defs/" + OTHER_STATEMENT_DEFINITION},
     ]}
     new = v3["$defs"][OTHER_STATEMENT_DEFINITION]["properties"]
@@ -252,7 +256,7 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
     (expected_text["anyOf"][0] if "anyOf" in expected_text else expected_text)["pattern"] = QUALITATIVE_GENERATION_PATTERN
     assert new["text"] == expected_text
     assert new["output_name"] == {**old["output_name"],
-        "enum": [name for name in old["output_name"]["enum"] if name not in {"evidence_basis", "guardrails", "control", "treatment"}]}
+        "enum": [name for name in old["output_name"]["enum"] if name not in {"evidence_basis", "guardrails", "control", "treatment", "test_method"}]}
     basis = v3["$defs"][EVIDENCE_BASIS_DEFINITION]["properties"]
     assert basis["output_name"]["enum"] == ["evidence_basis"]
     assert basis["text"]["enum"] == list(EVIDENCE_BASIS_NOTES)
@@ -266,7 +270,8 @@ def test_v3_preserves_content_contracts_and_caller_schema_without_mutation():
     for key in set(guardrails) - {"output_name", "text"}:
         assert guardrails[key] == new[key]
     for definition, name, notes in ((CONTROL_DEFINITION, "control", CONTROL_NOTES),
-                                    (TREATMENT_DEFINITION, "treatment", TREATMENT_NOTES)):
+                                    (TREATMENT_DEFINITION, "treatment", TREATMENT_NOTES),
+                                    (TEST_METHOD_DEFINITION, "test_method", INTERVENTION_RECIPES)):
         branch = v3["$defs"][definition]["properties"]
         assert branch["output_name"]["enum"] == [name]
         assert branch["text"]["enum"] == list(notes)
@@ -469,14 +474,14 @@ def test_evidence_basis_branches_do_not_weaken_exact_output_coverage(invocation,
     assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
-def test_twelve_other_output_names_retain_free_bounded_text():
+def test_eleven_other_output_names_retain_free_bounded_text():
     from app.module_execution.executors.experiments_support_selection import support_selection_wire_schema
     v2, evidence, parents = scope_schema(2, 3)
     wire = support_selection_wire_schema(v2, 16, evidence, parents)
     definition = wire["$defs"][OTHER_STATEMENT_DEFINITION]
     validator = Draft202012Validator({"$defs": wire["$defs"], **definition})
     names = definition["properties"]["output_name"]["enum"]
-    assert len(names) == 12 and not {"evidence_basis", "guardrails", "control", "treatment"} & set(names)
+    assert len(names) == 11 and not {"evidence_basis", "guardrails", "control", "treatment", "test_method"} & set(names)
     for name in names:
         statement = {"output_name": name, "text": "Compare supplied alternatives",
             "kind": "HYPOTHESIS", "confidence": "MEDIUM", "strategic_parent_id": parents[0],
@@ -751,7 +756,7 @@ def test_v6_qualitative_filter_blocks_observed_unsupported_two_count(invocation,
     assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
-@pytest.mark.parametrize("location", ["mechanism", "control", "treatment", "minimum_required_inputs", "intervention"])
+@pytest.mark.parametrize("location", ["mechanism", "control", "treatment", "test_method", "minimum_required_inputs", "intervention"])
 @pytest.mark.parametrize("cite", [False, True])
 def test_complete_spelled_quantity_source_uses_exact_enum_and_actual_support(invocation, location, cite):
     numeric_id, other_id, *_ = strategic_parents(invocation)
@@ -762,7 +767,7 @@ def test_complete_spelled_quantity_source_uses_exact_enum_and_actual_support(inv
         payload = typed_payload(data, kwargs["response_schema"])
         for row in payload["outputs"]:
             row["strategic_parent_id"] = other_id
-        if location in {"mechanism", "control", "treatment"}:
+        if location in {"mechanism", "control", "treatment", "test_method"}:
             row = next(row for row in payload["outputs"] if row["output_name"] == location)
             row["text"] = quote
             alias = next(key for key, value in data["experiments_support_selection_catalog"]["parents"].items() if value == numeric_id)
@@ -775,7 +780,7 @@ def test_complete_spelled_quantity_source_uses_exact_enum_and_actual_support(inv
     executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True, support_selection_wire=True)
     if cite:
         result = asyncio.run(executor.execute(request))
-        if location in {"mechanism", "control", "treatment"}:
+        if location in {"mechanism", "control", "treatment", "test_method"}:
             assert next(row for row in result.payload["outputs"] if row["output_name"] == location)["text"] == quote
         else:
             assert result.payload["experiments"][0][location] == ((quote,) if location == "minimum_required_inputs" else quote)
@@ -790,7 +795,7 @@ def test_noncompliant_provider_cannot_bypass_original_selected_parent_or_number_
     # request-wide assertion or change qualitative word-quantity acceptance.
     async def model(**kwargs):
         payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
-        payload["outputs"][2]["text"] = "Ask three questions about the offer"
+        next(row for row in payload["outputs"] if row["output_name"] == "mechanism")["text"] = "Ask three questions about the offer"
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:

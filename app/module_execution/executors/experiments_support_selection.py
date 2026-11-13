@@ -16,7 +16,7 @@ from .qualitative_generation import QUALITATIVE_GENERATION_PATTERN
 from .provider_schema import nodes
 from .support_schema import MAX_SUPPORT_IDENTITIES, check_schema_bounds
 
-WIRE_VERSION = "experiments.support_selection.v7"
+WIRE_VERSION = "experiments.support_selection.v8"
 MAX_REQUIRED_BOOLEAN_FLAGS = 2048
 EVIDENCE_MAP = "ExperimentsAdditionalEvidenceSupport"
 PARENT_MAP = "ExperimentsAdditionalParentSupport"
@@ -25,6 +25,7 @@ EVIDENCE_BASIS_DEFINITION = "EvidenceBasisExperimentStatement"
 GUARDRAILS_DEFINITION = "GuardrailsExperimentStatement"
 CONTROL_DEFINITION = "ControlExperimentStatement"
 TREATMENT_DEFINITION = "TreatmentExperimentStatement"
+TEST_METHOD_DEFINITION = "TestMethodExperimentStatement"
 OTHER_STATEMENT_DEFINITION = "OtherExperimentStatement"
 EVIDENCE_BASIS_NOTES = (
     "Основанием для проверки служит принятая стратегическая гипотеза; она задаёт направление эксперимента, но не доказывает его результативность.",
@@ -114,7 +115,8 @@ def _specialize_policy_statements(definitions):
     policies = (("evidence_basis", EVIDENCE_BASIS_DEFINITION, EVIDENCE_BASIS_NOTES),
                 ("guardrails", GUARDRAILS_DEFINITION, GUARDRAIL_NOTES),
                 ("control", CONTROL_DEFINITION, CONTROL_NOTES),
-                ("treatment", TREATMENT_DEFINITION, TREATMENT_NOTES))
+                ("treatment", TREATMENT_DEFINITION, TREATMENT_NOTES),
+                ("test_method", TEST_METHOD_DEFINITION, INTERVENTION_RECIPES))
     for output_name, definition, notes in policies:
         branch = deepcopy(statement)
         branch["properties"]["output_name"]["enum"] = [output_name]
@@ -148,7 +150,7 @@ def support_selection_wire_schema(v2_schema, expected_output_count, evidence_ids
                 or schema["properties"]["outputs"].get("items") != {"$ref": "#/$defs/ExperimentStatement"}
                 or any(name in definitions for name in (EVIDENCE_MAP, PARENT_MAP,
                                                         EVIDENCE_BASIS_DEFINITION, GUARDRAILS_DEFINITION,
-                                                        CONTROL_DEFINITION, TREATMENT_DEFINITION,
+                                                        CONTROL_DEFINITION, TREATMENT_DEFINITION, TEST_METHOD_DEFINITION,
                                                         OTHER_STATEMENT_DEFINITION))):
             _fail()
         for family, definition in (("evidence", "AllowedEvidenceId"), ("parents", "AllowedParentClaimId")):

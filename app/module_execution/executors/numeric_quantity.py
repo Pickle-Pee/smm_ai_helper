@@ -30,7 +30,7 @@ sixty seventy eighty ninety hundred thousand single
 _UNITS = frozenset("""
 visit visits session sessions question questions step steps action actions
 participant participants person persons people customer customers client clients
-item items image images photo photos task tasks group groups option options version versions set sets
+item items image images photo photos task tasks group groups option options variant variants version versions set sets
 experiment experiments hypothesis hypotheses trial trials cohort cohorts
 minute minutes hour hours day days week weeks month months year years
 ruble rubles rouble roubles dollar dollars euro euros percent percentage points
@@ -50,6 +50,7 @@ ruble rubles rouble roubles dollar dollars euro euros percent percentage points
 задание задания заданий заданию заданиям заданием заданиями задании заданиях
 группа группы групп группу группам группой группами группе группах
 вариант варианта вариантов варианту вариантам вариантом вариантами варианте вариантах варианты
+вариантный вариантная вариантное вариантные вариантного вариантной вариантных вариантному вариантным вариантную вариантными вариантном вариантною
 версия версии версий версию версиям версией версиею версиями версиях
 набор набора наборов набору наборам набором наборами наборе наборах наборы
 эксперимент эксперимента экспериментов эксперименту экспериментам экспериментом экспериментами эксперименте экспериментах эксперименты
