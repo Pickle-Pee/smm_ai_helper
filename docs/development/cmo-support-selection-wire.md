@@ -20,7 +20,7 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v10. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v11. Neither Registry descriptors nor DTOs change.
 Version 5 retains v2 selection semantics and adds the small observed-count
 generation filter described in cmo-provider-semantic-contract.md. The v3
 lookahead and v4 full-vocabulary candidates produced incomplete provider
@@ -263,3 +263,39 @@ proof of feedback effects. These annotations and wire-only guidance improve
 discoverability without changing types, enums, bounds, renderer, citations or
 canonical guards. Two completed responses that did not use SOURCE motivated this
 clarification; they do not prove a provider cause or guarantee future compliance.
+
+## v11: explicit owner-grounded strategic bet
+
+When `strategic_bets` is requested and the existing source catalog contains a
+complete eligible FIRST_PARTY product_truth/confirmed_business_fact value of at
+most300 characters, only this output uses CMOSourceBoundBetStatement. Its summary
+is a prospective validation note, kind is HYPOTHESIS and confidence UNKNOWN.
+Its single raw item chooses an exact owner SOURCE token and a closed observable
+audience/message hypothesis: value named in interviews, accurate restatement of
+terms, or specific questions in an owner-agreed comparison. RU/EN choices exist.
+The hypothesis concerns the complete provided terms, not an isolated equipment
+condition or a proven market effect.
+
+The decoder renders two separate canonical items: the exact complete source and
+the chosen prospective hypothesis. The explicit source token binds its actual
+owner evidence on this output, even when its additional flag is false. It never
+repairs another output's evidence or infers a citation from prose. Parent-primary
+requirements and all source-family/canonical bounds and semantic checks remain.
+Both items fit the existing300-character bound and remain within the limit of3.
+No actual-source clause is extracted, shortened, paraphrased or concatenated.
+
+The owner-only projection excludes demonstrations, audience, competitor and
+hypothetical-parent roles. Existing numeric/whitespace/reserved-namespace source
+eligibility rules remain unchanged. If no complete eligible owner value fits,
+the existing qualitative bet contract remains; no empty enum or truncated source
+is introduced. Partial requests without bets and all other output schemas retain
+their contracts. The productive959 pattern is unchanged.
+
+This intentionally trades free-form multiple bets for one explicit source-backed
+research bet in the eligible case. Its observable relation is testable, not an
+already established differentiation. Other free prose and the no-source fallback
+can still fail; the recipe is not a guarantee of full response acceptance.
+
+Canonical virtual_cmo.payload.v1 history and serialization are unchanged; only
+new provider requests use wirev11. Old raw wirev10 is rejected, not rewritten or
+replayed. No extra model call, database migration or stored-artifact update occurs.

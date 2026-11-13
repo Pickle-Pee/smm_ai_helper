@@ -53,9 +53,9 @@ def contracts(req):
     return canonical, wire, ids, parents, catalog
 
 
-def wire_output(names, choices):
+def wire_output(names, choices, source_choices=None):
     parents, evidence = choices["parents"], choices["evidence"]
-    return {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
+    value = {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
         "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand",
             "items":[RISK_ITEM_NOTES[0] if name == "risks" else
                      TRADEOFF_ITEM_NOTES[0] if name == "trade_offs" else "Interview prospective customers"],
@@ -65,6 +65,12 @@ def wire_output(names, choices):
             "additional_parent_support":{alias:False for alias in parents},
             "additional_evidence_support":{alias:False for alias in evidence}}
             for name in names}}
+    from app.module_execution.executors.cmo_source_bets import BET_INTROS, owner_bet_choices
+    bets = owner_bet_choices(source_choices or {})
+    if 'strategic_bets' in names and bets:
+        value['outputs']['strategic_bets'].update(text=BET_INTROS[0], confidence='UNKNOWN',
+            items=[{'source_choice':next(iter(bets)), 'test_relation':'audience_value_ru'}])
+    return value
 
 
 def decode(req, payload):

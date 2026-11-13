@@ -80,7 +80,7 @@ def test_every_closed_tradeoff_policy_passes_normal_executor_and_quality(note):
     req = scoped_request()
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         payload["outputs"]["trade_offs"]["text"] = "Validate the strategic compromise before selecting an emphasis"
         payload["outputs"]["trade_offs"]["items"] = [note]
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
@@ -118,7 +118,7 @@ def test_free_tradeoff_summary_requires_complete_selected_owner_not_demo_or_hypo
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         aliases = data["support_selection_catalog"]
-        payload = wire_output(req.expected_outputs, aliases)
+        payload = wire_output(req.expected_outputs, aliases, data.get("cmo_source_selection_catalog"))
         row = payload["outputs"]["trade_offs"]
         row["text"] = OWNER
         if mode in {"selected", "demo"}:
@@ -152,7 +152,7 @@ def test_summary_stays_free_but_same_bad_comparison_and_globals_still_fail_canon
     for field in ("trade_offs", "assumptions", "limitations"):
         async def model(**kwargs):
             data = json.loads(kwargs["text"])
-            payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+            payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
             if field == "trade_offs":
                 payload["outputs"][field]["text"] = BAD_COMPARISON
                 assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
@@ -231,13 +231,13 @@ def source_contracts(req):
     ("product_truth", OWNER), ("confirmed_business_fact", OWNER),
     ("confirmed_business_fact", "Курс  включает стандартизированную\nписьменную обратную связь.")])
 def test_explicit_source_choice_alone_renders_whole_source_selects_id_same_output_and_passes_qg(field, role, text):
-    req = source_request(role, text)
+    req = source_request(role, text, names=("strategic_diagnosis", "strategic_priorities"))
     observed = []
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         choices = data["cmo_source_selection_catalog"]
         marker = next(key for key, row in choices.items() if row["input_key"] == role)
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         row = payload["outputs"]["strategic_diagnosis"]
         row[field] = marker if field == "text" else [marker]
         assert not any(row["additional_evidence_support"].values())
@@ -261,7 +261,7 @@ def test_ordinary_demo_prose_stays_unrepaired_and_source_in_another_output_does_
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         marker = next(iter(data["cmo_source_selection_catalog"]))
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         payload["outputs"]["strategic_diagnosis"]["items"] = [prose]
         payload["outputs"]["strategic_bets"]["text"] = marker
         return json.dumps(payload)
@@ -274,7 +274,7 @@ def test_demo_source_selection_does_not_grant_owner_product_authority():
     req = source_request("existing_proof", OWNER)
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         payload["outputs"]["strategic_diagnosis"]["text"] = next(iter(data["cmo_source_selection_catalog"]))
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:
@@ -397,7 +397,7 @@ def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatc
         body = json.loads(wire.content)
         calls.append(body)
         data = json.loads(body["input"][1]["content"])
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         payload["outputs"]["strategic_diagnosis"]["items"] = [next(iter(data["cmo_source_selection_catalog"]))]
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload)})
     install_transport(monkeypatch, respond)
@@ -428,7 +428,7 @@ def test_explicit_source_union_cannot_bypass_original_selected_source_count_boun
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
         marker, source = next(iter(data["cmo_source_selection_catalog"].items()))
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
         row = payload["outputs"]["strategic_diagnosis"]
         row["text"] = marker
         other = [key for key in row["additional_evidence_support"] if key != source["evidence_key"]]
@@ -445,7 +445,7 @@ def test_explicit_source_union_cannot_bypass_original_selected_source_count_boun
 @pytest.mark.parametrize("text", ["Resource: prepare interviews.", "Resources: prepare interviews.",
                                   "A resource: owner description."])
 def test_resource_words_are_not_reserved_namespace_in_plain_prose_or_source_literals(text):
-    req = source_request("confirmed_business_fact", text)
+    req = source_request("confirmed_business_fact", text, names=("strategic_diagnosis", "strategic_priorities"))
     canonical, _, ids, parents, numeric, choices = source_contracts(req)
     assert any(row["text"] == text for row in choices.values())
     payload = wire_output(req.expected_outputs, support_selection_catalog(ids, parents))
