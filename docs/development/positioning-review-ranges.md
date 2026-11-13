@@ -380,3 +380,10 @@ authorized by a prepare/create prefix or HYPOTHESIS/RECOMMENDATION kind. Other
 benign phrasings can still reject because this is a finite grammar, not general
 tense inference. No generation instruction, schema or whole-source requirement
 for actual existing-demo assertions changes.
+
+Closed owner-clarification and audience-comparison questions may mention a richer
+feedback format as something to distinguish from written feedback. The complete
+question must match the bounded form; it does not establish that format as a
+current feature or a positive validation target. Appended product/demo assertions
+remain outside that exception. Equipment conditions still require their own
+explicit selected owner witness under the existing whole-source contract.
