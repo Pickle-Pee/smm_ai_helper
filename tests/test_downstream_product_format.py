@@ -599,3 +599,95 @@ def test_english_equipment_absence_standalone_cannot_drop_owner_qualifier(text):
         validate_leaf(text, owner=(EQUIPMENT_TRUTH,))
     assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
     validate_leaf(text, owner=(text,))
+
+
+XI_PERSONAL_TRIGGER = ('Аудитория последовательно интерпретирует «письменную обратную связь» как личный '
+    'письменный отклик и связывает это с поиском следующего упражнения (поддержка: validation_plan.).')
+
+
+@pytest.mark.parametrize('text', [XI_PERSONAL_TRIGGER, 'Письменный отклик является личным.'])
+def test_xi_personal_interpretation_and_inverse_response_require_whole_owner_truth(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, owner=(EQUIPMENT_TRUTH,))
+    assert caught.value.rule is SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH
+
+
+@pytest.mark.parametrize('text', [
+    XI_PERSONAL_TRIGGER.split(' (поддержка:')[0] + '.',
+    'Если аудитория понимает письменную обратную связь как личный отклик, расширить проверку.',
+    'Критерий успеха — личный письменный отклик правильно понят аудиторией.',
+    'Курс включает личную письменную обратную связь.',
+    'Ценность личного письменного отклика повысит интерес.',
+    'Обратная связь является личной.', 'Обратная связь будет личной.',
+    'Письменный отклик личный.', 'Письменный отклик будет личным.',
+    'Отклик является персональным.', 'Отклик будет индивидуальным.',
+    'Отклик является стандартизированным.', 'Обратная связь лична.',
+    'Гипотеза: письменный отклик будет личным.',
+])
+def test_personal_response_direct_inverse_future_and_positive_trigger_do_not_gain_hypothesis_authority(text):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text, owner=(TRUTH,), demo=(DEMO,))
+    validate_leaf(text, owner=(text,))
+
+
+PERSONAL_SAFE_CONTEXTS = (
+    'Проверить, предпочитает ли аудитория личный письменный отклик.',
+    'Выяснить, важна ли аудитории личная обратная связь.',
+    'Цель аудитории — получать личный письменный отклик.',
+    'Гипотеза предпочтения аудитории: аудитория ценит личный письменный отклик.',
+    'Уточнить у владельца, включает ли курс личный письменный отклик.',
+    'Не обещать личный письменный отклик без подтверждения владельца.',
+    'Избегать формулировок, которые можно понять как замену личного письменного отклика.',
+    'Собрать личные отзывы аудитории о сообщении.',
+)
+
+
+@pytest.mark.parametrize('text', PERSONAL_SAFE_CONTEXTS)
+def test_existing_bounded_personal_preference_questions_negative_policies_and_collection_stay_valid(text):
+    validate_leaf(text)
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text + ' Курс включает личный письменный отклик.', owner=(TRUTH,))
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(text + ' Обратная связь будет личной.', owner=(TRUTH,))
+
+
+@pytest.mark.parametrize('module,name', [(ModuleId.VIRTUAL_CMO, 'decision_triggers.'),
+                                         (ModuleId.EXPERIMENTS, 'mechanism')])
+@pytest.mark.parametrize('source', ['selected', 'unselected', 'demo', 'hyp_parent'])
+@pytest.mark.parametrize('kind', ['HYPOTHESIS', 'RECOMMENDATION'])
+def test_normal_personal_feedback_requires_whole_selected_owner_in_trigger_and_experiment(module, name, source, kind):
+    personal = 'Курс включает личный письменный отклик.'
+    req = valid_request(module)
+    if source == 'hyp_parent':
+        from app.marketing_orchestrator.quality_gates.contracts import ClaimType
+        from app.orchestration_runtime.serialization import result_to_json
+        from tests.test_strategy_intelligence import positioning, upstream
+        parent = positioning()
+        parent = replace(parent, payload=result_to_json(parent)['payload'],
+            normalized_result=replace(parent.normalized_result, claims=tuple(
+                replace(claim, value=personal, claim_type=ClaimType.HYPOTHESIS)
+                for claim in parent.normalized_result.claims)))
+        req = replace(req, upstream_results=upstream(parent))
+    else:
+        role = 'existing_proof' if source == 'demo' else 'confirmed_business_fact'
+        req = replace(req, context_packet=replace(req.context_packet,
+            known_facts=(*req.context_packet.known_facts, fact(role, personal))))
+    def inject(payload, data):
+        row = next(row for row in payload['outputs'] if row['output_name'] == name)
+        row['kind'] = kind
+        if module is ModuleId.VIRTUAL_CMO:
+            row['items'] = [personal]
+        else:
+            row['text'] = personal
+        row['evidence_ids'] = ([item['evidence_id'] for item in data['local_evidence']
+                               if item['input_key'] == role] if source in {'selected', 'demo'} else [])
+    if source == 'selected':
+        result = run(req, inject)
+        from app.module_execution.acceptance import fully_accepted
+        from app.orchestration_runtime.service import evaluate_result
+        quality = evaluate_result(hashlib.sha256(req.execution_id.encode()).hexdigest()[:32], result, req.upstream_results)
+        assert fully_accepted(result, quality['accepted_result_ids'], quality['accepted_claim_ids'])
+    else:
+        with pytest.raises(ExecutorOutputError) as caught:
+            run(req, inject)
+        assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID

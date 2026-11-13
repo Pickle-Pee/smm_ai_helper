@@ -27,6 +27,9 @@ Written feedback alone does not establish personal/individual or standardized re
 delivery. A demo comparison does not establish the contents of written feedback.
 Do not embed these unconfirmed product attributes inside a HYPOTHESIS. Recognized
 format claims need the same complete selected owner source as product copy.
+Do not make an unconfirmed richer feedback format a positive understanding,
+validation, success or scaling criterion. Check understanding against the complete
+owner-confirmed meaning; audience preferences do not prove personal delivery.
 Treat upstream risk warnings as constraints, never as extra product capabilities.
 Audience preferences/goals and testable value hypotheses may remain open without
 asserting new delivery features; confirm proposed product changes with the owner.
@@ -143,8 +146,10 @@ _NEGATIVE_DEMO_CLAUSE = (
 _NEGATIVE_DEMO_LIMITATION = re.compile(
     _NEGATIVE_DEMO_CLAUSE + r"(?:\.\s+" + _NEGATIVE_DEMO_CLAUSE + r")?\.?", re.I)
 _NEGATIVE_DEMO_PREFIX = re.compile(_NEGATIVE_DEMO_CLAUSE + r"\b", re.I)
+_RU_PERSONAL_FULL = r"личн(?:ый|ая|ое|ые|ого|ой|ому|ым|ом|ую|ых|ыми|ою)"
 _RU_DELIVERY_FEEDBACK = (
-    r"(?:персональн[а-яё]*|индивидуальн[а-яё]*|стандартиз(?:ирован|ован)н[а-яё]*)(?:\s*,\s*|\s+(?:и\s+)?)(?:письменн[а-яё]*\s+)?"
+    r"(?:персональн[а-яё]*|индивидуальн[а-яё]*|" + _RU_PERSONAL_FULL +
+    r"|стандартиз(?:ирован|ован)н[а-яё]*)(?:\s*,\s*|\s+(?:и\s+)?)(?:письменн[а-яё]*\s+)?"
     r"(?:обратн[а-яё]*\s+связ[а-яё]*|отклик[а-яё]*|разбор[а-яё]*|отзыв[а-яё]*|рецензи[а-яё]*)"
 )
 _EN_DELIVERY_FEEDBACK = (
@@ -153,8 +158,9 @@ _EN_DELIVERY_FEEDBACK = (
 )
 _DELIVERY_FEEDBACK = re.compile(
     r"\b(?:" + _RU_DELIVERY_FEEDBACK + r"|" + _EN_DELIVERY_FEEDBACK + r"|"
-    r"(?:письменн[а-яё]*\s+)?обратн[а-яё]*\s+связ[а-яё]*\s+"
-    r"(?:(?:является|будет)\s+)?(?:персональн[а-яё]*|индивидуальн[а-яё]*|стандартиз(?:ирован|ован)(?:н[а-яё]*|а|о|ы)?)|"
+    r"(?:письменн[а-яё]*\s+)?(?:обратн[а-яё]*\s+связ[а-яё]*|отклик[а-яё]*)\s+"
+    r"(?:(?:является|будет)\s+)?(?:персональн[а-яё]*|индивидуальн[а-яё]*|" + _RU_PERSONAL_FULL +
+    r"|лич(?:ен|на|но|ны)|стандартиз(?:ирован|ован)(?:н[а-яё]*|а|о|ы)?)|"
     r"(?:written\s+)?(?:feedback|reviews?)\s+(?:is|are|will\s+be)\s+"
     r"(?:personal(?:ized|ised)?|individual(?:ized|ised)?|standardi[sz]ed))\b", re.I)
 _FEEDBACK_CONTENT = re.compile(

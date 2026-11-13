@@ -356,3 +356,15 @@ only this equipment check, not the other leaf checks, and cannot authorize
 appended current product claims. The finite RU/EN families and closed exceptions
 are not a general semantic qualifier parser. Unknown forms still require content
 review. Generation schema and the productive 959 pattern are unchanged.
+
+The downstream feedback-format family also recognizes Russian `личный` adjective
+inflections and inverse feedback/response predicates such as `отклик будет личным`.
+A positive understanding, validation or scaling criterion cannot treat audience
+interpretation as a richer unconfirmed delivery format. This remains a format
+premise even when conditional or future-facing; a neighboring generic owner check
+or parent hypothesis does not authorize it. The existing complete selected owner
+leaf boundary applies. Bounded whole preference/goal/research questions, owner
+clarification, negative publication policies and audience feedback collection
+remain valid; appended product assertions are not covered by those contexts.
+No new positive-interpretation waiver, output closure, wire version or generation
+pattern is introduced.
