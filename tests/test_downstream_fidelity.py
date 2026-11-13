@@ -30,6 +30,109 @@ CONDITIONAL_DEMO_DECISION = (
     'акцента — согласовать формат обратной связи и масштабировать; если понимание есть, '
     'но доверие низкое — добавить наглядные демонстрации изменений снимков; '
     'если понимания нет — вернуться к уточнению формата и сообщению.')
+PI_PREPARED_DEMO_PLAN = ('Подготовить демонстрационные материалы, показывающие пример задания и пример '
+                         'письменного отклика, без предположений о формате доставки.')
+
+
+@pytest.mark.parametrize('text', [PI_PREPARED_DEMO_PLAN,
+    'Prepare demonstration materials that show a task example and a written feedback example.'])
+def test_prospective_created_demo_examples_are_not_existing_proof(text):
+    validate_leaf(text)
+
+
+CREATED_DEMO_PLANS = (
+    PI_PREPARED_DEMO_PLAN,
+    'Создать новые демонстрационные материалы, показывающие пример задания.',
+    'Подготовить демонстрационные материалы, которые показывают пример письменного отклика.',
+    'Создать демонстрационные материалы, показывающие пример письменного отклика и пример задания.',
+    'Prepare demonstration materials that show a task example and a written feedback example.',
+    'Create new demonstration materials that show an example of a task.',
+    'Prepare demonstration materials that show a written response example.',
+    'Create demonstration materials showing an example of written feedback and an assignment example, without assumptions about the delivery format.',
+)
+
+
+@pytest.mark.parametrize('text', CREATED_DEMO_PLANS)
+def test_closed_created_demo_verb_objects_joins_preserve_nonassertive_scope(text):
+    validate_leaf(text)
+    validate_leaf('  ' + text + '  ')
+
+
+@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+@pytest.mark.parametrize('copy_field,quoted', [(True, False), (False, True)])
+def test_created_demo_plan_does_not_exempt_public_copy_or_quoted_scope(text, copy_field, quoted):
+    value = '«' + text + '»' if quoted else text
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(value, copy_field=copy_field)
+
+
+@pytest.mark.parametrize('text', [
+    'Демонстрационные материалы показывают пример задания.',
+    'Существующие демонстрационные материалы показывают пример задания.',
+    'Демонстрационные материалы, которые показывают пример письменного отклика, доступны.',
+    'Подготовить существующие демонстрационные материалы, показывающие пример задания.',
+    'Подготовить демонстрационные материалы, показывающие доказанный эффект обратной связи.',
+    'Prepare existing demonstration materials that show a task example.',
+    'Demonstration materials show a task example.',
+    'The demonstration materials that show a task example are available.',
+    'Create demonstration materials that show proven feedback effectiveness.',
+    'Hypothesis: demonstration materials show a task example.',
+])
+def test_current_demo_relative_assertions_or_unknown_objects_are_not_creation_plans(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text, demo=(DEMO,))
+    assert caught.value.rule is SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE
+    validate_leaf(text, demo=(text,))
+
+
+@pytest.mark.parametrize('base', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+@pytest.mark.parametrize('suffix', [
+    ' Демонстрационный образец показывает эффективность курса.',
+    ' The existing demonstration proves feedback is effective.',
+    ' Письменная обратная связь является личной.',
+    ' Our course provides personalized feedback.',
+    ' Вы научитесь фотографировать.',
+    ' You will learn photography.',
+])
+def test_closed_future_creation_plan_cannot_launder_an_appended_claim(base, suffix):
+    with pytest.raises(StatementSemanticsError):
+        validate_leaf(base + suffix, demo=(DEMO,), owner=(TRUTH,))
+
+
+@pytest.mark.parametrize('text,rule', [
+    ('Подготовить демонстрационные материалы, показывающие пример личного письменного отклика.',
+     SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH),
+    ('Prepare demonstration materials that show a personalized written feedback example.',
+     SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH),
+    ('Prepare demonstration materials that show you will learn photography.',
+     SemanticRule.CUSTOMER_PROMISE_REQUIRES_OWNER_SOURCE),
+])
+def test_created_demo_candidate_still_runs_other_format_and_customer_checks(text, rule):
+    with pytest.raises(StatementSemanticsError) as caught:
+        validate_leaf(text)
+    assert caught.value.rule is rule
+
+
+@pytest.mark.parametrize('module,name', [(ModuleId.VIRTUAL_CMO, 'resource_priorities'),
+                                         (ModuleId.EXPERIMENTS, 'test_method')])
+@pytest.mark.parametrize('kind', ['HYPOTHESIS', 'RECOMMENDATION'])
+@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+def test_normal_downstream_created_demo_plans_pass_without_existing_proof_and_with_quality(module, name, kind, text):
+    req = valid_request(module)
+    def inject(payload, data):
+        assert not any(item['input_key'] == 'existing_proof' for item in data['local_evidence'])
+        row = next(row for row in payload['outputs'] if row['output_name'] == name)
+        row['kind'] = kind
+        if module is ModuleId.VIRTUAL_CMO:
+            row['items'] = [text]
+        else:
+            row['text'] = text
+    result = run(req, inject)
+    from app.module_execution.acceptance import fully_accepted
+    from app.orchestration_runtime.service import evaluate_result
+    import hashlib
+    quality = evaluate_result(hashlib.sha256(req.execution_id.encode()).hexdigest()[:32], result, req.upstream_results)
+    assert fully_accepted(result, quality['accepted_result_ids'], quality['accepted_claim_ids'])
 
 
 @pytest.mark.parametrize('text', [PLANNED_DEMO_METHOD, CONDITIONAL_DEMO_DECISION])

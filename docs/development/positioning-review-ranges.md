@@ -368,3 +368,15 @@ clarification, negative publication policies and audience feedback collection
 remain valid; appended product assertions are not covered by those contexts.
 No new positive-interpretation waiver, output closure, wire version or generation
 pattern is introduced.
+
+For downstream demo recognition, a closed future creation plan may prepare/create
+demonstration materials showing a task example, a plain written-feedback example,
+or their explicit conjunction. An optional tail disclaims delivery assumptions.
+Only the captured showing-verb span is excluded after the complete RU/EN plan
+matches; other demo fact tokens and all earlier format/customer checks still run.
+The exception is unavailable to public-copy fields or quoted plans. Existing
+materials, unknown objects, inferred effects and appended assertions are not
+authorized by a prepare/create prefix or HYPOTHESIS/RECOMMENDATION kind. Other
+benign phrasings can still reject because this is a finite grammar, not general
+tense inference. No generation instruction, schema or whole-source requirement
+for actual existing-demo assertions changes.

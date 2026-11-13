@@ -110,6 +110,29 @@ _NONASSERTIVE_DEMO_VERBS = (
     re.compile(r"\bесли\s+(?:(?:качественные\s+)?интервью\s+и\s+тест|тест)\s+"
                r"(?P<verb>показывают|показывает)\b", re.I),
 )
+_RU_TASK_EXAMPLE = r"пример\s+задания"
+_RU_FEEDBACK_EXAMPLE = r"пример\s+письменного\s+отклика"
+_RU_CREATED_EXAMPLES = (
+    rf"(?:{_RU_TASK_EXAMPLE}(?:\s+и\s+{_RU_FEEDBACK_EXAMPLE})?"
+    rf"|{_RU_FEEDBACK_EXAMPLE}(?:\s+и\s+{_RU_TASK_EXAMPLE})?)"
+)
+_EN_TASK_EXAMPLE = r"(?:a\s+(?:task|assignment)\s+example|an\s+example\s+of\s+a\s+(?:task|assignment))"
+_EN_FEEDBACK_EXAMPLE = (
+    r"(?:a\s+written\s+(?:feedback|response)\s+example|an\s+example\s+of\s+"
+    r"(?:written\s+feedback|a\s+written\s+response))"
+)
+_EN_CREATED_EXAMPLES = (
+    rf"(?:{_EN_TASK_EXAMPLE}(?:\s+and\s+{_EN_FEEDBACK_EXAMPLE})?"
+    rf"|{_EN_FEEDBACK_EXAMPLE}(?:\s+and\s+{_EN_TASK_EXAMPLE})?)"
+)
+_PROSPECTIVE_CREATED_DEMO = re.compile(
+    r"(?:(?:Подготовить|Создать)\s+(?:новые\s+)?демонстрационные\s+материалы,\s*"
+    r"(?:(?P<ru_showing>показывающие)|которые\s+(?P<ru_show>показывают))\s+" + _RU_CREATED_EXAMPLES +
+    r"(?:,\s*без\s+предположений\s+о\s+формате\s+доставки)?|"
+    r"(?:Prepare|Create)\s+(?:new\s+)?demonstration\s+materials\s+"
+    r"(?:(?P<en_showing>showing)|that\s+(?P<en_show>show))\s+" + _EN_CREATED_EXAMPLES +
+    r"(?:,\s*without\s+assumptions\s+about\s+(?:the\s+)?delivery\s+format)?)[.!]?", re.I,
+)
 _DEMO_PROPOSALS = frozenset({
     'Check whether a new demo shows the intended comparison.',
     'Проверить, показывает ли новый демонстрационный образец предполагаемое сравнение.',
@@ -333,6 +356,14 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     # rest of the leaf: another positive/relative assertion still blocks.
     nonassertive = set() if copy_field or quoted else {
         match.span("verb") for pattern in _NONASSERTIVE_DEMO_VERBS for match in pattern.finditer(text)}
+    if not copy_field and not quoted:
+        created = _PROSPECTIVE_CREATED_DEMO.fullmatch(value)
+        if created:
+            offset = len(text) - len(text.lstrip())
+            for group in ("ru_showing", "ru_show", "en_showing", "en_show"):
+                if created.group(group) is not None:
+                    start, end = created.span(group)
+                    nonassertive.add((offset + start, offset + end))
     demo_facts = tuple(match for match in _DEMO_FACT.finditer(text) if match.span() not in nonassertive)
     if _DEMO.search(text) and demo_facts:
         planned = value in _DEMO_PROPOSALS
