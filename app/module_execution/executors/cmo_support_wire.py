@@ -8,7 +8,10 @@ from app.module_execution.errors import ModuleExecutionContractError
 from .cmo_provider_contract import cmo_provider_schema, QUALITATIVE_PATTERN
 from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
-from .cmo_source_selection import source_text_schema, validate_source_catalog, render_source_leaf, reject_reserved_marker
+from .cmo_source_selection import (
+    source_text_schema, validate_source_catalog, render_source_leaf, reject_reserved_marker,
+    SOURCE_ITEMS_DESCRIPTION,
+)
 
 WIRE_VERSION = "virtual_cmo.support_selection.v10"
 MAX_SOURCE_CHOICES = 128
@@ -175,6 +178,8 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
             props["text"] = source_text_schema(props["text"], 4000, source_choices)
             if definition != TRADEOFFS_DEFINITION:
                 props["items"]["items"] = source_text_schema(props["items"]["items"], 300, source_choices)
+                if "anyOf" in props["items"]["items"]:
+                    props["items"]["description"] = SOURCE_ITEMS_DESCRIPTION
         schema["properties"]["outputs"] = {
             "type": "object", "properties": {name: {"$ref": "#/$defs/" + (
                 STATEMENTS[0] if name == "main_growth_constraint" else

@@ -250,3 +250,16 @@ mock-HTTP tests establish the explicit rendering contract only; independent code
 review and a fresh complete nine-output normal capability/QG/content check are
 required before another full graph. A provider POST is never replayed because a
 wire version or instruction fingerprint changed.
+
+The no-digit rule is explicitly scoped to qualitative prose. Exact listed
+SOURCE tokens are technical selectors; only their token digits are permitted.
+SOURCE-capable outer fields and enum branches explain this distinction, and a
+free items array advertises both prose and whole-source choices only when a
+complete source fits its 300-character item bound. Empty catalogs, longer-only
+sources, closed policies and globals keep their original field descriptions.
+Current owner/demo assertions should select SOURCE or be omitted; prospective
+use belongs in a separate qualitative leaf. A comparison sample is not asserted
+proof of feedback effects. These annotations and wire-only guidance improve
+discoverability without changing types, enums, bounds, renderer, citations or
+canonical guards. Two completed responses that did not use SOURCE motivated this
+clarification; they do not prove a provider cause or guarantee future compliance.

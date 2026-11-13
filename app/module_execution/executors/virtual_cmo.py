@@ -96,10 +96,14 @@ When trade_offs is requested, choose its items from the supplied prospective
 trade-off policies. Keep its text specific to the supported strategic compromise;
 do not presume a current delivery format, effective emphasis, available assets
 or completed owner approval.
-For a whole owner fact or existing-demo assertion in free text/items, choose an
-exact SOURCE:eNNN marker from cmo_source_selection_catalog; the server renders its
-complete unchanged text and selects that source on THIS output. Keep interpretation
-in another leaf. Never append interpretation to a marker or copy a source fragment.
+In free text/items, the no-digits rule applies to qualitative prose. Exact listed
+SOURCE tokens are the ONLY digit-bearing alternative in those fields; their
+digits are technical selectors, not quantities.
+For a current owner fact or existing-demo assertion in free text/items, choose an
+exact SOURCE:eNNN marker from cmo_source_selection_catalog OR OMIT that fact.
+The server renders the complete unchanged text and selects that source on THIS output. Keep interpretation
+or proposed use in another qualitative leaf. Do not describe a comparison sample
+as proof of feedback effects. Never append interpretation to a marker or copy a source fragment.
 Source roles remain unchanged: a demo is not owner product proof. Numerical source
 values stay only in numeric_context. SOURCE choices are not allowed in closed risk
 policies, trade_offs.items, assumptions or limitations; never put reserved SOURCE:

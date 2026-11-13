@@ -31,6 +31,7 @@ from tests.test_module_executors import fact
 from tests.test_strategy_intelligence import upstream, positioning
 from app.module_execution.executors.cmo_source_selection import (
     source_selection_catalog, validate_source_catalog, source_text_schema, render_source_leaf,
+    SOURCE_ITEMS_DESCRIPTION,
 )
 from app.module_execution.executors.common import EvidenceSourceClass
 from app.module_execution.executors.downstream_fidelity import typed_literal_sources, selected_sources
@@ -406,6 +407,17 @@ def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatc
     branch = schema["$defs"][STATEMENTS[0]]["properties"]["text"]["anyOf"]
     assert branch[0]["pattern"] == QUALITATIVE_GENERATION_PATTERN
     assert all(not re.fullmatch(QUALITATIVE_GENERATION_PATTERN, key) for key in branch[1]["enum"])
+    main_props = schema["$defs"][STATEMENTS[0]]["properties"]
+    assert "technical selectors" in main_props["text"]["description"]
+    assert "Digits are permitted ONLY" in branch[1]["description"]
+    assert "THIS output" in branch[1]["description"]
+    assert main_props["items"]["description"] == SOURCE_ITEMS_DESCRIPTION
+    assert "OR exact listed SOURCE tokens" in main_props["items"]["description"]
+    assert "digits are allowed ONLY" in main_props["items"]["description"]
+    for definition in ("CMORisksStatement", TRADEOFFS_DEFINITION):
+        items = schema["$defs"][definition]["properties"]["items"]
+        assert "anyOf" not in items["items"]
+        assert items["description"] != SOURCE_ITEMS_DESCRIPTION
     assert next(row for row in result.payload["outputs"] if row["output_name"] == "strategic_diagnosis")["items"] == (DEMO_SOURCE,)
 
 
@@ -453,3 +465,19 @@ def test_source_is_not_an_escape_from_existing_generation_count_word_language(te
     assert not has_numeric_quantity(text)
     assert re.fullmatch(QUALITATIVE_GENERATION_PATTERN, text) is None
     assert source_selection_catalog([fake_source("owner", text)], {"e000": "owner"}) == {}
+
+
+@pytest.mark.parametrize("source_size", [0, 300, 301])
+def test_source_metadata_digit_exception_is_advertised_only_where_selectors_exist(source_size):
+    req = (scoped_request() if source_size == 0 else
+           source_request("confirmed_business_fact", "x" * source_size))
+    _, schema, _, _, _, choices = source_contracts(req)
+    text = schema["$defs"][STATEMENTS[1]]["properties"]["text"]
+    items = schema["$defs"][STATEMENTS[1]]["properties"]["items"]
+    assert bool(choices) == (source_size > 0)
+    assert ("anyOf" in text) == (source_size > 0)
+    assert ("anyOf" in items["items"]) == (0 < source_size <= 300)
+    assert (items["description"] == SOURCE_ITEMS_DESCRIPTION) == (0 < source_size <= 300)
+    assert schema["$defs"][TRADEOFFS_DEFINITION]["properties"]["items"]["description"] != SOURCE_ITEMS_DESCRIPTION
+    assert "SOURCE" not in str(schema["properties"]["assumptions"])
+    assert "SOURCE" not in str(schema["properties"]["limitations"])

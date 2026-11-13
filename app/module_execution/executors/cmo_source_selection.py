@@ -17,6 +17,12 @@ _FIELDS = {"text", "evidence_id", "evidence_key", "input_key", "source_class"}
 # A complete marker fragment remains technical syntax even with glued text.
 _RESERVED_SOURCE = re.compile(r"\bSOURCE:|SOURCE:e[0-9]{3}", re.I)
 _QUALITATIVE = re.compile(QUALITATIVE_GENERATION_PATTERN)
+SOURCE_ITEMS_DESCRIPTION = (
+    "Items are qualitative strategic prose OR exact listed SOURCE tokens. "
+    "No digits in prose; digits are allowed ONLY inside exact SOURCE tokens. "
+    "For current owner/demo facts choose SOURCE or omit the fact. "
+    "Keep proposed use or interpretation in a separate qualitative item."
+)
 
 
 def contains_reserved_source_syntax(text):
@@ -92,7 +98,17 @@ def source_text_schema(field, maximum, catalog):
     markers = sorted(key for key, row in catalog.items() if len(row["text"]) <= maximum)
     if not markers:
         return deepcopy(field)
-    return {"anyOf": [deepcopy(field), {"type": "string", "enum": markers}]}
+    return {"description": (
+        "Choose qualitative prose under the no-digit rule OR one exact listed SOURCE token. "
+        "Token digits are technical selectors, not strategic quantities. "
+        "For a current owner/demo fact choose SOURCE or omit it; "
+        "put prospective use or interpretation in a separate qualitative leaf."
+    ), "anyOf": [deepcopy(field), {"type": "string", "enum": markers, "description": (
+        "Exact whole-source selector, for example " + markers[0] + ". "
+        "Digits are permitted ONLY as part of an exact listed token. "
+        "It renders the complete source and selects its evidence on THIS output. "
+        "Do not append explanation, interpretation or claimed effects."
+    )}]}
 
 
 def reject_reserved_marker(text):
