@@ -58,6 +58,8 @@ _EQUIPMENT_RESEARCH_OR_PLAN = re.compile(
     r"условия\s+с\s+владельцем\s+до\s+публикации"
     r"|Не\s+обещать\s+(?:обучение|доступность)\s+EQUIPMENT_CONDITION\s+"
     r"без\s+подтверждения\s+владельца"
+    r"|(?:Собрать|Получить)\s+(?:(?:письменную|качественную)\s+)?обратную\s+связь\s+"
+    r"по\s+формату\s+практических\s+заданий\s+и\s+ощущению\s+доступности\s+EQUIPMENT_CONDITION"
     r"|Check\s+whether\s+customers\s+prefer\s+learning\s+EQUIPMENT_CONDITION"
     r"|Audience\s+goal:\s*learn\s+EQUIPMENT_CONDITION"
     r"|(?:Confirm\s+with\s+the\s+owner\s+whether|Check\s+whether)\s+learning\s+"
@@ -65,6 +67,8 @@ _EQUIPMENT_RESEARCH_OR_PLAN = re.compile(
     r"|Research\s+audience\s+interest\s+in\s+learning\s+EQUIPMENT_CONDITION"
     r"|Test\s+whether\s+learning\s+EQUIPMENT_CONDITION\s+is\s+feasible\s+before\s+"
     r"asking\s+the\s+owner\s+to\s+approve\s+it"
+    r"|(?:Collect|Gather)\s+(?:(?:written|qualitative)\s+)?feedback\s+on\s+(?:the\s+)?format\s+"
+    r"of\s+(?:practical|practice)\s+(?:tasks|assignments)\s+and\s+perceived\s+accessibility\s+EQUIPMENT_CONDITION"
     r"|Do\s+not\s+promise\s+(?:learning|accessibility)\s+EQUIPMENT_CONDITION\s+"
     r"without\s+owner\s+confirmation)[.!?]?", re.I,
 )

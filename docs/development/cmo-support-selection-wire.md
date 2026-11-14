@@ -344,3 +344,11 @@ No failed response, saved approval or provider operation is reused as new
 acceptance evidence. Offline recipes and mock HTTP prove the boundary only;
 fresh model behavior, complete content quality and release acceptance remain
 separate gates.
+
+The downstream equipment guard also recognizes a bounded future collection of
+written/qualitative feedback about practical-task format and perceived
+accessibility. This is audience research, without establishing an equipment
+condition. The entire unquoted leaf must match; public copy, appended assertions
+and positive validation criteria retain the owner-source checks. Other format,
+demo, promise and numeric checks still run. Wire/schema and stored v1 payloads
+are unchanged by this additional research-language form.
