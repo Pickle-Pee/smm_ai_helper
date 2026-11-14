@@ -6,7 +6,7 @@ from jsonschema import Draft202012Validator
 
 from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.positioning_support_selection import (
-    decode_support_selection_wire, support_selection_wire_schema,
+    decode_support_selection_wire, product_source_catalog, support_selection_wire_schema,
 )
 from app.module_execution.executors.schemas import PositioningOutput
 from tests.test_positioning_support_selection import fixture, output
@@ -19,7 +19,7 @@ from tests.test_positioning_support_selection import fixture, output
 def test_explicit_text_mode_roundtrips_without_changing_raw_or_canonical(mode, text):
     f = fixture(("offer",))
     payload = output(f)
-    payload["outputs"]["offer"]["text"] = {"mode": mode, "value": text}
+    payload["outputs"]["offer"]["text"] = {"mode": mode, "value": next(iter(product_source_catalog(f[3]))) if mode == "SOURCE" else text}
     before = copy.deepcopy(payload)
     assert Draft202012Validator(f[1]).is_valid(payload)
     result = decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
@@ -50,7 +50,7 @@ def test_source_mode_preserves_provided_numeric_wording_without_punctuation():
     f[3][0].value = "Курс длится 6 недель"
     schema = support_selection_wire_schema(f[0], PositioningOutput, *f[2:])
     payload = output((f[0], schema, *f[2:]))
-    payload["outputs"]["offer"]["text"] = {"mode": "SOURCE", "value": f[3][0].value}
+    payload["outputs"]["offer"]["text"] = {"mode": "SOURCE", "value": next(iter(product_source_catalog(f[3])))}
     result = decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
     assert result["outputs"][0]["text"] == f[3][0].value
 
@@ -66,10 +66,11 @@ def test_text_union_is_over_disjoint_tagged_objects_not_over_strings():
     assert all(set(b["required"]) == {"mode", "value"} for b in branches)
 
 
-def test_v3_wire_is_not_silently_reinterpreted_as_v4():
+@pytest.mark.parametrize("version", ["v3", "v5"])
+def test_old_wire_is_not_silently_reinterpreted(version):
     f = fixture(("offer",))
     payload = output(f)
-    payload["wire_contract_version"] = "positioning.support_selection.v3"
+    payload["wire_contract_version"] = f"positioning.support_selection.{version}"
     with pytest.raises(ModuleExecutionContractError):
         decode_support_selection_wire(payload, f[0], PositioningOutput, *f[2:])
 

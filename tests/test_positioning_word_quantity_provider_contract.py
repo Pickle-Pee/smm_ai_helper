@@ -2,6 +2,7 @@
 import pytest
 import asyncio
 from jsonschema import Draft202012Validator
+from app.module_execution.executors.positioning_support_selection import product_source_catalog
 from tests.test_positioning_support_selection import fixture, output, qualitative, sourced, SelectionModel
 
 
@@ -30,7 +31,7 @@ def test_complete_source_assertion_preserves_conservatively_excluded_words(truth
     from app.module_execution.executors.positioning_support_selection import support_selection_wire_schema
     from app.module_execution.executors.schemas import PositioningOutput
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:])
-    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=sourced(truth)
+    value=output((f[0],schema,*f[2:]));value['outputs']['offer']['text']=sourced(next(iter(product_source_catalog(f[3]))))
     assert Draft202012Validator(schema).is_valid(value)
 
 
@@ -43,7 +44,9 @@ def test_actual_supplied_word_or_digit_quantity_remains_an_exact_literal_choice(
     from app.module_execution.executors.positioning import PositioningExecutor
     facts=tuple(replace(f,value=truth) if f.label=='product_truth' else f
         for f in facts_for_module(ModuleId.POSITIONING))
-    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=sourced(truth)))
+    model=SelectionModel(lambda p,d:p['outputs']['offer'].update(text=sourced(next(
+        key for key, source in d["positioning_product_sources"].items()
+        if source["category"] == "product_truth"))))
     result=asyncio.run(PositioningExecutor(model_call=model,support_selection_wire=True).execute(
         request(ModuleId.POSITIONING,facts=facts,outputs=('offer',))))
     assert result.payload['outputs'][0]['text']==truth and len(model.calls)==1
@@ -55,6 +58,6 @@ def test_explicit_source_preserves_numbered_result_without_repair():
     from app.module_execution.executors.schemas import PositioningOutput
     f=fixture(('offer',));f[3][0].value='one session'
     schema=support_selection_wire_schema(f[0],PositioningOutput,*f[2:]);value=output((f[0],schema,*f[2:]))
-    value['outputs']['offer']['text']=sourced('one session');before=copy.deepcopy(value)
+    value['outputs']['offer']['text']=sourced(next(iter(product_source_catalog(f[3]))));before=copy.deepcopy(value)
     decoded=decode_support_selection_wire(value,f[0],PositioningOutput,*f[2:])
     assert value==before and decoded['outputs'][0]['text']=='one session'

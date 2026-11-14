@@ -30,7 +30,7 @@ sixty seventy eighty ninety hundred thousand single
 _UNITS = frozenset("""
 visit visits session sessions question questions step steps action actions
 participant participants person persons people customer customers client clients
-item items image images photo photos task tasks group groups option options
+item items image images photo photos task tasks group groups option options variant variants version versions set sets
 experiment experiments hypothesis hypotheses trial trials cohort cohorts
 minute minutes hour hours day days week weeks month months year years
 ruble rubles rouble roubles dollar dollars euro euros percent percentage points
@@ -50,6 +50,9 @@ ruble rubles rouble roubles dollar dollars euro euros percent percentage points
 задание задания заданий заданию заданиям заданием заданиями задании заданиях
 группа группы групп группу группам группой группами группе группах
 вариант варианта вариантов варианту вариантам вариантом вариантами варианте вариантах варианты
+вариантный вариантная вариантное вариантные вариантного вариантной вариантных вариантному вариантным вариантную вариантными вариантном вариантною
+версия версии версий версию версиям версией версиею версиями версиях
+набор набора наборов набору наборам набором наборами наборе наборах наборы
 эксперимент эксперимента экспериментов эксперименту экспериментам экспериментом экспериментами эксперименте экспериментах эксперименты
 гипотеза гипотезы гипотез гипотезу гипотезам гипотезой гипотезами гипотезе гипотезах
 поток потока потоков потоку потокам потоком потоками потоке потоках потоки
@@ -63,8 +66,11 @@ ruble rubles rouble roubles dollar dollars euro euros percent percentage points
 доллар доллара долларов доллару долларам долларом долларами долларе долларах доллары
 евро процент процента процентов проценту процентам процентом процентами проценте процентах проценты
 """.split())
+_CARDINAL_LENGTHS = tuple(sorted({len(token) for token in _CARDINALS}))
+_MAX_JOINED_LENGTH = max(map(len, _CARDINALS)) + max(map(len, _UNITS))
+
 _MODIFIERS = frozenset("""
-short brief additional new paid initial introductory simple quick small full complete
+short brief additional new paid initial introductory simple quick small full complete minimal
 вводный вводная вводное вводные вводного вводной вводных вводному вводным вводную вводными вводном
 короткий короткая короткое короткие короткого короткой коротких короткому коротким короткую короткими коротком
 краткий краткая краткое краткие краткого краткой кратких краткому кратким краткую краткими кратком
@@ -74,11 +80,15 @@ short brief additional new paid initial introductory simple quick small full com
 простой простая простое простые простого простой простых простому простым простую простыми простом
 быстрый быстрая быстрое быстрые быстрого быстрой быстрых быстрому быстрым быструю быстрыми быстром
 полный полная полное полные полного полной полных полному полным полную полными полном
+минимальный минимальная минимальное минимальные минимального минимальной минимальных минимальному минимальным минимальную минимальными минимальном минимальною
 """.split())
 
 
 def has_numeric_quantity(text: str) -> bool:
     """Detect digits or an explicit cardinal followed by a recognized unit.
+
+    An exact whole-word cardinal+unit concatenation is also recognized; no
+    prefix/substring or morphological inference is used.
 
     At most two listed modifiers may intervene, separated by whitespace/hyphens.
     No arbitrary words or sentence punctuation are crossed: `one of the visits`,
@@ -89,7 +99,13 @@ def has_numeric_quantity(text: str) -> bool:
         return True
     words = list(_WORD.finditer(text))
     for index, word in enumerate(words):
-        if word.group().casefold() not in _CARDINALS:
+        token = word.group().casefold()
+        if len(token) <= _MAX_JOINED_LENGTH and any(
+            token[:length] in _CARDINALS and token[length:] in _UNITS
+            for length in _CARDINAL_LENGTHS if length < len(token)
+        ):
+            return True
+        if token not in _CARDINALS:
             continue
         previous = word
         for offset in range(1, 4):

@@ -42,3 +42,31 @@ def test_staff_expertise_and_other_assurances_still_require_actual_proof(text):
     with pytest.raises(StatementSemanticsError) as caught:
         PositioningExecutor(model_call=None).validate_statement(statement(text), sources(), {})
     assert caught.value.rule is SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED
+
+
+@pytest.mark.parametrize("text", [
+    "Курс для людей, которые хотят снимать лучше без профессионального оборудования, "
+    "опора на практические задания и обратную связь.",
+    "Для занятий не требуется профессиональное оборудование.",
+    "Для занятий не требуется профессионального оборудования.",
+])
+def test_equipment_requirement_is_not_a_product_assurance(text):
+    value = statement(text)
+    source = {"product": SimpleNamespace(input_key="product_truth", value=
+        "Курс для начинающих, снимающих на телефон или первую камеру. "
+        "Включает практические задания и письменную обратную связь преподавателя.")}
+    PositioningExecutor(model_call=None).validate_statement(value, source, {})
+
+
+@pytest.mark.parametrize("text", [
+    "Курс без профессионального оборудования ведёт профессиональный преподаватель.",
+    "Курс включает профессиональное оборудование.",
+    "Курс без профессионального оборудования гарантирует результат.",
+    "Для занятий не требуется профессиональное оборудование, их ведёт профессиональный преподаватель.",
+    "Для занятий не требуется профессионального оборудования, курс гарантирует результат.",
+    "Для занятий требуется профессиональное оборудование.",
+])
+def test_equipment_reference_preserves_affirmative_assurance_checks(text):
+    with pytest.raises(StatementSemanticsError) as caught:
+        PositioningExecutor(model_call=None).validate_statement(statement(text), sources(), {})
+    assert caught.value.rule is SemanticRule.PRODUCT_ASSURANCE_SUPPORT_REQUIRED

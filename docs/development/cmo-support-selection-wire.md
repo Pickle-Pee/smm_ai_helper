@@ -20,7 +20,13 @@ provider retries, routing, scheduling or additional provider calls.
 VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED is a typed default-off setting, passed
 through explicit production composition and the existing executor factory as
 virtual_cmo_support_selection_wire / support_selection_wire. The wire version is
-virtual_cmo.support_selection.v2. Neither Registry descriptors nor DTOs change.
+virtual_cmo.support_selection.v12. Neither Registry descriptors nor DTOs change.
+Version 5 retains v2 selection semantics and adds the small observed-count
+generation filter described in cmo-provider-semantic-contract.md. The v3
+lookahead and v4 full-vocabulary candidates produced incomplete provider
+responses and were not released. Persisted
+canonical payloads and durable operation identities remain unchanged; a changed
+generation fingerprint never authorizes replaying a completed provider POST.
 
 The builder starts from the existing cmo_provider_schema contract, retaining its
 qualitative text/items patterns and bounded exact same-source numeric pairs. It
@@ -34,6 +40,25 @@ inside statements. Shared main/other statement definitions retain original
 text/items/assumptions/limitations/confidence/numeric_context bounds. The main
 growth constraint remains HYPOTHESIS with one item; other statements retain the
 existing HYPOTHESIS/RECOMMENDATION restriction.
+
+Version 6 maps only the `risks` output to a dedicated closed statement definition.
+Its RU/EN text/items describe prospective validation risks: compare audience
+expectations, tested wording and confirmed owner terms; obtain an owner decision
+before testing a proposed format; check resources before expansion. They do not
+invent a personal/standardized/current feedback format, proven market position or
+resource adequacy. Primary source selection, support maps, `numeric_context`,
+kinds/confidence and all original string/array bounds remain unchanged. The other
+eight outputs retain their existing free qualitative text/item schemas and the
+frozen small generation filter.
+
+Global `assumptions` keeps its original optional array and field bounds, but its
+items are closed RU/EN validation prerequisites: validate working strategic
+hypotheses before treating them as confirmed conclusions. This does not declare
+all input evidence absent, deny supplied research/economics, or assume favorable
+competition and available capacity. An empty assumption array remains allowed.
+This is a deliberately narrower provider language; valid free-form risks or
+assumptions outside these policies may reject. Canonical v1 artifacts/history and
+original numerical, source-authority and product-fidelity checks are unchanged.
 
 Canonical evidence_ids and parent_claim_ids arrays are absent and forbidden in
 the wire. Instead each statement requires:
@@ -117,3 +142,261 @@ confidence/attribution, default-off wiring and bytes, immutable schemas, provide
 mutation, schema budgets/refusal, and the production HTTP adapter with mock
 transport. Legacy uncited numerical context remains rejected. Two clean final
 Telegram strategy workflows and qualitative acceptance remain separate gates.
+
+
+## Version 9: productive qualitative language and prospective trade-off items
+
+The v7 source-aware adjective trie with a terminal-separator wrapper and the v8
+larger two-word trie with shared schema definitions both returned incomplete
+actual CMO responses. Their receipts and FAIL outcomes are retained; local regex
+validity and supported schema shapes did not establish provider completion.
+V9 removes those generation-only catalogs, reference definitions and helper
+modules, restoring the exact pre-refactor qualitative-generation implementation.
+The original 959-character pattern retains UTF8 SHA256
+`8cfe49afdb10b8f2319c466edc169619c93b7bb5a01aa4f0a88400cab042103c`.
+No descriptor filter or terminal-separator requirement applies to free prose.
+This is a bounded rollback candidate, not a proven provider root cause or fix.
+
+V6's closed risk text/items and global hypothesis-validation assumptions remain.
+Only `trade_offs.items` additionally uses a small RU/EN enum of prospective
+trade-off policies: balance validation speed with faithful owner description,
+choose further audience research or a bounded communication test based on results,
+and compare proposed emphases while weighing clarity against completeness.
+These are operator decisions to investigate, not asserted current delivery
+formats, available assets, resources, completed approvals or proven efficacy.
+The dedicated CMOTradeoffsStatement clones every other OtherStrategyStatement
+field exactly. Items retain their original 1..3 array bound and 1..300 character
+string bounds. Kind, confidence, support flags and numeric_context are unchanged.
+Its text remains case-specific qualitative prose up to 4000 characters; the
+remaining seven outputs keep their original qualitative text/items language.
+Partial requested-name objects and all source bounds remain unchanged.
+
+This representation loses some case-specific detail in trade-off items while
+preserving an unrestricted strategic summary. It prevents the observed unsafe
+format comparand in that item position; it does not guarantee the same premise
+cannot appear in another free field. The strengthened canonical owner/demo,
+standardized-format and numerical guards remain authoritative across all leaves.
+A complete supplied standardized owner quotation in the free summary still
+requires its actual selected local owner source. An uncited owner source, demo
+or strategic parent hypothesis cannot authorize it. Supplied quantities remain
+only complete exact numeric_context pairs under the original citation semantics.
+
+No v7/v8 compatibility shim, stored-payload rewrite or source-flag repair remains.
+Canonical payload v1, accepted history, durable operation IDs and persistence do
+not change. A changed generation fingerprint never authorizes repeating a prior
+POST. Independent code review and one fresh full normal CMO capability/content
+proof are required before another full graph; HTTP 200, partial output, or old
+successful responses do not substitute for that proof.
+
+
+## Version 10: explicit whole-source selections
+
+A completed v9 response appended interpretation to a demonstration assertion and
+selected no local demo evidence on that output. Canonical fidelity correctly
+rejected it. More prose guidance does not make source copying deterministic.
+V10 gives free statement text/items a small explicit SOURCE:eNNN alternative.
+The other alternative is the exact existing bounded 959-pattern string schema.
+Markers contain ASCII digits, so these alternatives are disjoint without a new
+regex or wrapping ordinary prose in mode objects. Schema enums contain only
+marker keys; the model input separately labels complete supplied text, evidence
+alias and source role. Source text remains untrusted data, never instructions.
+
+The request-local CMO adapter uses the existing eNNN alias bijection. Eligibility
+queries canonical typed_literal_sources, the pure implementation used unchanged
+by selected_sources: FIRST_PARTY product_truth/confirmed_business_fact are owner
+sources; FIRST_PARTY existing_proof is demo evidence. Audience/external/parent
+hypotheses are not selector sources. No POSITIONING product/RTB catalog authority
+is imported. Only complete nonempty string values up to 4000 characters that
+contain no canonical numerical quantity or reserved SOURCE namespace are offered.
+No structured-value extraction, sentence splitting, trimming or truncation occurs.
+Outer-whitespace-padded values are omitted/refused, never trimmed: the existing
+canonical Pydantic policy strips outer whitespace, so such a value could not
+remain an exact accepted source quotation. Interior spacing/newlines stay exact.
+The complete expanded value must also match the frozen qualitative language;
+SOURCE never bypasses its observed-count-word restriction. This deliberately
+omits even supplied unlisted-unit `two principles` or a brand containing the
+standalone word `Two`, without claiming general quantity entailment or repairing
+the source. The original canonical numeric detector remains independent.
+Item enums include only markers whose full expanded value fits 300 characters.
+Numerical values remain exclusively in the original numeric_context mechanism.
+At most 64 selector entries and 16384 UTF8 JSON bytes are allowed; overflow fails
+before model I/O. Original aggregate schema/source limits apply independently.
+
+Encoding, model input and decoding materialize the same evidence tuple and
+reconstruct the same scoped catalog and aliases. Decoding validates wire JSON,
+then resolves only an exact explicit marker to one complete source value and
+adds that actual evidence ID to the SAME output's canonical selected set. This
+is declared explicit selection, like primary/additional/numeric_context choices:
+a false additional flag does not veto a SOURCE choice. Raw booleans/input are
+never changed. Ordinary prose is never matched to source text, shortened, split
+or repaired. Rendering happens once; supplied source values containing reserved
+syntax are omitted/refused, not recursively interpreted. All canonical schema,
+Pydantic, kind, owner/demo/equipment/numeric, 32-source and QG checks still run.
+A demo selector cannot authorize an owner-format claim, and a source selected on
+another output cannot repair a missing witness here.
+
+Only free statement fields receive selectors. Closed risk fields, trade-off
+items and global assumptions/limitations never render them. The SOURCE:
+namespace is case-insensitively reserved: unknown/malformed, concatenated,
+wrong-size or out-of-scope markers reject instead of leaking as literal prose.
+There is no fallback source lookup or fuzzy correction. The schema and decoder
+retain original 4000/300 bounds and partial-name scope. The canonical payload is
+still v1 with plain text and actual source IDs; no selector or catalog persists.
+
+The producer can quote via SOURCE and place interpretation in another free leaf.
+It may still choose unsafe ordinary prose, which must continue failing canonical
+validation. The original nu FAIL stays immutable. Offline known-response and
+mock-HTTP tests establish the explicit rendering contract only; independent code
+review and a fresh complete nine-output normal capability/QG/content check are
+required before another full graph. A provider POST is never replayed because a
+wire version or instruction fingerprint changed.
+
+The no-digit rule is explicitly scoped to qualitative prose. Exact listed
+SOURCE tokens are technical selectors; only their token digits are permitted.
+SOURCE-capable outer fields and enum branches explain this distinction, and a
+free items array advertises both prose and whole-source choices only when a
+complete source fits its 300-character item bound. Empty catalogs, longer-only
+sources, closed policies and globals keep their original field descriptions.
+Current owner/demo assertions should select SOURCE or be omitted; prospective
+use belongs in a separate qualitative leaf. A comparison sample is not asserted
+proof of feedback effects. These annotations and wire-only guidance improve
+discoverability without changing types, enums, bounds, renderer, citations or
+canonical guards. Two completed responses that did not use SOURCE motivated this
+clarification; they do not prove a provider cause or guarantee future compliance.
+
+## v11: explicit owner-grounded strategic bet
+
+When `strategic_bets` is requested and the existing source catalog contains a
+complete eligible FIRST_PARTY product_truth/confirmed_business_fact value of at
+most300 characters, only this output uses CMOSourceBoundBetStatement. Its summary
+is a prospective validation note, kind is HYPOTHESIS and confidence UNKNOWN.
+Its single raw item chooses an exact owner SOURCE token and a closed observable
+audience/message hypothesis: value named in interviews, accurate restatement of
+terms, or specific questions in an owner-agreed comparison. RU/EN choices exist.
+The hypothesis concerns the complete provided terms, not an isolated equipment
+condition or a proven market effect.
+
+The decoder renders two separate canonical items: the exact complete source and
+the chosen prospective hypothesis. The explicit source token binds its actual
+owner evidence on this output, even when its additional flag is false. It never
+repairs another output's evidence or infers a citation from prose. Parent-primary
+requirements and all source-family/canonical bounds and semantic checks remain.
+Both items fit the existing300-character bound and remain within the limit of3.
+No actual-source clause is extracted, shortened, paraphrased or concatenated.
+
+The owner-only projection excludes demonstrations, audience, competitor and
+hypothetical-parent roles. Existing numeric/whitespace/reserved-namespace source
+eligibility rules remain unchanged. If no complete eligible owner value fits,
+the existing qualitative bet contract remains; no empty enum or truncated source
+is introduced. Partial requests without bets and all other output schemas retain
+their contracts. The productive959 pattern is unchanged.
+
+This intentionally trades free-form multiple bets for one explicit source-backed
+research bet in the eligible case. Its observable relation is testable, not an
+already established differentiation. Other free prose and the no-source fallback
+can still fail; the recipe is not a guarantee of full response acceptance.
+
+Canonical virtual_cmo.payload.v1 history and serialization are unchanged; only
+new provider requests use wirev11. Old raw wirev10 is rejected, not rewritten or
+replayed. No extra model call, database migration or stored-artifact update occurs.
+
+## v12: bounded demonstration-scope diagnosis
+
+The 14e7257 course response selected its actual demonstration source but appended
+an unsupported effect interpretation to a paraphrased sample assertion in
+`strategic_diagnosis.items`. Normal validation correctly rejected that whole
+leaf. The response and failed run remain immutable; neither source availability
+nor an adjacent caveat turns the new interpretation into supported proof.
+
+When `strategic_diagnosis` is requested and the already validated source catalog
+contains a complete FIRST_PARTY `existing_proof` value of at most300 characters,
+only this output uses `CMOSourceBoundDiagnosisStatement`. Its summary states a
+possible gap between the supplied sample and audience understanding, expressly
+requiring validation. Kind is HYPOTHESIS and confidence UNKNOWN. One raw item
+selects an exact demonstration SOURCE token and a closed prospective relation:
+audience understanding, connection to the proposed message, or relevance to the
+audience's reasons for interest. Each relation remains a question to investigate,
+not an established audience gap, product effect or demonstration of effectiveness.
+
+The decoder renders two distinct canonical items: the unchanged complete source
+and the chosen prospective diagnostic hypothesis. The explicit source selection
+binds its actual local evidence to this output even when its additional flag is
+false. It does not infer citations, copy another output's support, extract a
+source fragment or repair model prose. Parent-primary requirements, source-family
+limits, numeric context and every existing canonical and semantic check remain.
+
+This eligible lane intentionally narrows strategic diagnosis to sample scope and
+audience/message understanding. It cannot express arbitrary unrelated diagnoses
+in this output. The other eight output schemas retain their capabilities, and
+free prose elsewhere can still fail validation. The restriction avoids another
+optional free-prose alternative that could repeat the captured blending failure;
+it does not pretend to provide unrestricted model-generated diagnostic creativity.
+
+Source eligibility is unchanged: numeric, whitespace, reserved-marker and long
+source rules still belong to the existing catalog. No eligible demo, a source
+longer than the item bound, or a request without diagnosis keeps the preceding
+diagnosis/output shape; nothing is truncated and no empty enum is introduced.
+The productive959 pattern, source roles and downstream fidelity guards are frozen.
+
+Canonical `virtual_cmo.payload.v1` history remains readable without migration or
+rerating. New requests use wirev12; old raw v11 is rejected without conversion.
+No failed response, saved approval or provider operation is reused as new
+acceptance evidence. Offline recipes and mock HTTP prove the boundary only;
+fresh model behavior, complete content quality and release acceptance remain
+separate gates.
+
+The downstream equipment guard also recognizes a bounded future collection of
+written/qualitative feedback about practical-task format and perceived
+accessibility. This is audience research, without establishing an equipment
+condition. The entire unquoted leaf must match; public copy, appended assertions
+and positive validation criteria retain the owner-source checks. Other format,
+demo, promise and numeric checks still run. Wire/schema and stored v1 payloads
+are unchanged by this additional research-language form.
+
+Future creation of comparison materials, including a comparison in the context
+of feedback, is also a bounded operator plan. It does not assert that an existing
+demo proves a feedback format or that participants receive comparison feedback.
+Only the complete non-copy, unquoted creation leaf gets this recognition; all
+other product-format, promise and demo assertions still require their sources.
+
+The same closed creation grammar also accepts the imperative «Сделать» / «Make»
+and the restrictive tail «без дополнительных обещаний» / «without additional
+promises» (optional comma). Reason: Telegram acceptance graph `f4bec03b` on
+`6df396a` rejected the CMO resource leaf «Сделать демонстрационный материал,
+показывающий сравнение снимков без дополнительных обещаний.» Objects, the
+whole-leaf match and every other check are unchanged; appended assertions,
+existing-demo wording and unknown objects still reject.
+
+## Wire v13 · closed demo-material plans
+
+`virtual_cmo.support_selection.v13` removes free-text demo-material planning from
+the CMO provider wire instead of growing the downstream creation grammar.
+
+- Every free prose branch of `MainGrowthConstraintStatement`,
+  `OtherStrategyStatement` (text and items) and the trade-off text uses
+  `DEMO_FREE_PATTERN`: the shared qualitative pattern plus forbidden words
+  `демо`, `demo`, `demos`, `proof`, `proofs` and every word starting with
+  `демонс` / `demonst` (shortest unambiguous stems; pattern 959 → 2465 chars). Built by the same trie complement
+  (`allowed_word_pattern(words, prefixes)`); `QUALITATIVE_GENERATION_PATTERN`
+  is byte-identical (SHA-256 `8cfe49af…`) and used unchanged by other modules.
+  Ordinary words such as «демографические», «демократичный» and «образец» remain.
+- `OtherStrategyStatement` items add one closed enum of six RU/EN plan sentences
+  (`cmo_demo_plans.DEMO_PLAN_NOTES`): prepare a NEW demo strictly from the
+  complete confirmed owner description without additional promises and agree it
+  with the owner; check audience understanding without treating it as evidence of
+  results; use it only after owner approval and an understanding check. They name
+  no demo contents, assert nothing about an existing demo and pass the unchanged
+  downstream checks without any exemption. Main-growth-constraint, risks,
+  trade-off items, bets and diagnoses do not offer them.
+- Current demo facts still use exact SOURCE tokens; existing descriptions are kept
+  and the demo rule is appended. The decoder validates against the same wire
+  schema, so free demo prose fails at `schema_invalid` server-side as well.
+- Canonical v1 payloads, downstream fidelity validators, the creation grammar,
+  Quality Gates and EXPERIMENTS are unchanged. Older wire versions are rejected.
+
+Reason and evidence: Telegram graph `f4bec03b` (`6df396a`) and live course
+`1df91294` (`fcbac48`) each failed on new free-text demo-plan paraphrases. Of 22
+saved live CMO responses, 6 of 7 rejected ones used demo vocabulary in free prose
+(5 of 15 accepted ones did too). Counterfactual replays of both failed responses,
+changing only the version and the offending leaves to closed plans, are fully
+accepted (9/9) by the normal executor and Quality Gates.

@@ -102,6 +102,8 @@ class SemanticRule(str, Enum):
     PRODUCT_CLAIM_REQUIRES_TRUTH = "product_claim_requires_truth"
     RTB_QUOTE_REQUIRED = "rtb_quote_required"
     PRODUCT_ASSURANCE_SUPPORT_REQUIRED = "product_assurance_support_required"
+    CUSTOMER_PROMISE_REQUIRES_OWNER_SOURCE = "customer_promise_requires_owner_source"
+    DEMONSTRATION_ASSERTION_REQUIRES_SOURCE = "demonstration_assertion_requires_source"
 
 
 class NumericContextFailureReason(str, Enum):
@@ -220,6 +222,21 @@ def parent_claims(request):
             if claim.authority_status is AuthorityStatus.WITHIN_SCOPE:
                 parents[claim.claim_id] = claim
     return parents
+
+
+def factual_competitor_parents(request):
+    """Resolve evidence-backed factual competitors without promoting hypotheses."""
+    backed = {
+        claim.claim_id for upstream in request.upstream_results
+        if upstream.module_id.value in {"COMPETITOR_ANALYSIS", "MARKET_ANALYSIS"}
+        for claim in upstream.result.normalized_result.claims
+        if claim.evidence_ids
+        and set(claim.evidence_ids) <= {record.evidence_id for record in upstream.result.normalized_result.evidence
+                                       if record.source_class is EvidenceSourceClass.EXTERNAL_PRIMARY}
+    }
+    return {identity: claim for identity, claim in parent_claims(request).items()
+            if identity in backed and claim.claim_type in {ClaimType.FACT, ClaimType.OBSERVATION}
+            and isinstance(claim.value, str)}
 
 
 @dataclass(frozen=True)

@@ -28,6 +28,20 @@ from tests.test_strategy_intelligence import IntelligenceModel, valid_request, r
 from tests.test_module_executors import fact, request, FakeModel, dispatch
 from tests.test_cmo_provider_contract import capture, output
 
+RESOURCE_COUNT = "Подготовить один минимальный набор тестовых сообщений для оперативной проверки."
+
+
+@pytest.mark.parametrize("text", [RESOURCE_COUNT, "Prepare one minimal set of test messages."])
+def test_actual_cmo_resource_priorities_rejects_unprovided_minimal_set_count(text):
+    model = IntelligenceModel(use_parents=True)
+    def inject(payload, data):
+        row = next(row for row in payload["outputs"] if row["output_name"] == "resource_priorities")
+        row["items"] = [text]
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(valid_request(ModuleId.VIRTUAL_CMO), inject, model=model)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(model.calls) == 1
+
 
 @pytest.mark.parametrize("text", [
     "Новичок может за один визит попробовать материал и уйти с готовым изделием.",
@@ -61,6 +75,15 @@ def test_unsupplied_design_quantities_in_words_are_rejected(field, value):
     "Пригласить два–три новых платных клиента.", "Собрать пять–десять участников.",
     "Через три недели проверить спрос.", "The target is zero dollars.",
     "One hundred visits.", "Сто новых клиентов.", "Two-question form.",
+    "Запуск двухверсий текстовой коммуникации.", "Compare twoversions.",
+    "Compare two versions.", "Сравнить двух версий.", "Compare TWOversions.",
+    "Сравнить двухвариантов.", "Использовать двумяверсиями.",
+    RESOURCE_COUNT, "Prepare one minimal set of test messages.",
+    "Prepare one set of messages.", "Сравнить два набора.",
+    "Использовать одним минимальным набором.", "Подготовить один минимальный новый набор.",
+    "Prepare one minimal new set.", "Compare twosets.", "Сравнить двухнаборов.",
+    "Подготовить два минимальных набора.", "Ограничиться одним минимальным набором.",
+    "Ask one minimal question.", "Проверить одну минимальную группу.",
     "Use ٥ questions.", "Use ２ questions.", "Use 3 questions.",
 ])
 def test_detector_recognizes_explicit_counts_and_preserves_unicode_digits(text):
@@ -77,6 +100,14 @@ def test_detector_recognizes_explicit_counts_and_preserves_unicode_digits(text):
     "Ask qualitative questions and compare replies.", "С одной стороны это гипотеза.",
     "A single source of truth guides messaging.", "One clear message is useful.",
     "Two short new paid questions.",  # Three modifiers exceed the explicit bound.
+    "Twoversionsuffix is a label.", "Pretwoversions is a label.",
+    "Someoneversions is a label.", "Двухверсийный ярлык.", "Преддвухверсий ярлык.",
+    "One of the versions is unclear.", "Одна из версий требует уточнения.",
+    "One of the sets is unclear.", "Один из наборов требует уточнения.",
+    "Onesetup is a label.", "Preoneset is a label.", "Однонаборный ярлык.",
+    "One. Minimal set preparation follows.", "Один. Минимальный набор подготовить позже.",
+    "One, minimal set of messages.", "Prepare one minimal new paid set.",
+    "Подготовить один минимальный новый платный набор.",
     "Two very short questions.",     # Unlisted adverb is not inferred as an adjective.
 ])
 def test_detector_avoids_idioms_ordinals_pronouns_and_cross_sentence_matching(text):
@@ -84,7 +115,8 @@ def test_detector_avoids_idioms_ordinals_pronouns_and_cross_sentence_matching(te
     require_supported_numbers(text, ())
 
 
-@pytest.mark.parametrize("text", ["Two short questions are required.", "Нужны два коротких вопроса."])
+@pytest.mark.parametrize("text", ["Two short questions are required.", "Нужны два коротких вопроса.",
+    "Compare twoversions.", "Запуск двухверсий текстовой коммуникации."])
 def test_full_supplied_word_quantity_passes_but_uncited_or_new_rationale_does_not(text):
     require_supported_numbers(text, (text,))
     for candidate, supports in ((text, ("A different assertion.",)),
@@ -125,9 +157,10 @@ def test_positioning_exact_word_quantity_uses_actual_cited_source():
         dispatch(invocation, FakeModel(unrelated))
 
 
-def test_design_full_word_quantity_quote_from_actual_strategic_parent_passes():
+@pytest.mark.parametrize("quote", ["Ask two short questions.",
+    "Запуск двухверсий текстовой коммуникации.", "Compare twoversions."])
+def test_design_full_word_quantity_quote_from_actual_strategic_parent_passes(quote):
     invocation = valid_request(ModuleId.EXPERIMENTS)
-    quote = "Ask two short questions."
     parent_request = request(ModuleId.POSITIONING, outputs=("differentiation",))
     parent_request = replace(parent_request, context_packet=replace(parent_request.context_packet,
         known_facts=tuple(replace(f, value=quote) if f.label == "product_truth" else f
@@ -155,8 +188,9 @@ def test_word_quantity_context_retains_complete_units_and_separates_assertion_au
 
 
 @pytest.mark.parametrize("field", ["text", "items"])
-def test_cmo_word_quantity_prose_stays_forbidden_even_when_source_supported(field):
-    quote = "Ask two short questions."
+@pytest.mark.parametrize("quote", ["Ask two short questions.", "Compare twoversions.",
+    "Запуск двухверсий текстовой коммуникации.", RESOURCE_COUNT, "Prepare one minimal set of messages."])
+def test_cmo_word_quantity_prose_stays_forbidden_even_when_source_supported(field, quote):
     values = dict(output_name="strategic_diagnosis", text="Validate demand", items=["Compare responses"],
         kind="HYPOTHESIS", confidence="MEDIUM", evidence_ids=["evd_source"], parent_claim_ids=[], numeric_context=[])
     values[field] = quote if field == "text" else [quote]
@@ -182,7 +216,12 @@ def test_cmo_word_quote_catalog_and_provider_keep_exact_same_source_pairs():
     assert numeric_quote_catalog(local, {}) == sorted(numeric_quote_catalog(local, {}), key=lambda e:e["support_id"])
     assert cmo_provider_schema(canonical, numeric_quote_catalog(local, {})) == provider
     assert canonical == original
-    assert all(node.get("pattern") == "^[^0-9]*$" for node in nodes(provider) if "pattern" in node)
+    # Same-source numerical quotations remain allowed in their dedicated
+    # context; the qualitative prose branch must not generate that quantity.
+    prose = deepcopy(candidate)
+    prose["outputs"][0]["text"] = quote
+    assert Draft202012Validator(canonical).is_valid(prose)
+    assert not validator.is_valid(prose)
     for bad in ({"support_id":ids["existing_proof"], "quote":quote},
                 {"support_id":ids["product_truth"], "quote":"Ask two short questions"},
                 {"support_id":"evd_unknown", "quote":quote}):
@@ -197,13 +236,16 @@ def test_cmo_word_quote_catalog_and_provider_keep_exact_same_source_pairs():
     ("fragment", NumericContextFailureReason.QUOTE_IS_FRAGMENT),
     ("unknown", NumericContextFailureReason.SUPPORT_NOT_FOUND),
 ])
-def test_original_cmo_guard_rejects_wrong_word_quote_identity_and_fragments(mutation, reason):
-    quote = "Ask two short questions, subject to consent."
+@pytest.mark.parametrize("quote,fragment", [
+    ("Ask two short questions, subject to consent.", "Ask two short questions"),
+    (RESOURCE_COUNT, "один минимальный набор"),
+])
+def test_original_cmo_guard_rejects_wrong_word_quote_identity_and_fragments(mutation, reason, quote, fragment):
     local = {"evd_source":SimpleNamespace(value=quote),
              "evd_other":SimpleNamespace(value="The service takes one visit.")}
     identity, text = "evd_source", quote
     if mutation == "cross_pair": identity = "evd_other"
-    if mutation == "fragment": text = "Ask two short questions"
+    if mutation == "fragment": text = fragment
     if mutation == "unknown": identity = "evd_unknown"
     statement = OtherStrategyStatement(output_name="strategic_diagnosis", text="Validate demand", items=["Compare responses"],
         kind="HYPOTHESIS", confidence="MEDIUM", evidence_ids=["evd_other"] if mutation == "uncited" else list(local),
@@ -233,8 +275,9 @@ def test_provider_guidance_words_and_fulfillment_do_not_claim_deterministic_enta
 
 
 
-def test_actual_accepted_cmo_word_context_cannot_authorize_experiment_assertion():
-    quote = "Ask two short questions, subject to consent."
+@pytest.mark.parametrize("quote", ["Ask two short questions, subject to consent.",
+    "Compare twoversions.", "Запуск двухверсий текстовой коммуникации.", RESOURCE_COUNT])
+def test_actual_accepted_cmo_word_context_cannot_authorize_experiment_assertion(quote):
     invocation = valid_request(ModuleId.VIRTUAL_CMO)
     invocation = replace(invocation, context_packet=replace(invocation.context_packet,
         known_facts=(*invocation.context_packet.known_facts, fact("existing_proof", quote))))
@@ -251,3 +294,39 @@ def test_actual_accepted_cmo_word_context_cannot_authorize_experiment_assertion(
         run(experiment_request, lambda p,d: p["experiments"][0].update(intervention=quote), model=model)
     assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
     assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize("module", [ModuleId.VIRTUAL_CMO, ModuleId.EXPERIMENTS])
+@pytest.mark.parametrize("quote", ["Запуск двухверсий текстовой коммуникации.", "Compare twoversions."])
+def test_actual_executors_reject_unsupported_joined_quantity_statements(module, quote):
+    model = IntelligenceModel(use_parents=True)
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(valid_request(module), lambda p,d: p["outputs"][0].update(text=quote), model=model)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize("field", ["intervention", "minimum_required_inputs"])
+@pytest.mark.parametrize("quote", ["Запуск двухверсий текстовой коммуникации.", "Compare twoversions."])
+def test_actual_experiments_rejects_unsupported_joined_nested_quantities(field, quote):
+    model = IntelligenceModel(use_parents=True)
+    value = [quote] if field == "minimum_required_inputs" else quote
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(valid_request(ModuleId.EXPERIMENTS), lambda p,d: p["experiments"][0].update({field:value}), model=model)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize("quote", ["Запуск двухверсий текстовой коммуникации.", "Compare twoversions."])
+def test_joined_quantity_source_must_be_selected_not_merely_available(quote):
+    invocation = valid_request(ModuleId.EXPERIMENTS)
+    invocation = replace(invocation, context_packet=replace(invocation.context_packet,
+        known_facts=(*invocation.context_packet.known_facts, fact("existing_proof", quote))))
+    def unselected(payload, data):
+        identity = next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"] == "existing_proof")
+        for output in payload["outputs"]:
+            output["evidence_ids"] = [i for i in output["evidence_ids"] if i != identity]
+        payload["experiments"][0]["intervention"] = quote
+    with pytest.raises(ExecutorOutputError) as caught:
+        run(invocation, unselected)
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID

@@ -1,12 +1,12 @@
 """Explicit strategic selection for EXPERIMENTS; persisted payload remains v1."""
 from copy import deepcopy
-import re
 
 from jsonschema import Draft202012Validator
 
 from app.module_execution.errors import ModuleExecutionContractError
 from .provider_schema import collapse_redundant_support_anyof, collapse_single_support_anyof, nodes
 from .support_schema import check_schema_bounds
+from .numeric_quantity import has_numeric_quantity
 
 WIRE_VERSION = "experiments.wire.v2"
 SELECTED_PARENT = "strategic_parent_id"
@@ -60,7 +60,7 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     if any(type(value) is not str for value in statement_assertions):
         raise ModuleExecutionContractError("Invalid experiment statement assertion wire scope")
     statement_numeric_assertions = sorted({text for text in statement_assertions
-                                          if 1 <= len(text) <= 4000 and re.search(r"\d", text)})
+                                          if 1 <= len(text) <= 4000 and has_numeric_quantity(text)})
     if statement_numeric_assertions:
         definitions[STATEMENT_NUMERIC_ASSERTION_DEFINITION] = {
             "type": "string", "minLength": 1, "maxLength": 4000, "enum": statement_numeric_assertions}
@@ -96,7 +96,7 @@ def strategic_parent_wire_schema(validation_schema, strategic_ids, constraints=(
     if any(type(value) is not str for value in strategic_assertions):
         raise ModuleExecutionContractError("Invalid experiment assertion wire scope")
     numeric_assertions = sorted({text for text in strategic_assertions
-                                 if 1 <= len(text) <= 300 and re.search(r"\d", text)})
+                                 if 1 <= len(text) <= 300 and has_numeric_quantity(text)})
     if numeric_assertions:
         definitions[NUMERIC_ASSERTION_DEFINITION] = {
             "type": "string", "minLength": 1, "maxLength": 300, "enum": numeric_assertions}

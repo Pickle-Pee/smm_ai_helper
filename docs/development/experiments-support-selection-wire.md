@@ -18,14 +18,35 @@ and history readers need no migration.
 
 ## Declared provider protocol
 
-The new version is experiments.support_selection.v3. It is built on the existing
-V2 schema and changes only canonical-output support representation. Outputs remain
+The current version is experiments.support_selection.v8. It is built on the existing
+V2 schema and retains v3 canonical-output support representation. Outputs remain
 an array with existing names/kinds, raw eligible strategic_parent_id, text/numeric
 assertion rules, one primary strategic design reference, exact constraints and all
 other bounds. Canonical evidence_ids and parent_claim_ids are absent and forbidden
-in V3 wire input. Instead each statement returns additional_evidence_support and
+in the support-selection wire input. Instead each statement returns additional_evidence_support and
 additional_parent_support: closed objects containing every source alias as a
 required strictly boolean property.
+
+In v8, qualitative `test_method` text uses a fifth specialized statement branch
+and the same authoritative INTERVENTION_RECIPES as nested intervention plans.
+The complete prospective plans require preparation and owner agreement, and
+describe a control/test comparison or qualitative interviews. This narrows method
+choice; eleven other output texts retain their case-specific free prose.
+Hypothesis, population, metrics, sample/duration logic and decisions remain
+case-specific. No existing asset or completed approval is inferred.
+
+The method's original whole-source numerical quotation alternative and4000-text
+bound remain separate from the nested intervention's300-text bound. Exact source
+selection and provenance remain required; fragments and foreign quotes reject.
+Old raw v7 is rejected rather than rewritten; canonical experiments.payload.v1
+history and readers remain unchanged. The regular959 generation pattern, source
+family caps, primary-parent requirement and evidence_basis ownership are intact.
+
+The numeric detector explicitly recognizes variant(s) and listed Russian
+вариантный adjective inflections as units following a cardinal, including exact
+whole-word joins such as двевариантные. The existing modifier/gap/substring rules
+are unchanged; this is not general morphological or numerical inference. Having
+control/treatment slots creates no exemption for new cardinal counts in prose.
 
 experiments_support_selection_catalog maps sorted complete authorized sources to
 e000/p000 aliases. Evidence comes from the same request-local evidence passed to
@@ -53,6 +74,86 @@ and assumptions/limitations. Original canonical schema, Pydantic, duplicate/iden
 strategic, numeric/word-quantity, constraint, confidence and Quality Gate checks
 remain authoritative after decoding. This is a versioned provider representation,
 not equivalence with V2 raw-response acceptance or a relaxation of canonical rules.
+
+Version 4 gives `evidence_basis` a closed epistemic provenance note in Russian or
+English: the explicitly selected accepted strategic hypothesis guides the
+experiment and does not establish its effectiveness. It adds two disjoint nested
+statement branches distinguished by `output_name`: `evidence_basis` and the other
+fifteen outputs. Only the former text is constrained to that note. All other text,
+kinds, confidence, explicit citation selections, mandatory strategic parent, field
+and array bounds remain unchanged. Notes do not claim that a demonstration exists,
+proves a recurring service format, or establishes customer outcomes. They cannot
+promote a hypothesis into efficacy proof. There is no implicit demo citation.
+
+The source statement is still canonical v1 after decoding. Existing accepted
+artifacts/history are read as before; new wire responses must use the current version. Duplicate or
+missing outputs remain rejected. Unknown statement names, source
+definition collisions, text bounds and unexpected schema shapes fail closed before
+provider I/O. A changed wire version never authorizes repeating a completed durable
+operation. Historical diagnostic failures remain unchanged.
+
+Version 5 adds a third disjoint statement branch for `guardrails`. Its qualitative
+text is a closed RU/EN publication policy: public copy must match confirmed owner
+product descriptions and must not promise unconfirmed features or outcomes. This
+avoids repeatedly generating free-form policy wording that can resemble delivery
+claims. It is an intentionally narrower generation subset, not equivalence with
+every valid free-form guardrail. The original alternative for complete supplied
+numerical assertions remains intact; its enum must contain recognized quantities,
+and original canonical validation still requires the actual selected source for
+the complete statement. It cannot become an arbitrary qualitative escape.
+
+`evidence_basis` keeps its v4 notes. The other fourteen output contracts remain
+unchanged, including experiment-specific stop/scale decisions and learning records.
+Nested designs, failure conditions, input requirements, citations, mandatory
+strategic parent, field/array bounds and canonical v1 history are unchanged. An
+unprovided outcome or unsupported numerical target does not become an accepted
+guardrail. No source is selected implicitly by either kind of policy note.
+
+Version 6 makes the uniquely named `evidence_basis` the first canonical output,
+regardless of model array order. The executor attaches nested design data and
+checks its selected witnesses on that first claim. Only the statement moves:
+content, selected source flags and the relative order of all other outputs are
+preserved. No other output's citations are borrowed or unioned into its evidence.
+A full request requires the basis exactly once. Partial requests containing it
+also move it first; partial requests without it retain their original first-output
+ownership contract. Duplicate/missing output rejection and canonical bounds remain.
+Historical accepted payloads are not reordered or rewritten.
+
+The same v6 generation schema applies the existing small RU/EN two-form filter
+to free qualitative statement/design text, including minimum-input items. It
+does not touch complete source/numerical enums. The authorized assertion catalogs
+now recognize the existing canonical word-quantity detector as well as digits,
+preserving exact supplied `two/двух` quotations that previously fit qualitative
+generation. Every numerical statement/design still needs its actual selected
+source and complete exact assertion; an allowed enum is not an implicit citation.
+Other quantities and unlisted languages remain subject to canonical validation.
+The wire version changes the request fingerprint, never the durable operation ID
+or the prohibition on repeating a completed/unknown provider operation.
+
+Version 7 gives `control` and `treatment` disjoint operator-plan branches. Closed
+RU/EN notes require preparing new messages from confirmed owner facts and the
+explicitly selected strategic hypothesis, then obtaining owner approval before
+testing. They do not claim current messages, landing pages, service properties or
+completed approval. Complete supplied numerical assertions retain their original
+alternative and actual selected-source checks; numerical text cannot manufacture
+authority for an unconfirmed asset or delivery claim.
+
+Nested `intervention` chooses a complete recipe within its existing 300-character
+bound: prepare/approve and compare new messages, or prepare/approve and research
+them in qualitative audience interviews. Both recipes have RU/EN variants. The
+separate selected design hypothesis supplies the actual experimental focus;
+metrics, expected signals, falsifiers, sizing/stops, input requirements and all
+twelve other output text contracts retain their prior authority and bounds.
+Exact supplied numerical intervention assertions remain available through the
+original source enum. Free-form fragments or presumed existing assets do not.
+
+This is a deliberately bounded communication/message-validation generation
+subset, not an equivalent replacement for every possible EXPERIMENTS plan. It
+preserves complete useful operator steps instead of truncated ad-copy fragments.
+Other valid free-form control, treatment or intervention prose can reject with
+this opt-in wire. Canonical v1 history, source selection, first-basis design
+ownership and durable operation IDs remain unchanged. Earlier accepted artifacts
+and failed diagnostic responses are never rewritten by a new wire version.
 
 ## Bounded generation overhead
 

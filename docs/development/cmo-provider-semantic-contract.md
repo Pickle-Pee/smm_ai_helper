@@ -14,12 +14,30 @@ with parent_claims(request), matching execution. The existing numeric_quote_cata
 is the sole selector of eligible support_id/exact_quote pairs. Its existing caps
 remain 64 complete entries and 16384 serialized UTF-8 bytes.
 
-CMO statement text and each strategy item receive the portable ^[^0-9]*$ pattern.
-The local numerical guard already forbids all Unicode decimal digits in these
-fields, even when supplied. Thus this provider restriction does not exclude
-locally accepted prose. It is not a claim that the structural schema previously
-contained the rule, or that an ASCII pattern proves absence of every Unicode
-digit. The unchanged Unicode-aware local guard remains authoritative.
+CMO statement text and each strategy item exclude ASCII digits and the six
+observed-count forms two/два/две/двух/двум/двумя. A small trie-complement pattern
+uses explicit case pairs, alphabet boundaries and only external anchors. It
+prevents the saved unsupported "два варианта" generation failure. This is a
+generation aid: every other quantity remains subject to the unchanged complete
+canonical numeric guard. Passing the provider pattern proves no numerical safety.
+
+The earlier negative-lookahead candidate returned HTTP 200 but empty incomplete
+output, including at the full CMO budget. A regular variant with an end anchor
+inside a repeated alternative did the same. A bounded differential matrix
+confirmed the ASCII control and Cyrillic ranges work, and the same small trie
+completes when anchors occur only at the outside. This identifies an observed
+provider grammar restriction without claiming its internal implementation. The
+full-vocabulary outer-anchor variant completed a primitive probe but truncated
+an actual nine-output CMO response despite a full output budget. Its visible
+stopping point permits a locally valid continuation; the provider's internal
+cause remains unknown. The shipped generation filter is therefore intentionally
+small, and full CMO completion is tested separately from a primitive field probe.
+
+The filter preserves harmless expressions such as "one of the options".
+Complete source-bound numeric quotations, including spelled quantities, remain
+possible through numeric_context. Other cardinal words, languages, Unicode
+digits and source provenance remain the unchanged canonical guard's
+responsibility. The pattern is not a general numerical or semantic proof.
 
 When pairs exist, the shared provider NumericContext definition uses full closed
 object anyOf branches grouped by support_id. Each branch has that literal source
