@@ -130,17 +130,17 @@ _EN_CREATED_EXAMPLES = (
     rf"|{_EN_FEEDBACK_EXAMPLE}(?:\s+and\s+{_EN_TASK_EXAMPLE})?)"
 )
 _PROSPECTIVE_CREATED_DEMO = re.compile(
-    r"(?:(?:Подготовить|Создать|Сформировать)\s+(?:(?:новые\s+)?демонстрационные\s+материалы|"
+    r"(?:(?:Подготовить|Создать|Сформировать|Сделать)\s+(?:(?:новые\s+)?демонстрационные\s+материалы|"
     r"демонстрационный\s+материал),\s*"
     r"(?:(?P<ru_showing>показывающие|показывающий)|(?:которые|который)\s+(?P<ru_show>показывают|показывает))\s+"
     r"(?:" + _RU_CREATED_EXAMPLES + r"|сравнение\s+снимков(?:\s+в\s+контексте\s+обратной\s+связи)?)"
     r"(?:,\s*без\s+(?:предположений\s+о\s+формате\s+доставки|"
-    r"изменения\s+подтверждённых\s+владельцем\s+условий))?|"
-    r"(?:Prepare|Create)\s+(?:new\s+)?demonstration\s+materials\s+"
+    r"изменения\s+подтверждённых\s+владельцем\s+условий)|,?\s+без\s+дополнительных\s+обещаний)?|"
+    r"(?:Prepare|Create|Make)\s+(?:new\s+)?demonstration\s+materials\s+"
     r"(?:(?P<en_showing>showing)|that\s+(?P<en_show>show))\s+"
     r"(?:" + _EN_CREATED_EXAMPLES + r"|a\s+comparison\s+of\s+photographs(?:\s+in\s+the\s+context\s+of\s+feedback)?)"
     r"(?:,\s*without\s+(?:assumptions\s+about\s+(?:the\s+)?delivery\s+format|"
-    r"changing\s+owner-confirmed\s+terms))?)[.!]?", re.I,
+    r"changing\s+owner-confirmed\s+terms)|,?\s+without\s+additional\s+promises)?)[.!]?", re.I,
 )
 _DEMO_PROPOSALS = frozenset({
     'Check whether a new demo shows the intended comparison.',

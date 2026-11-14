@@ -358,3 +358,11 @@ of feedback, is also a bounded operator plan. It does not assert that an existin
 demo proves a feedback format or that participants receive comparison feedback.
 Only the complete non-copy, unquoted creation leaf gets this recognition; all
 other product-format, promise and demo assertions still require their sources.
+
+The same closed creation grammar also accepts the imperative «Сделать» / «Make»
+and the restrictive tail «без дополнительных обещаний» / «without additional
+promises» (optional comma). Reason: Telegram acceptance graph `f4bec03b` on
+`6df396a` rejected the CMO resource leaf «Сделать демонстрационный материал,
+показывающий сравнение снимков без дополнительных обещаний.» Objects, the
+whole-leaf match and every other check are unchanged; appended assertions,
+existing-demo wording and unknown objects still reject.

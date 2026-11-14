@@ -34,6 +34,8 @@ PI_PREPARED_DEMO_PLAN = ('Подготовить демонстрационны�
                          'письменного отклика, без предположений о формате доставки.')
 PRISMA_CREATED_DEMO_PLAN = ('Сформировать демонстрационный материал, показывающий сравнение снимков '
                             'в контексте обратной связи, без изменения подтверждённых владельцем условий.')
+# Telegram acceptance graph f4bec03b (6df396a): exact CMO resource_priorities leaf falsely rejected.
+TELEGRAM_6DF_DEMO_PLAN = 'Сделать демонстрационный материал, показывающий сравнение снимков без дополнительных обещаний.'
 
 
 @pytest.mark.parametrize('text', [PI_PREPARED_DEMO_PLAN,
@@ -55,6 +57,9 @@ CREATED_DEMO_PLANS = (
     'Создать демонстрационный материал, который показывает сравнение снимков.',
     'Prepare demonstration materials showing a comparison of photographs in the context of feedback, without changing owner-confirmed terms.',
     'Create demonstration materials that show a comparison of photographs.',
+    TELEGRAM_6DF_DEMO_PLAN,
+    'Сделать демонстрационный материал, показывающий сравнение снимков, без дополнительных обещаний.',
+    'Make demonstration materials showing a comparison of photographs without additional promises.',
 )
 
 
@@ -89,6 +94,14 @@ def test_created_demo_plan_does_not_exempt_public_copy_or_quoted_scope(text, cop
     'Prepare existing demonstration materials showing a comparison of photographs.',
     'Demonstration materials show a comparison of photographs in the context of feedback.',
     'Prepare demonstration materials showing proven feedback effectiveness.',
+    'Сделать существующий демонстрационный материал, показывающий сравнение снимков без дополнительных обещаний.',
+    'Сделать демонстрационный материал, показывающий эффективность курса без дополнительных обещаний.',
+    'Демонстрационный материал показывает сравнение снимков без дополнительных обещаний.',
+    'Сделать демонстрационный материал, показывающий сравнение снимков без дополнительных обещаний, '
+    'который доказывает рост записей.',
+    'Сделать демонстрационный материал, показывающий сравнение снимков без дополнительных обещаний и с гарантией результата.',
+    'Make existing demonstration materials showing a comparison of photographs without additional promises.',
+    'Make demonstration materials showing proven course effectiveness without additional promises.',
 ])
 def test_current_demo_relative_assertions_or_unknown_objects_are_not_creation_plans(text):
     with pytest.raises(StatementSemanticsError) as caught:
