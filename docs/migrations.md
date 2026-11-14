@@ -37,3 +37,7 @@ Backend больше не создает таблицы автоматическ
 Миграция `20260909_0008` сохраняет существующие ответы сессий, canonical completed responses и Task history; downgrade удаляет только claim columns/constraints и теряет сведения об активном владельце. Downgrade выполняется с остановленными backend-процессами. Подробный контракт: [standalone tasks](task_pipeline.md).
 
 Тестовые downgrade/re-upgrade выполняются только на отдельных disposable PostgreSQL databases из README, никогда на общей БД с пользовательскими данными. Уже объединённые миграции не редактируются.
+
+## B1a: `20261114_0015` (identity foundation)
+
+Ревизия `20261114_0015` идёт после `20261103_0014`. Она делает `users.telegram_id` nullable, добавляет `external_identities`, выполняет идемпотентный backfill Telegram identities и добавляет trigger'ы зеркалирования и неизменяемости `telegram_id`. Миграция только расширяет схему; `users.id` и связи владения не меняются. Downgrade отказывается работать при наличии web-only пользователей или не-Telegram identities. Merge — только после интеграции стека PR #174. Подробно: [identity foundation B1a](design/identity-foundation-b1a.md).
