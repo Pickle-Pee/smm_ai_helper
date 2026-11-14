@@ -25,12 +25,18 @@ class BusinessFactCandidate(_StrictContract):
 
 class NaturalLanguageContextProjection(_StrictContract):
     facts: tuple[BusinessFactCandidate, ...] = Field(max_length=11)
+    # Slots the provider supplied but literal grounding rejected. They carry no value,
+    # only the fact that the current request addressed this field itself.
+    # Serialized only when non-empty, so unmasked rows keep the pre-mask JSON shape.
+    masked_keys: tuple[BusinessFactKey, ...] = Field(default=(), max_length=11, exclude_if=lambda keys: not keys)
 
     @model_validator(mode="after")
     def unique_keys(self):
         keys = [fact.key for fact in self.facts]
         if len(set(keys)) != len(keys):
             raise ValueError("Duplicate projected business field")
+        if len(set(self.masked_keys)) != len(self.masked_keys) or set(self.masked_keys) & set(keys):
+            raise ValueError("Masked projection fields must be unique and unprojected")
         return self
 
 
@@ -59,12 +65,13 @@ class ProviderContextProjection(_StrictContract):
         provider = ProviderContextProjection.model_validate(self)
         supplied = {key: value for key, value in provider.model_dump().items() if value is not None}
         accepted = {key: value for key, value in supplied.items() if value in text}
+        rejected = tuple(key for key in supplied if key not in accepted)
         log.info("Copilot provider projection accepted_fields=%s rejected_fields=%s accepted_count=%s rejected_count=%s",
-                 sorted(accepted), sorted(supplied.keys() - accepted.keys()), len(accepted), len(supplied) - len(accepted))
+                 sorted(accepted), sorted(rejected), len(accepted), len(rejected))
         projection = NaturalLanguageContextProjection(facts=tuple(
             BusinessFactCandidate(key=key, value=value)
             for key, value in accepted.items()
-        ))
+        ), masked_keys=rejected)
         return validate_projection(projection, text)
 
 
@@ -91,6 +98,7 @@ def validate_projection(projection: NaturalLanguageContextProjection, text: str)
 
 def merge_projected_context(
     explicit: tuple[ContextEntry, ...], projection: NaturalLanguageContextProjection, text: str,
+    *, request_scoped: frozenset[str] = frozenset(),
 ) -> tuple[ContextEntry, ...]:
     """Presence masks projection, even for empty or unauthorized explicit entries.
 
@@ -101,6 +109,15 @@ def merge_projected_context(
     keys = {item.semantic_key for item in explicit}
     projected = tuple(entry(candidate.key, candidate.value, layer="request.projection")
                       for candidate in projection.facts if candidate.key not in keys)
-    log.info("Copilot context projection fields=%s count=%s",
-             sorted(item.semantic_key for item in projected), len(projected))
-    return (*explicit, *projected)
+    # The request itself addressed these fields, but no literal excerpt survived.
+    # An empty current-request entry masks BrandProfile/project/conversation values
+    # (ContextResolver keeps the first authorized layer and omits empty values), so a
+    # different product or audience is never substituted. Explicit answers still win.
+    # `request_scoped` keys come from sources declared in this same request (the
+    # owned site); they describe the same subject and are not masked.
+    masks = tuple(entry(key, None, layer="request.projection")
+                  for key in projection.masked_keys if key not in keys and key not in request_scoped)
+    log.info("Copilot context projection fields=%s count=%s masked_fields=%s",
+             sorted(item.semantic_key for item in projected), len(projected),
+             sorted(item.semantic_key for item in masks))
+    return (*explicit, *projected, *masks)
