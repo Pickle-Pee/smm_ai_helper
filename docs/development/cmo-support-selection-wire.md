@@ -366,3 +366,37 @@ promises» (optional comma). Reason: Telegram acceptance graph `f4bec03b` on
 показывающий сравнение снимков без дополнительных обещаний.» Objects, the
 whole-leaf match and every other check are unchanged; appended assertions,
 existing-demo wording and unknown objects still reject.
+
+## Wire v13 · closed demo-material plans
+
+`virtual_cmo.support_selection.v13` removes free-text demo-material planning from
+the CMO provider wire instead of growing the downstream creation grammar.
+
+- Every free prose branch of `MainGrowthConstraintStatement`,
+  `OtherStrategyStatement` (text and items) and the trade-off text uses
+  `DEMO_FREE_PATTERN`: the shared qualitative pattern plus forbidden words
+  `демо`, `demo`, `demos`, `proof`, `proofs` and every word starting with
+  `демонс` / `demonst` (shortest unambiguous stems; pattern 959 → 2465 chars). Built by the same trie complement
+  (`allowed_word_pattern(words, prefixes)`); `QUALITATIVE_GENERATION_PATTERN`
+  is byte-identical (SHA-256 `8cfe49af…`) and used unchanged by other modules.
+  Ordinary words such as «демографические», «демократичный» and «образец» remain.
+- `OtherStrategyStatement` items add one closed enum of six RU/EN plan sentences
+  (`cmo_demo_plans.DEMO_PLAN_NOTES`): prepare a NEW demo strictly from the
+  complete confirmed owner description without additional promises and agree it
+  with the owner; check audience understanding without treating it as evidence of
+  results; use it only after owner approval and an understanding check. They name
+  no demo contents, assert nothing about an existing demo and pass the unchanged
+  downstream checks without any exemption. Main-growth-constraint, risks,
+  trade-off items, bets and diagnoses do not offer them.
+- Current demo facts still use exact SOURCE tokens; existing descriptions are kept
+  and the demo rule is appended. The decoder validates against the same wire
+  schema, so free demo prose fails at `schema_invalid` server-side as well.
+- Canonical v1 payloads, downstream fidelity validators, the creation grammar,
+  Quality Gates and EXPERIMENTS are unchanged. Older wire versions are rejected.
+
+Reason and evidence: Telegram graph `f4bec03b` (`6df396a`) and live course
+`1df91294` (`fcbac48`) each failed on new free-text demo-plan paraphrases. Of 22
+saved live CMO responses, 6 of 7 rejected ones used demo vocabulary in free prose
+(5 of 15 accepted ones did too). Counterfactual replays of both failed responses,
+changing only the version and the offending leaves to closed plans, are fully
+accepted (9/9) by the normal executor and Quality Gates.

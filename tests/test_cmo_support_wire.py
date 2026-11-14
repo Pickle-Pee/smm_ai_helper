@@ -423,11 +423,16 @@ def test_risk_policy_only_changes_risks_prose_and_assumption_items():
                     TRADEOFFS_DEFINITION if name=='trade_offs' else 'OtherStrategyStatement')
         assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
         props=wire['$defs'][definition]['properties']
-        assert props['text']['pattern']==QUALITATIVE_PATTERN
+        # v13: free CMO prose uses the demo-free variant of the qualitative pattern.
+        from app.module_execution.executors.cmo_demo_plans import DEMO_FREE_PATTERN, DEMO_PLAN_NOTES
+        assert props['text']['pattern']==DEMO_FREE_PATTERN
         if name=='trade_offs':
             assert props['items']['items']['enum']==list(TRADEOFF_ITEM_NOTES)
+        elif definition=='OtherStrategyStatement':
+            free,plan=props['items']['items']['anyOf']
+            assert free['pattern']==DEMO_FREE_PATTERN and plan['enum']==list(DEMO_PLAN_NOTES)
         else:
-            assert props['items']['items']['pattern']==QUALITATIVE_PATTERN
+            assert props['items']['items']['pattern']==DEMO_FREE_PATTERN
     original=canonical['properties']['assumptions']
     projected=wire['properties']['assumptions']
     assert {k:v for k,v in projected.items() if k!='items'}=={k:v for k,v in original.items() if k!='items'}

@@ -18,6 +18,7 @@ from app.module_execution.executors.cmo_support_wire import (
     TRADEOFFS_DEFINITION, TRADEOFF_ITEM_NOTES, STATEMENTS, WIRE_FIELDS,
     support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
 )
+from app.module_execution.executors.cmo_demo_plans import DEMO_FREE_PATTERN, DEMO_ITEMS_NOTE, DEMO_PLAN_NOTES
 from app.module_execution.executors.numeric_quantity import has_numeric_quantity
 from app.module_execution.executors.provider_schema import nodes
 from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
@@ -62,14 +63,16 @@ def test_only_tradeoff_items_are_specialized_and_all_other_fields_are_identical(
         if key != "items":
             assert trade["properties"][key] == field
     items = trade["properties"]["items"]
-    assert {key: value for key, value in items.items() if key != "items"} == {
-        key: value for key, value in other["properties"]["items"].items() if key != "items"}
+    assert {key: value for key, value in items.items() if key not in {"items", "description"}} == {
+        key: value for key, value in other["properties"]["items"].items() if key not in {"items", "description"}}
+    assert other["properties"]["items"]["description"].endswith(DEMO_ITEMS_NOTE)
     assert items["minItems"] == 1 and items["maxItems"] == 3
     assert items["items"]["enum"] == list(TRADEOFF_ITEM_NOTES)
     assert items["items"]["minLength"] == 1 and items["items"]["maxLength"] == 300
-    assert trade["properties"]["text"]["pattern"] == QUALITATIVE_GENERATION_PATTERN
+    assert trade["properties"]["text"]["pattern"] == DEMO_FREE_PATTERN
     assert schema["properties"]["outputs"]["properties"]["trade_offs"] == {"$ref": "#/$defs/" + TRADEOFFS_DEFINITION}
-    assert all(node["pattern"] == QUALITATIVE_GENERATION_PATTERN for node in nodes(schema) if "pattern" in node)
+    # v13: every free CMO prose branch uses the demo-free variant of the qualitative pattern.
+    assert all(node["pattern"] == DEMO_FREE_PATTERN for node in nodes(schema) if "pattern" in node)
     assert "pattern" not in schema["properties"]["limitations"]["items"]
     assert canonical == contracts(req)[0]
 
@@ -268,7 +271,8 @@ def test_ordinary_demo_prose_stays_unrepaired_and_source_in_another_output_does_
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:
         asyncio.run(VirtualCMOExecutor(model_call=model, support_selection_wire=True).execute(req))
-    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    # v13 rejects free demo prose already at the wire schema (stricter than v12 semantics).
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID
 
 
 def test_demo_source_selection_does_not_grant_owner_product_authority():
@@ -406,13 +410,13 @@ def test_source_choice_actual_http_adapter_retains_small_prose_branch(monkeypatc
     assert len(calls) == 1
     schema = calls[0]["text"]["format"]["schema"]
     branch = schema["$defs"][STATEMENTS[0]]["properties"]["text"]["anyOf"]
-    assert branch[0]["pattern"] == QUALITATIVE_GENERATION_PATTERN
-    assert all(not re.fullmatch(QUALITATIVE_GENERATION_PATTERN, key) for key in branch[1]["enum"])
+    assert branch[0]["pattern"] == DEMO_FREE_PATTERN
+    assert all(not re.fullmatch(DEMO_FREE_PATTERN, key) for key in branch[1]["enum"])
     main_props = schema["$defs"][STATEMENTS[0]]["properties"]
     assert "technical selectors" in main_props["text"]["description"]
     assert "Digits are permitted ONLY" in branch[1]["description"]
     assert "THIS output" in branch[1]["description"]
-    assert main_props["items"]["description"] == SOURCE_ITEMS_DESCRIPTION
+    assert main_props["items"]["description"].startswith(SOURCE_ITEMS_DESCRIPTION)
     assert "OR exact listed SOURCE tokens" in main_props["items"]["description"]
     assert "digits are allowed ONLY" in main_props["items"]["description"]
     for definition in ("CMORisksStatement", TRADEOFFS_DEFINITION):
@@ -477,8 +481,13 @@ def test_source_metadata_digit_exception_is_advertised_only_where_selectors_exis
     items = schema["$defs"][STATEMENTS[1]]["properties"]["items"]
     assert bool(choices) == (source_size > 0)
     assert ("anyOf" in text) == (source_size > 0)
-    assert ("anyOf" in items["items"]) == (0 < source_size <= 300)
-    assert (items["description"] == SOURCE_ITEMS_DESCRIPTION) == (0 < source_size <= 300)
+    # v13: OtherStrategyStatement items always offer closed demo plans; SOURCE branch only when eligible.
+    branches = items["items"]["anyOf"]
+    source_branches = [b for b in branches if "enum" in b and b["enum"] != list(DEMO_PLAN_NOTES)]
+    assert bool(source_branches) == (0 < source_size <= 300)
+    assert branches[-1]["enum"] == list(DEMO_PLAN_NOTES)
+    assert items["description"].startswith(SOURCE_ITEMS_DESCRIPTION) == (0 < source_size <= 300)
+    assert items["description"].endswith(DEMO_ITEMS_NOTE)
     assert schema["$defs"][TRADEOFFS_DEFINITION]["properties"]["items"]["description"] != SOURCE_ITEMS_DESCRIPTION
     assert "SOURCE" not in str(schema["properties"]["assumptions"])
     assert "SOURCE" not in str(schema["properties"]["limitations"])

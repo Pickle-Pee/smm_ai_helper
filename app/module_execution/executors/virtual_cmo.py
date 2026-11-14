@@ -121,6 +121,10 @@ demo SOURCE token and a diagnostic_relation. The server renders the complete
 sample assertion and a separate prospective audience/message question. Use the
 declared diagnostic intro, HYPOTHESIS and UNKNOWN confidence; neither a sample
 nor the selected relation establishes a product effect or a current audience gap.
+Free CMO prose (texts and items) must not mention demonstration or demo materials;
+the schema rejects such words. A current demo fact uses its exact SOURCE token.
+To plan a NEW demo material in an item, choose one exact listed demo-plan sentence;
+the server keeps it unchanged. Do not describe what a planned demo will contain or show.
 Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):

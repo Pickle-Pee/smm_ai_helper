@@ -16,8 +16,9 @@ from .cmo_source_bets import BET_DEFINITION, owner_bet_choices, source_bet_state
 from .cmo_source_diagnoses import (
     DIAGNOSIS_DEFINITION, demo_diagnosis_choices, source_diagnosis_statement_schema, render_source_diagnosis,
 )
+from .cmo_demo_plans import DEMO_ITEMS_NOTE, DEMO_TEXT_NOTE, demo_free_prose, with_note
 
-WIRE_VERSION = "virtual_cmo.support_selection.v12"
+WIRE_VERSION = "virtual_cmo.support_selection.v13"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -180,11 +181,16 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
         _install_validation_policies(schema, names)
         for definition in (*STATEMENTS, *((TRADEOFFS_DEFINITION,) if "trade_offs" in names else ())):
             props = definitions[definition]["properties"]
-            props["text"] = source_text_schema(props["text"], 4000, source_choices)
+            props["text"] = demo_free_prose(source_text_schema(props["text"], 4000, source_choices))
             if definition != TRADEOFFS_DEFINITION:
                 props["items"]["items"] = source_text_schema(props["items"]["items"], 300, source_choices)
                 if "anyOf" in props["items"]["items"]:
                     props["items"]["description"] = SOURCE_ITEMS_DESCRIPTION
+                # v13: demo materials appear only as SOURCE facts or closed new-demo plans.
+                plans = definition == STATEMENTS[1]
+                props["items"]["items"] = demo_free_prose(props["items"]["items"], plans=plans)
+                props["items"]["description"] = with_note(props["items"].get("description"),
+                                                          DEMO_ITEMS_NOTE if plans else DEMO_TEXT_NOTE)
         bets = owner_bet_choices(source_choices) if "strategic_bets" in names else {}
         if bets:
             definitions[BET_DEFINITION] = source_bet_statement_schema(definitions[STATEMENTS[1]], bets)
