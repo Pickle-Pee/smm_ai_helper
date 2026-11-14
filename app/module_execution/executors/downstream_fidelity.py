@@ -108,7 +108,7 @@ _RESEARCH_RETURN = re.compile(
 _DEMO = re.compile(r"\b(?:демонстраци\w*|демо(?:[-‐‑–—]?(?:пример|образец|материал|ролик)\w*)?|proof|demonstration\w*|demos?)\b", re.I)
 _DEMO_FACT = re.compile(
     r"\b(?:существующ\w*|имеющ\w*|имеется|представлен\w*|показыва\w*|демонстриру\w*|"
-    r"подтвержда\w*|доказыва\w*|existing|available|shows?|demonstrates?|proves?|illustrates?)\b", re.I)
+    r"подтвержда\w*|доказыва\w*|existing|available|shows?|showing|demonstrates?|proves?|illustrates?)\b", re.I)
 _NONASSERTIVE_DEMO_VERBS = (
     re.compile(r"(?:^|;)\s*дополнительно\s+(?P<verb>показывать)\b", re.I),
     re.compile(r"\bесли\s+(?:(?:качественные\s+)?интервью\s+и\s+тест|тест)\s+"
@@ -120,7 +120,7 @@ _RU_CREATED_EXAMPLES = (
     rf"(?:{_RU_TASK_EXAMPLE}(?:\s+и\s+{_RU_FEEDBACK_EXAMPLE})?"
     rf"|{_RU_FEEDBACK_EXAMPLE}(?:\s+и\s+{_RU_TASK_EXAMPLE})?)"
 )
-_EN_TASK_EXAMPLE = r"(?:a\s+(?:task|assignment)\s+example|an\s+example\s+of\s+a\s+(?:task|assignment))"
+_EN_TASK_EXAMPLE = r"(?:(?:a|an)\s+(?:task|assignment)\s+example|an\s+example\s+of\s+a\s+(?:task|assignment))"
 _EN_FEEDBACK_EXAMPLE = (
     r"(?:a\s+written\s+(?:feedback|response)\s+example|an\s+example\s+of\s+"
     r"(?:written\s+feedback|a\s+written\s+response))"
@@ -130,12 +130,17 @@ _EN_CREATED_EXAMPLES = (
     rf"|{_EN_FEEDBACK_EXAMPLE}(?:\s+and\s+{_EN_TASK_EXAMPLE})?)"
 )
 _PROSPECTIVE_CREATED_DEMO = re.compile(
-    r"(?:(?:Подготовить|Создать)\s+(?:новые\s+)?демонстрационные\s+материалы,\s*"
-    r"(?:(?P<ru_showing>показывающие)|которые\s+(?P<ru_show>показывают))\s+" + _RU_CREATED_EXAMPLES +
-    r"(?:,\s*без\s+предположений\s+о\s+формате\s+доставки)?|"
+    r"(?:(?:Подготовить|Создать|Сформировать)\s+(?:(?:новые\s+)?демонстрационные\s+материалы|"
+    r"демонстрационный\s+материал),\s*"
+    r"(?:(?P<ru_showing>показывающие|показывающий)|(?:которые|который)\s+(?P<ru_show>показывают|показывает))\s+"
+    r"(?:" + _RU_CREATED_EXAMPLES + r"|сравнение\s+снимков(?:\s+в\s+контексте\s+обратной\s+связи)?)"
+    r"(?:,\s*без\s+(?:предположений\s+о\s+формате\s+доставки|"
+    r"изменения\s+подтверждённых\s+владельцем\s+условий))?|"
     r"(?:Prepare|Create)\s+(?:new\s+)?demonstration\s+materials\s+"
-    r"(?:(?P<en_showing>showing)|that\s+(?P<en_show>show))\s+" + _EN_CREATED_EXAMPLES +
-    r"(?:,\s*without\s+assumptions\s+about\s+(?:the\s+)?delivery\s+format)?)[.!]?", re.I,
+    r"(?:(?P<en_showing>showing)|that\s+(?P<en_show>show))\s+"
+    r"(?:" + _EN_CREATED_EXAMPLES + r"|a\s+comparison\s+of\s+photographs(?:\s+in\s+the\s+context\s+of\s+feedback)?)"
+    r"(?:,\s*without\s+(?:assumptions\s+about\s+(?:the\s+)?delivery\s+format|"
+    r"changing\s+owner-confirmed\s+terms))?)[.!]?", re.I,
 )
 _DEMO_PROPOSALS = frozenset({
     'Check whether a new demo shows the intended comparison.',

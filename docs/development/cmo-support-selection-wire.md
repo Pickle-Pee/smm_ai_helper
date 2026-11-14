@@ -352,3 +352,9 @@ condition. The entire unquoted leaf must match; public copy, appended assertions
 and positive validation criteria retain the owner-source checks. Other format,
 demo, promise and numeric checks still run. Wire/schema and stored v1 payloads
 are unchanged by this additional research-language form.
+
+Future creation of comparison materials, including a comparison in the context
+of feedback, is also a bounded operator plan. It does not assert that an existing
+demo proves a feedback format or that participants receive comparison feedback.
+Only the complete non-copy, unquoted creation leaf gets this recognition; all
+other product-format, promise and demo assertions still require their sources.

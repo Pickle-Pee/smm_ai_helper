@@ -32,6 +32,8 @@ CONDITIONAL_DEMO_DECISION = (
     'если понимания нет — вернуться к уточнению формата и сообщению.')
 PI_PREPARED_DEMO_PLAN = ('Подготовить демонстрационные материалы, показывающие пример задания и пример '
                          'письменного отклика, без предположений о формате доставки.')
+PRISMA_CREATED_DEMO_PLAN = ('Сформировать демонстрационный материал, показывающий сравнение снимков '
+                            'в контексте обратной связи, без изменения подтверждённых владельцем условий.')
 
 
 @pytest.mark.parametrize('text', [PI_PREPARED_DEMO_PLAN,
@@ -49,6 +51,10 @@ CREATED_DEMO_PLANS = (
     'Create new demonstration materials that show an example of a task.',
     'Prepare demonstration materials that show a written response example.',
     'Create demonstration materials showing an example of written feedback and an assignment example, without assumptions about the delivery format.',
+    PRISMA_CREATED_DEMO_PLAN,
+    'Создать демонстрационный материал, который показывает сравнение снимков.',
+    'Prepare demonstration materials showing a comparison of photographs in the context of feedback, without changing owner-confirmed terms.',
+    'Create demonstration materials that show a comparison of photographs.',
 )
 
 
@@ -58,7 +64,7 @@ def test_closed_created_demo_verb_objects_joins_preserve_nonassertive_scope(text
     validate_leaf('  ' + text + '  ')
 
 
-@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4], *CREATED_DEMO_PLANS[8:]])
 @pytest.mark.parametrize('copy_field,quoted', [(True, False), (False, True)])
 def test_created_demo_plan_does_not_exempt_public_copy_or_quoted_scope(text, copy_field, quoted):
     value = '«' + text + '»' if quoted else text
@@ -77,6 +83,12 @@ def test_created_demo_plan_does_not_exempt_public_copy_or_quoted_scope(text, cop
     'The demonstration materials that show a task example are available.',
     'Create demonstration materials that show proven feedback effectiveness.',
     'Hypothesis: demonstration materials show a task example.',
+    'Сформировать существующий демонстрационный материал, показывающий сравнение снимков.',
+    'Демонстрационный материал показывает сравнение снимков в контексте обратной связи.',
+    'Сформировать демонстрационный материал, показывающий эффективность обратной связи.',
+    'Prepare existing demonstration materials showing a comparison of photographs.',
+    'Demonstration materials show a comparison of photographs in the context of feedback.',
+    'Prepare demonstration materials showing proven feedback effectiveness.',
 ])
 def test_current_demo_relative_assertions_or_unknown_objects_are_not_creation_plans(text):
     with pytest.raises(StatementSemanticsError) as caught:
@@ -85,7 +97,7 @@ def test_current_demo_relative_assertions_or_unknown_objects_are_not_creation_pl
     validate_leaf(text, demo=(text,))
 
 
-@pytest.mark.parametrize('base', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+@pytest.mark.parametrize('base', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4], *CREATED_DEMO_PLANS[8:]])
 @pytest.mark.parametrize('suffix', [
     ' Демонстрационный образец показывает эффективность курса.',
     ' The existing demonstration proves feedback is effective.',
@@ -116,7 +128,7 @@ def test_created_demo_candidate_still_runs_other_format_and_customer_checks(text
 @pytest.mark.parametrize('module,name', [(ModuleId.VIRTUAL_CMO, 'resource_priorities'),
                                          (ModuleId.EXPERIMENTS, 'test_method')])
 @pytest.mark.parametrize('kind', ['HYPOTHESIS', 'RECOMMENDATION'])
-@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4]])
+@pytest.mark.parametrize('text', [CREATED_DEMO_PLANS[0], CREATED_DEMO_PLANS[4], *CREATED_DEMO_PLANS[8:]])
 def test_normal_downstream_created_demo_plans_pass_without_existing_proof_and_with_quality(module, name, kind, text):
     req = valid_request(module)
     def inject(payload, data):
