@@ -28,7 +28,7 @@ from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
 from app.orchestration_runtime.serialization import result_from_json, result_to_json
 from app.orchestration_runtime.service import evaluate_result
 from tests.test_cmo_generation_policy import DEMO_SOURCE, source_contracts, source_request
-from tests.test_cmo_support_wire import contracts, decode, scoped_request, wire_output
+from tests.test_cmo_support_wire import contracts, decode, owner_terms_for, scoped_request, wire_output
 
 OBSERVED_FREE_DEMO_LEAVES = (
     # Telegram f4bec03b on 6df396a, resource_priorities.items[1]
@@ -97,7 +97,7 @@ def test_schema_offers_plans_only_on_other_strategy_items():
     for definition in (STATEMENTS[0], STATEMENTS[1], TRADEOFFS_DEFINITION):
         assert defs[definition]["properties"]["text"]["pattern"] == DEMO_FREE_PATTERN
     assert schema["properties"]["wire_contract_version"]["enum"] == [WIRE_VERSION]
-    assert WIRE_VERSION == "virtual_cmo.support_selection.v13"
+    assert WIRE_VERSION == "virtual_cmo.support_selection.v14"
 
 
 @pytest.mark.parametrize("name", PLAN_OUTPUTS)
@@ -106,7 +106,7 @@ def test_closed_plan_passes_normal_executor_and_quality(name, note):
     req = scoped_request()
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"))
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], data.get("cmo_source_selection_catalog"), owner_terms=data.get("cmo_owner_terms_catalog"))
         payload["outputs"][name]["items"] = ["Interview prospective customers", note]
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
         return json.dumps(payload)
@@ -138,7 +138,7 @@ def test_executor_rejects_free_demo_plan_at_schema_stage():
     req = scoped_request()
     async def model(**kwargs):
         data = json.loads(kwargs["text"])
-        payload = wire_output(req.expected_outputs, data["support_selection_catalog"])
+        payload = wire_output(req.expected_outputs, data["support_selection_catalog"], owner_terms=data.get("cmo_owner_terms_catalog"))
         payload["outputs"]["resource_priorities"]["items"] = [OBSERVED_FREE_DEMO_LEAVES[0]]
         return json.dumps(payload)
     with pytest.raises(ExecutorOutputError) as caught:
@@ -150,7 +150,8 @@ def test_demo_source_token_and_closed_plan_coexist_on_one_output():
     req = source_request()
     _, schema, ids, parents, _, choices = source_contracts(req)
     marker = next(iter(choices))
-    payload = wire_output(req.expected_outputs, support_selection_catalog(ids, parents), choices)
+    payload = wire_output(req.expected_outputs, support_selection_catalog(ids, parents), choices,
+                          owner_terms=owner_terms_for(req))
     payload["outputs"]["resource_priorities"]["items"] = [marker, DEMO_PLAN_NOTES[1]]
     assert Draft202012Validator(schema).is_valid(payload)
     decoded = decode(req, payload)

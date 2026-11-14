@@ -22,7 +22,7 @@ from .claim_support import StrategyClaim, StoredNumericContext
 from .downstream_fidelity import FIDELITY_INSTRUCTION
 from .numeric_diagnostics import observe
 from .cmo_provider_contract import cmo_provider_schema
-from .cmo_source_selection import source_selection_catalog
+from .cmo_source_selection import owner_terms_catalog, source_selection_catalog
 from .cmo_support_wire import (
     WIRE_VERSION, support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
 )
@@ -114,6 +114,10 @@ token and test_relation selects an observable audience/message hypothesis.
 The server renders the COMPLETE source and that hypothesis as separate items,
 and selects the owner evidence on this output. The hypothesis concerns the full
 provided terms, not an isolated equipment condition or a proven marketing effect.
+Owner terms that contain a quantity are listed in cmo_owner_terms_catalog as
+TERMS:eNNN choices for strategic_bets only. The server renders the hypothesis as
+the only item and the complete terms as an exact numeric_context quote; never
+restate or shorten those terms or their numbers in prose.
 Use HYPOTHESIS and UNKNOWN confidence. Do not paraphrase source facts into prose.
 Other outputs and bet requests without an eligible owner source keep their schema.
 When strategic_diagnosis has a source-bound diagnosis schema, select an eligible
@@ -131,8 +135,13 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         if self._support_selection_wire:
             evidence = tuple(evidence)
             aliases = support_selection_catalog((e.record.evidence_id for e in evidence), parents)
-            return {**data, "support_selection_catalog": aliases,
+            data = {**data, "support_selection_catalog": aliases,
                     "cmo_source_selection_catalog": source_selection_catalog(evidence, aliases["evidence"])}
+            terms = owner_terms_catalog(evidence, aliases["evidence"], numeric_quote_catalog(
+                {e.record.evidence_id: e for e in evidence}, parents))
+            if terms and "strategic_bets" in request.expected_outputs:
+                data["cmo_owner_terms_catalog"] = terms
+            return data
         if not self._numeric_quote_catalog_enabled:
             return data
         return {**data,
@@ -158,7 +167,8 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         aliases = support_selection_catalog((e.record.evidence_id for e in evidence), parents)
         return support_selection_wire_schema(validation_schema, request.expected_outputs,
             (e.record.evidence_id for e in evidence), parents, catalog,
-            source_selection_catalog(evidence, aliases["evidence"]))
+            source_selection_catalog(evidence, aliases["evidence"]),
+            owner_terms_catalog(evidence, aliases["evidence"], catalog))
 
     def decode_wire_payload(self, request, payload, evidence):
         evidence = tuple(evidence)
@@ -169,8 +179,8 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
         aliases = support_selection_catalog(evidence_ids, parents)
         return decode_support_selection_wire(payload, canonical, request.expected_outputs,
-            evidence_ids, parents, catalog, source_selection_catalog(evidence,
-                aliases["evidence"]))
+            evidence_ids, parents, catalog, source_selection_catalog(evidence, aliases["evidence"]),
+            owner_terms_catalog(evidence, aliases["evidence"], catalog))
 
     def provider_schema_for(self, request, validation_schema):
         if self._support_selection_wire:

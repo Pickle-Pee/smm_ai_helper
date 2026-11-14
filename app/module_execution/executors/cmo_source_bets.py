@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 from app.module_execution.errors import ModuleExecutionContractError
+from .cmo_source_selection import TERMS_PREFIX
 
 
 BET_DEFINITION = "CMOSourceBoundBetStatement"
@@ -19,11 +20,18 @@ BET_RELATIONS = {
 }
 
 
-def owner_bet_choices(source_choices):
-    """Project the already validated typed catalog, never infer authority from prose."""
-    return {key: row for key, row in source_choices.items()
-            if row["input_key"] in {"product_truth", "confirmed_business_fact"}
-            and row["source_class"] == "FIRST_PARTY" and len(row["text"]) <= 300}
+def owner_bet_choices(source_choices, owner_terms=None):
+    """Project the already validated typed catalogs, never infer authority from prose.
+
+    SOURCE choices render complete qualitative owner terms as an item. TERMS
+    choices (complete owner terms containing a quantity) render only as an
+    exact numeric_context quote, because canonical items stay digit-free.
+    """
+    choices = {key: row for key, row in source_choices.items()
+               if row["input_key"] in {"product_truth", "confirmed_business_fact"}
+               and row["source_class"] == "FIRST_PARTY" and len(row["text"]) <= 300}
+    choices.update((key, row) for key, row in (owner_terms or {}).items() if key.startswith(TERMS_PREFIX))
+    return dict(sorted(choices.items()))
 
 
 def source_bet_statement_schema(base, choices):
@@ -35,7 +43,8 @@ def source_bet_statement_schema(base, choices):
     props["kind"] = {"type": "string", "const": "HYPOTHESIS"}
     props["confidence"] = {"type": "string", "enum": ["UNKNOWN"]}
     props["items"] = {"type": "array", "minItems": 1, "maxItems": 1,
-        "description": "Choose one complete owner source and an observable audience/message hypothesis about the FULL supplied terms, not an isolated condition or a proven result.",
+        "description": ("Choose one complete owner source and an observable audience/message hypothesis about the FULL supplied terms, not an isolated condition or a proven result. "
+                        "A SOURCE choice renders the complete terms as an item; a TERMS choice renders the complete terms, including their quantities, only as an exact numeric_context quote."),
         "items": {"type": "object", "properties": {
             "source_choice": {"type": "string", "enum": sorted(choices)},
             "test_relation": {"type": "string", "enum": list(BET_RELATIONS)},
@@ -49,4 +58,7 @@ def render_source_bet(item, choices):
             or type(item["test_relation"]) is not str or item["test_relation"] not in BET_RELATIONS):
         raise ModuleExecutionContractError("Invalid CMO source-bound bet")
     row = choices[item["source_choice"]]
-    return [row["text"], BET_RELATIONS[item["test_relation"]]], row["evidence_id"]
+    relation = BET_RELATIONS[item["test_relation"]]
+    if item["source_choice"].startswith(TERMS_PREFIX):
+        return [relation], row["evidence_id"], [{"support_id": row["evidence_id"], "quote": row["text"]}]
+    return [row["text"], relation], row["evidence_id"], []

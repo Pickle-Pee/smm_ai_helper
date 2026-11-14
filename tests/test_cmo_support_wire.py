@@ -49,11 +49,22 @@ def contracts(req):
         requirement=VirtualCMOExecutor(model_call=None).support_requirement_for(req))
     catalog = numeric_quote_catalog({e.record.evidence_id:e for e in evidence}, parents)
     source_choices = source_selection_catalog(evidence, support_selection_catalog(ids, parents)["evidence"])
-    wire = support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, catalog, source_choices)
+    wire = support_selection_wire_schema(canonical, req.expected_outputs, ids, parents, catalog, source_choices,
+                                         owner_terms_for(req))
     return canonical, wire, ids, parents, catalog
 
 
-def wire_output(names, choices, source_choices=None):
+def owner_terms_for(req):
+    """The executor's TERMS catalog: complete owner terms carrying a quantity."""
+    from app.module_execution.executors.cmo_source_selection import owner_terms_catalog
+    evidence = first_party_evidence(req, scoped_facts(req))
+    ids = tuple(e.record.evidence_id for e in evidence)
+    parents = parent_claims(req)
+    catalog = numeric_quote_catalog({e.record.evidence_id: e for e in evidence}, parents)
+    return owner_terms_catalog(evidence, support_selection_catalog(ids, parents)["evidence"], catalog)
+
+
+def wire_output(names, choices, source_choices=None, owner_terms=None):
     parents, evidence = choices["parents"], choices["evidence"]
     value = {"wire_contract_version":WIRE_VERSION, "assumptions":[], "limitations":[],
         "outputs":{name:{"text":RISK_TEXT_NOTES[0] if name == "risks" else "Validate supplied demand",
@@ -66,7 +77,7 @@ def wire_output(names, choices, source_choices=None):
             "additional_evidence_support":{alias:False for alias in evidence}}
             for name in names}}
     from app.module_execution.executors.cmo_source_bets import BET_INTROS, owner_bet_choices
-    bets = owner_bet_choices(source_choices or {})
+    bets = owner_bet_choices(source_choices or {}, owner_terms)
     if 'strategic_bets' in names and bets:
         value['outputs']['strategic_bets'].update(text=BET_INTROS[0], confidence='UNKNOWN',
             items=[{'source_choice':next(iter(bets)), 'test_relation':'audience_value_ru'}])
@@ -84,7 +95,8 @@ def decode(req, payload):
     canonical, _, ids, parents, catalog = contracts(req)
     evidence = first_party_evidence(req, scoped_facts(req))
     source_choices = source_selection_catalog(evidence, support_selection_catalog(ids, parents)["evidence"])
-    return decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, catalog, source_choices)
+    return decode_support_selection_wire(payload, canonical, req.expected_outputs, ids, parents, catalog, source_choices,
+                                         owner_terms_for(req))
 
 
 def test_legacy_provider_allows_duplicate_arrays_but_new_wire_forbids_array_fields():
@@ -109,7 +121,7 @@ def test_all_outputs_typed_citations_original_gates_and_v1_roundtrip(parents_pre
         calls.append(deepcopy(kwargs));data=json.loads(kwargs["text"])
         assert "numeric_quote_catalog" not in data and "numeric_quote_catalog_guidance" not in data
         choices=data["support_selection_catalog"]
-        payload=wire_output(req.expected_outputs,choices)
+        payload=wire_output(req.expected_outputs,choices,owner_terms=data.get("cmo_owner_terms_catalog"))
         quote_id=next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"]=="product_truth")
         first=payload["outputs"][req.expected_outputs[0]]
         if not parents_present:
@@ -139,7 +151,7 @@ def test_primary_and_additional_true_alias_name_one_citation_without_mutating_wi
     req=scoped_request(parents_present)
     _, wire, ids, parents, _=contracts(req)
     choices=support_selection_catalog(ids,parents)
-    payload=wire_output(req.expected_outputs,choices)
+    payload=wire_output(req.expected_outputs,choices,owner_terms=owner_terms_for(req))
     name=req.expected_outputs[0];statement=payload["outputs"][name]
     family="parents" if parents_present else "evidence"
     primary=statement["primary_parent_key" if parents_present else "primary_evidence_key"]
@@ -227,7 +239,7 @@ def test_thirty_three_explicit_sources_fail_original_canonical_bound_without_tru
     req=replace(req,context_packet=replace(req.context_packet,known_facts=(*req.context_packet.known_facts,*extra)))
     async def model(**kwargs):
         data=json.loads(kwargs["text"]);choices=data["support_selection_catalog"]
-        payload=wire_output(req.expected_outputs,choices)
+        payload=wire_output(req.expected_outputs,choices,owner_terms=data.get("cmo_owner_terms_catalog"))
         first=payload["outputs"][req.expected_outputs[0]]
         chosen=list(choices["evidence"])[:33]
         first["primary_evidence_key"]=chosen[0]
@@ -257,7 +269,7 @@ def test_legacy_uncited_numeric_pair_is_still_rejected():
 def test_prose_patterns_and_unicode_server_guard_remain_authoritative(field,text,provider_valid):
     req=scoped_request()
     async def model(**kwargs):
-        payload=wire_output(req.expected_outputs,json.loads(kwargs["text"])["support_selection_catalog"])
+        payload=wire_output(req.expected_outputs,json.loads(kwargs["text"])["support_selection_catalog"],owner_terms=json.loads(kwargs["text"]).get("cmo_owner_terms_catalog"))
         payload["outputs"][req.expected_outputs[0]][field]=[text] if field=="items" else text
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload) is provider_valid
         return json.dumps(payload)
@@ -285,7 +297,7 @@ def test_default_off_configuration_and_shared_registry_wiring(monkeypatch,enable
 def test_provider_mutation_cannot_weaken_wire_or_original_validation():
     req=scoped_request()
     async def model(**kwargs):
-        payload=wire_output(req.expected_outputs,json.loads(kwargs["text"])["support_selection_catalog"])
+        payload=wire_output(req.expected_outputs,json.loads(kwargs["text"])["support_selection_catalog"],owner_terms=json.loads(kwargs["text"]).get("cmo_owner_terms_catalog"))
         kwargs["response_schema"].clear()
         payload["outputs"][req.expected_outputs[0]]["text"]=""
         return json.dumps(payload)
@@ -328,7 +340,7 @@ def test_actual_http_adapter_and_duplicate_json_key_rejection(monkeypatch,duplic
     def respond(wire):
         body=json.loads(wire.content);calls.append(body)
         data=json.loads(body["input"][1]["content"])
-        payload=wire_output(req.expected_outputs,data["support_selection_catalog"])
+        payload=wire_output(req.expected_outputs,data["support_selection_catalog"], owner_terms=data.get("cmo_owner_terms_catalog"))
         raw=json.dumps(payload)
         if duplicate_json:raw=raw.replace('"additional_parent_support": {"p000": false}',
             '"additional_parent_support": {"p000": false, "p000": true}',1)
@@ -356,7 +368,7 @@ def test_numeric_context_parent_pair_is_an_explicit_additional_parent_citation()
     numeric_id=parent.normalized_result.claims[1].claim_id
     async def model(**kwargs):
         data=json.loads(kwargs["text"]);choices=data["support_selection_catalog"]
-        payload=wire_output(req.expected_outputs,choices)
+        payload=wire_output(req.expected_outputs,choices,owner_terms=data.get("cmo_owner_terms_catalog"))
         first=payload["outputs"][req.expected_outputs[0]]
         first["primary_parent_key"]=next(alias for alias,identity in choices["parents"].items() if identity!=numeric_id)
         first["numeric_context"]=[{"support_id":numeric_id,"quote":PRICE}]
@@ -374,7 +386,7 @@ def test_context_selected_source_participates_in_confidence_and_attribution():
     req=replace(req,context_packet=replace(req.context_packet,known_facts=facts))
     async def model(**kwargs):
         data=json.loads(kwargs["text"])
-        payload=wire_output(req.expected_outputs,data["support_selection_catalog"])
+        payload=wire_output(req.expected_outputs,data["support_selection_catalog"], owner_terms=data.get("cmo_owner_terms_catalog"))
         identity=next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"]=="product_truth")
         payload["outputs"][req.expected_outputs[0]]["numeric_context"]=[{"support_id":identity,"quote":PRICE}]
         return json.dumps(payload)
@@ -417,8 +429,11 @@ def test_risk_policy_only_changes_risks_prose_and_assumption_items():
     assert risk['properties']['items']['items']['enum']==list(RISK_ITEM_NOTES)
     assert wire['properties']['outputs']['properties']['risks']=={'$ref':'#/$defs/'+RISKS_DEFINITION}
     from app.module_execution.executors.cmo_provider_contract import QUALITATIVE_PATTERN
+    # The fixture's owner terms carry a price, so bets use the closed TERMS recipe.
+    assert owner_terms_for(req)
+    assert wire['properties']['outputs']['properties']['strategic_bets']=={'$ref':'#/$defs/CMOSourceBoundBetStatement'}
     for name in req.expected_outputs:
-        if name=='risks':continue
+        if name in {'risks','strategic_bets'}:continue
         definition=('MainGrowthConstraintStatement' if name=='main_growth_constraint' else
                     TRADEOFFS_DEFINITION if name=='trade_offs' else 'OtherStrategyStatement')
         assert wire['properties']['outputs']['properties'][name]=={'$ref':'#/$defs/'+definition}
@@ -446,7 +461,7 @@ def test_closed_risk_and_validation_assumptions_preserve_citations_context_and_g
         fact('economics','Owner economic inputs supplied.'),fact('market_research','Competitor descriptions supplied.'))))
     async def model(**kwargs):
         data=json.loads(kwargs['text'])
-        payload=wire_output(req.expected_outputs,data['support_selection_catalog'])
+        payload=wire_output(req.expected_outputs,data['support_selection_catalog'], owner_terms=data.get("cmo_owner_terms_catalog"))
         risk=payload['outputs']['risks']
         risk['text']=RISK_TEXT_NOTES[language]
         risk['items']=[RISK_ITEM_NOTES[language*3]]
@@ -479,7 +494,7 @@ def test_risk_and_assumption_policies_do_not_generate_unsupported_factual_premis
     req=scoped_request();calls=[]
     async def model(**kwargs):
         calls.append(True)
-        payload=wire_output(req.expected_outputs,json.loads(kwargs['text'])['support_selection_catalog'])
+        payload=wire_output(req.expected_outputs,json.loads(kwargs["text"])["support_selection_catalog"],owner_terms=json.loads(kwargs["text"]).get("cmo_owner_terms_catalog"))
         if location=='risk_text':payload['outputs']['risks']['text']=text
         elif location=='risk_item':payload['outputs']['risks']['items']=[text]
         else:payload['assumptions']=[text]
