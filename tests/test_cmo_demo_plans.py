@@ -97,7 +97,7 @@ def test_schema_offers_plans_only_on_other_strategy_items():
     for definition in (STATEMENTS[0], STATEMENTS[1], TRADEOFFS_DEFINITION):
         assert defs[definition]["properties"]["text"]["pattern"] == DEMO_FREE_PATTERN
     assert schema["properties"]["wire_contract_version"]["enum"] == [WIRE_VERSION]
-    assert WIRE_VERSION == "virtual_cmo.support_selection.v14"
+    assert WIRE_VERSION == "virtual_cmo.support_selection.v15"
 
 
 @pytest.mark.parametrize("name", PLAN_OUTPUTS)

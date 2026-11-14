@@ -427,3 +427,21 @@ v14 keeps the canonical rule and adds a second, closed choice for bets only:
 
 Canonical v1 payloads, `validate_numeric_context`, Quality Gates and EXPERIMENTS
 are unchanged. Older wire versions are rejected.
+
+## Wire v15 · no schema keys or bare labels in free prose
+
+In the same bakery run the model returned a bet item that was the technical key
+`audience_understanding_ru` and summaries consisting of the single word
+`RECOMMENDATION` / `HYPOTHESIS`; the decoder and downstream checks accepted them.
+
+v15 tightens only the free CMO prose branch (statement text, items and the
+trade-off summary; the same branch already excludes demo vocabulary since v13):
+
+- `_` is neither a letter nor a separator, so schema keys cannot be written;
+- at least two words are required, so a kind label cannot replace content.
+
+The provider applies the pattern during generation and the decoder validates the
+same wire schema, so a leak fails at `schema_invalid` instead of reaching storage.
+Closed enums (risks, trade-off items, bet and diagnosis recipes, demo plans) are
+unchanged. The shared `QUALITATIVE_GENERATION_PATTERN` used by other modules is
+byte-identical. Older wire versions are rejected.

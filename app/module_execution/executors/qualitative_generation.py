@@ -8,6 +8,9 @@ _ALPHABET = "abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрст�
 _LETTERS = "A-Za-zА-Яа-яЁё"
 _WORD_CHARACTER = f"[{_LETTERS}]"
 _SEPARATOR = f"[^{_LETTERS}0-9]"
+# Human prose never needs "_": excluding it from separators rejects schema keys
+# such as audience_understanding_ru wherever this separator is used.
+PROSE_SEPARATOR = f"[^{_LETTERS}0-9_]"
 
 
 def _character_class(letters):
@@ -73,8 +76,14 @@ def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=()):
     return suffix(trie, root=True)
 
 
-def generation_pattern(word_pattern):
-    return "^" + _SEPARATOR + "*(?:" + word_pattern + "(?:" + _SEPARATOR + "+" + word_pattern + ")*)?" + _SEPARATOR + "*$"
+def generation_pattern(word_pattern, *, separator=_SEPARATOR, min_words=0):
+    """Anchor allowed words; min_words=2 rejects bare labels such as RECOMMENDATION."""
+    if min_words not in (0, 2):
+        raise ValueError("Unsupported minimum word count")
+    if min_words == 2:
+        return ("^" + separator + "*" + word_pattern + "(?:" + separator + "+" + word_pattern + ")+"
+                + separator + "*$")
+    return "^" + separator + "*(?:" + word_pattern + "(?:" + separator + "+" + word_pattern + ")*)?" + separator + "*$"
 
 
 # Word branches must be maximal. Repeating adjacent allowed prefixes would
