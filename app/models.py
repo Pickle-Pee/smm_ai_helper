@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -36,11 +37,20 @@ class JobStatus(str, Enum):
 
 
 class User(Base):
+    """The single internal principal (``users.id``) for every channel.
+
+    ``telegram_id`` is NULL for a future web-only user and is never invented.
+    Once written it is immutable (database trigger, migration 20261114_0015).
+    """
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("telegram_id", name="users_telegram_id_key"),)
+    __table_args__ = (
+        UniqueConstraint("telegram_id", name="users_telegram_id_key"),
+        # Target of the composite FK that pins a Telegram identity to this user's own id.
+        UniqueConstraint("id", "telegram_id", name="uq_users_id_telegram_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -59,6 +69,46 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+
+class ExternalIdentity(Base):
+    """A verified external identity bound to exactly one ``users.id``.
+
+    Rows are verified-only (``verified_at`` is required). B1a writes Telegram
+    rows exclusively from PostgreSQL: the migration backfill and the
+    ``users_mirror_telegram_identity`` trigger on user insert. A Telegram row's
+    ``(user_id, telegram_id)`` must equal its user's own ``(id, telegram_id)``.
+    No ORM relationship is declared; nothing in the AI core navigates it.
+    """
+    __tablename__ = "external_identities"
+    __table_args__ = (
+        UniqueConstraint("provider", "subject", name="uq_external_identities_provider_subject"),
+        ForeignKeyConstraint(
+            ["user_id", "telegram_id"], ["users.id", "users.telegram_id"],
+            name="fk_external_identities_user_telegram", ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "provider ~ '^(telegram|email|oidc:[a-z0-9][a-z0-9._-]{0,58})$'",
+            name="ck_external_identities_provider",
+        ),
+        CheckConstraint(
+            "CASE WHEN provider = 'telegram' "
+            "THEN telegram_id IS NOT NULL AND telegram_id > 0 AND subject = telegram_id::text "
+            "ELSE telegram_id IS NULL AND length(subject) BETWEEN 1 AND 255 AND subject = btrim(subject) END",
+            name="ck_external_identities_subject",
+        ),
+        Index("ix_external_identities_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE", name="fk_external_identities_user_id"), nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class OwnedProductSnapshotRecord(Base):
