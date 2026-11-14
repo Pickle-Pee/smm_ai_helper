@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.module_execution.errors import ModuleExecutionContractError
 from .claim_premises import factual_premise_ranges, asserts_no_follow_up, source_follow_up
 from app.module_execution.executors.positioning_strategy import (
-    safe_strategy_statement, build_strategy_choices, STRATEGY_SOURCE_ROLES, source_fact_units, POSITIONING_OUTPUT_PURPOSES,
+    safe_strategy_statement, build_strategy_choices, STRATEGY_SOURCE_ROLES, POSITIONING_OUTPUT_PURPOSES,
     citation_role_allowed,
 )
 
@@ -325,36 +325,13 @@ def draft_spans(text):
     return spans
 
 
-def source_units_for(text, ids, evidence, spans, output_name):
-    """Resolve typed source predicates only for an entire eligible owner source."""
-    tokens = draft_tokens(text)
-    offsets = [0]
-    for token in tokens:
-        offsets.append(offsets[-1] + len(token))
-    for identity in ids:
-        source = evidence[identity]
-        if (source["role"] != "product_truth" or source["text"] != text
-                or not eligible_source(output_name, "product", ReviewEvidence(**source))):
-            continue
-        planned = source_fact_units(text)
-        if not planned:
-            continue
-        units = {}
-        for unit in planned:
-            positions = [index for index in range(len(tokens))
-                         if offsets[index] < unit["end_char"] and offsets[index + 1] > unit["start_char"]]
-            if not positions:
-                raise ModuleExecutionContractError("Invalid source unit range")
-            anchor = "fact_" + unit["unit_id"]
-            spans[anchor] = (positions[0], positions[-1] + 1)
-            units[unit["unit_id"]] = {"label": unit["label"], "span_id": anchor,
-                                      "evidence_ids": [identity]}
-        return units
-    return {}
-
-
 def review_contract(rows, evidence):
-    """Closed verdicts: the server owns both proof types and known source units."""
+    """Closed verdicts: the server owns both proof types.
+
+    No source text is decomposed by recognizing a particular owner wording, so
+    every output uses free atoms over the complete text. The empty "units" and
+    "known_facts" fields keep the scoped_verdicts.v5 shape unchanged.
+    """
     from .serialization import fingerprint
     from app.module_execution.executors.support_schema import check_schema_bounds
 
@@ -375,7 +352,6 @@ def review_contract(rows, evidence):
             eligible_source(name, category, ReviewEvidence(**evidence[identity])) for category in categories
         ) or identity in strategy_ids]
         spans = draft_spans(row["text"])
-        units = source_units_for(row["text"], ids, evidence, spans, name)
         prospective = any(row["text"].strip() == choice["text"] for choice in authorized_choices)
         source_fact = any(row["text"] == evidence[identity]["text"] and any(
             eligible_source(name, category, ReviewEvidence(**evidence[identity])) for category in categories
@@ -386,37 +362,26 @@ def review_contract(rows, evidence):
         source_view = {}
         for identity in ids:
             source = evidence[identity]
-            source_view[identity] = {**source, "known_facts": [{
-                "unit_id": unit["unit_id"], "label": unit["label"],
-                "quote": source["text"][unit["start_char"]:unit["end_char"]],
-            } for unit in source_fact_units(source["text"]) if source["role"] == "product_truth"]}
+            source_view[identity] = {**source, "known_facts": []}
         outputs[name] = {"spans": {identity: "".join(tokens[start:end])
                                    for identity, (start, end) in spans.items()},
-                         "units": units, "evidence": source_view,
+                         "units": {}, "evidence": source_view,
                          "strategy_choices": authorized_choices,
                          "audit_scope": scope,
                          "empirical_validation": "REQUIRED" if prospective else "NOT_ASSESSED",
                          "declared_kind": row.get("kind", "HYPOTHESIS"),
                          "purpose": POSITIONING_OUTPUT_PURPOSES.get(name, "Supply the named output without inventing facts.")}
 
-        def claim_schema(unit_id, anchor_ids, source_ids, *, prescribed=False):
-            fields = {
-                "span_id": {"type": "string", "enum": anchor_ids},
-                "unit_id": {"type": "string", "enum": [unit_id]},
-                "verdict": {"type": "string", "enum": verdicts},
-                "support_ids": {"type": "array", "items": {"type": "string", **({"enum": source_ids} if source_ids else {})},
-                                "maxItems": len(source_ids) if prescribed else min(len(source_ids), 8)},
-            }
-            if prescribed:
-                fields["support_ids"]["minItems"] = len(source_ids)
-            return {"type": "object", "properties": fields, "required": list(fields), "additionalProperties": False}
-
-        items = ({"anyOf": [claim_schema(identity, [unit["span_id"]], unit["evidence_ids"], prescribed=True)
-                            for identity, unit in units.items()]} if units
-                 else claim_schema("free", list(spans), ids))
+        atom = {
+            "span_id": {"type": "string", "enum": list(spans)},
+            "unit_id": {"type": "string", "enum": ["free"]},
+            "verdict": {"type": "string", "enum": verdicts},
+            "support_ids": {"type": "array", "items": {"type": "string", **({"enum": ids} if ids else {})},
+                            "maxItems": min(len(ids), 8)},
+        }
+        items = {"type": "object", "properties": atom, "required": list(atom), "additionalProperties": False}
         fields = {"atoms_complete": {"type": "boolean"}, "output_fulfilled": {"type": "boolean"},
-                  "claims": {"type": "array", "minItems": len(units) if units else 1,
-                             "maxItems": len(units) if units else 64, "items": items}}
+                  "claims": {"type": "array", "minItems": 1, "maxItems": 64, "items": items}}
         properties[name] = {"type": "object", "properties": fields, "required": list(fields), "additionalProperties": False}
     root = {"draft_fingerprint": {"type": "string", "enum": [digest]},
             "assessment": {"type": "string", "enum": ["APPROVE", "REJECT", "UNCERTAIN"]},
@@ -456,22 +421,13 @@ async def review_positioning(model_call, result, evidence):
         reviews = []
         for name, reviewed in report["reviews"].items():
             view = data["outputs"][name]
-            expected_units = view["units"]
-            unit_ids = [atom["unit_id"] for atom in reviewed["claims"]]
-            if expected_units and (len(unit_ids) != len(set(unit_ids)) or set(unit_ids) != set(expected_units)):
-                raise ValueError("Source unit coverage mismatch")
             tokens = draft_tokens(draft[name].text)
             anchors = draft_spans(draft[name].text)
-            source_units_for(draft[name].text, list(view["evidence"]), evidence, anchors, name)
             claims = []
             for atom in reviewed["claims"]:
                 start, end = anchors[atom["span_id"]]
                 if len(atom["support_ids"]) != len(set(atom["support_ids"])):
                     raise ValueError("Duplicate source")
-                if expected_units:
-                    unit = expected_units[atom["unit_id"]]
-                    if atom["span_id"] != unit["span_id"] or set(atom["support_ids"]) != set(unit["evidence_ids"]):
-                        raise ValueError("Source unit identity mismatch")
                 span = "".join(tokens[start:end])
                 char_start = len("".join(tokens[:start]))
                 proposal = strategy_supports(draft[name], span, char_start, char_start + len(span),

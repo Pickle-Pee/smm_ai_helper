@@ -199,12 +199,12 @@ there is no suitable exact assertion or requested slot, omit the qualified claim
 Before writing demand_context, value_proposition, differentiation and
 positioning_statement, separate the proposed marketing angle from factual product
 terms. demand_context describes a need to investigate, not a product exemption.
-value_proposition proposes a benefit to test, not a promise that the course gives
-skills. differentiation proposes a comparison to validate, not a claim that a
+value_proposition proposes a benefit to test, not a promise that the product
+delivers an outcome. differentiation proposes a comparison to validate, not a claim that a
 product is fully usable under particular conditions. positioning_statement
 recommends an angle, not a summary that strengthens the product's commitments.
-Use explicit test language such as "Проверить интерес к практике фотографии."
-or "Тестировать акцент на применении навыков." Only include a factual premise
+Use explicit test language such as "Тестировать акцент на полноте условий предложения."
+or "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору." Only include a factual premise
 when its actual cited source establishes it; HYPOTHESIS and RECOMMENDATION do
 not authorize new product properties or audience facts.
 The server supplies positioning_strategy_options for each output. For QUALITATIVE
@@ -232,7 +232,7 @@ its distinct marketing question or testable angle. A source saying practical
 tasks does not establish homework, and written feedback does not establish
 personal feedback. An unsupplied audience preference remains a question to test.
 For claim_risks, describe the uncertainty neutrally, for example
-"Уточнить, что именно получает участник после курса." Avoid quoting or negating
+"Уточнить у владельца, что именно входит в предложение." Avoid quoting or negating
 qualification terms in free-text risk descriptions.
 Supplied assertions are literal alternatives; their existence alone is not evidence. If ANY quantity is needed, including a supplied
 duration, use its product source key or an ENTIRE exact non-product source

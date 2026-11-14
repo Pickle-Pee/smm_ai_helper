@@ -25,10 +25,10 @@ def test_output_purposes_cover_exactly_the_positioning_contract():
 
 
 @pytest.mark.parametrize("text", [
-    "Test whether beginners value knowing what to practice next.",
-    "Ask participants whether the timing meets their needs.",
+    "Test which task the audience wants to complete when choosing.",
+    "Ask the audience whether the stated conditions meet their needs.",
     "Гипотеза: аудитории может быть важна ясность следующего шага.",
-    "Проверить интерес к практике фотографии.",
+    "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору.",
     "Проверить, нужен ли аудитории онлайн-формат.",
     "Ask whether participants want homework.",
     "Test whether beginners value personal feedback.",
@@ -54,16 +54,16 @@ def test_closed_questions_preserve_useful_hypotheses_and_recommendations(text):
     "Гипотеза: занятия проходят онлайн.",
     "Ask whether participants want homework supplied by the course.",
     "Проверить, нужен ли аудитории онлайн-формат, который входит в курс.",
-    "Проверить интерес к практике фотографии. Курс аккредитован.",
+    "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору. Курс аккредитован.",
     "Test whether beginners value personal feedback. The instructor is certified.",
     "Test whether beginners value personal feedback, which we provide.",
     "No action is needed after the workshop.",
     "Никаких дальнейших действий не потребуется.",
     "Bounded supported hypothesis: value_proposition",
     "Explore a useful angle.",
-    "Проверить\u200b интерес к практике фотографии.",
-    "Проверить интерес к практике фотогрaфии.",
-    "Проверить интерес к практике фотографии.\x00",
+    "Проверить,\u200b какие ситуации заставляют аудиторию искать альтернативу текущему выбору.",
+    "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбoру.",
+    "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору.\x00",
     "",
     "   ",
     None,
@@ -73,7 +73,7 @@ def test_unknown_or_modified_language_is_not_approved_by_a_hypothesis_label(text
 
 
 def test_positive_exact_membership_does_not_normalize_internal_unicode_whitespace():
-    text = "Проверить интерес к практике фотографии."
+    text = "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору."
     assert safe_strategy_statement(text)
     assert not safe_strategy_statement(text.replace(" ", "\u00a0", 1))
 
@@ -84,6 +84,26 @@ COURSE_TRUTH = (
 )
 CERAMICS_TRUTH = "Материалы и обжиг включены. Участники забирают изделия после обжига в другой день."
 
+# Real Telegram-shaped slots: lower-case starts, genitive product phrases,
+# trailing periods and owner conditions joined by ";".
+DOMAINS = {
+    "course": ("Курс мобильной фотографии ФотоСтарт", "Начинающие взрослые", COURSE_TRUTH),
+    "ceramics": ("Мастер-класс по керамике Тёплая глина", "Взрослые без опыта лепки", CERAMICS_TRUTH),
+    "bakery": ("пекарни «Хлебный двор», которая продаёт хлеб по предзаказу.",
+               "жители района, которые покупают свежий хлеб к выходным.",
+               "заказ принимается накануне вечером; хлеб забирают самовывозом из пекарни в субботу утром, доставки нет."),
+    "b2b": ("сервиса бухгалтерского сопровождения «Баланс» для небольших компаний.",
+            "владельцы небольших компаний без штатного бухгалтера.",
+            "договор заключается минимум на квартал; первичные документы клиент передаёт сам; налоговые споры не ведём."),
+    "dentist": ("стоматологической клиники «Улыбка» у метро.",
+                "взрослые, которые откладывают визит к стоматологу.",
+                "приём только по записи; стоимость лечения определяется после осмотра."),
+}
+NON_EDUCATION = ("bakery", "b2b", "dentist")
+EDUCATION_VOCABULARY = ("курс", "обучен", "практик", "навык", "участник", "заняти", "урок", "знакомств",
+                        "ученик", "студент", "мастер-класс", "learn", "practi", "beginner", "participant",
+                        "course", "lesson", "skill")
+
 
 def choice_evidence(truth=COURSE_TRUTH, product="Курс ФотоСтарт", audience="Начинающие фотографы"):
     return {
@@ -91,6 +111,21 @@ def choice_evidence(truth=COURSE_TRUTH, product="Курс ФотоСтарт", a
         "evd_audience": {"role": "audience", "text": audience},
         "evd_truth": {"role": "product_truth", "text": truth},
     }
+
+
+def domain_choices(domain):
+    product, audience, truth = DOMAINS[domain]
+    return build_strategy_choices(choice_evidence(truth, product, audience))
+
+
+def template_shape(domain):
+    """Rendered choices with the quoted owner slots replaced by placeholders."""
+    from app.module_execution.executors.positioning_strategy import _quoted
+
+    product, audience, _ = DOMAINS[domain]
+    return {name: [(row["text"].replace(_quoted(product), "«PRODUCT»").replace(_quoted(audience), "«AUDIENCE»"),
+                    row["required_source_ids"]) for row in rows]
+            for name, rows in domain_choices(domain).items()}
 
 
 def test_request_scoped_choices_form_a_positioning_proposal_with_exact_identity_and_audience():
@@ -101,42 +136,64 @@ def test_request_scoped_choices_form_a_positioning_proposal_with_exact_identity_
     proposed, = choices["positioning_statement"]
     assert "«Курс ФотоСтарт»" in proposed["text"]
     assert "«Начинающие фотографы»" in proposed["text"]
-    assert "в категории «освоение новой практики»" in proposed["text"]
-    assert "письменная обратная связь как ориентир для практики" in proposed["text"]
+    assert "полное изложение условий владельца без сокращений" in proposed["text"]
     assert proposed["required_source_ids"] == ["evd_audience", "evd_identity", "evd_truth"]
     assert choices["target"][0]["required_source_ids"] == ["evd_audience", "evd_identity"]
 
 
-def test_course_and_ceramics_have_distinct_source_bound_value_and_difference_hypotheses():
-    course = build_strategy_choices(choice_evidence())
-    ceramics = build_strategy_choices(choice_evidence(CERAMICS_TRUTH, "Мастер-класс Тёплая глина", "Взрослые без опыта лепки"))
+def test_every_strategic_output_has_a_choice_for_telegram_shaped_slots():
+    for domain in DOMAINS:
+        choices = domain_choices(domain)
+        assert all(choices[name] for name in set(STRATEGY_OPTIONS) - {"offer", "RTB"}), domain
+
+
+def test_templates_do_not_depend_on_the_product_domain():
+    shapes = [template_shape(domain) for domain in DOMAINS]
+    assert all(shape == shapes[0] for shape in shapes)
+
+
+def test_non_education_products_receive_no_education_vocabulary():
+    from app.module_execution.executors.positioning_strategy import _quoted
+
+    for domain in NON_EDUCATION:
+        product, audience, _ = DOMAINS[domain]
+        for name, rows in domain_choices(domain).items():
+            for row in rows:
+                text = row["text"].replace(_quoted(product), "").replace(_quoted(audience), "").lower()
+                assert not [word for word in EDUCATION_VOCABULARY if word in text], (domain, name, row["text"])
+    static = "\n".join(text for options in STRATEGY_OPTIONS.values() for text in options).lower()
+    assert not [word for word in EDUCATION_VOCABULARY if word in static]
+
+
+def test_owner_terms_are_referenced_as_a_whole_never_fragmented_or_restated():
+    for domain, (_, _, truth) in DOMAINS.items():
+        rendered = "\n".join(row["text"] for rows in domain_choices(domain).values() for row in rows)
+        clauses = [clause.strip(" .") for part in truth.split(";") for clause in part.split(". ")]
+        assert not [clause for clause in clauses if len(clause) > 12 and clause in rendered], domain
+
+
+def test_trailing_sentence_period_of_a_quoted_slot_is_not_doubled_inside_quotes():
+    statement, = domain_choices("bakery")["positioning_statement"]
+    assert "«жители района, которые покупают свежий хлеб к выходным»" in statement["text"]
+    assert ".»" not in statement["text"]
+
+
+def test_owner_terms_bind_value_and_difference_hypotheses_only_when_supplied():
+    with_terms = build_strategy_choices(choice_evidence())
+    evidence = choice_evidence()
+    del evidence["evd_truth"]
+    without_terms = build_strategy_choices(evidence)
     for output in ("value_proposition", "differentiation", "points_of_difference", "positioning_statement"):
-        assert course[output] != ceramics[output]
-        assert all("evd_truth" in row["required_source_ids"] for row in (*course[output], *ceramics[output]))
-    assert "прозрачность условий получения изделия" in ceramics["positioning_statement"][0]["text"]
-    assert "письменная обратная связь" not in ceramics["positioning_statement"][0]["text"]
+        assert all("evd_truth" in row["required_source_ids"] for row in with_terms[output])
+        assert all("evd_truth" not in row["required_source_ids"] for row in without_terms[output])
+    assert "ясность выбора и следующего шага" in without_terms["value_proposition"][0]["text"]
 
 
-@pytest.mark.parametrize("truth", [
-    "Возможно, участники выполняют практические задания и получают письменную обратную связь.",
-    "Пример: Участники выполняют практические задания и получают письменную обратную связь.",
-    "Если владелец подтвердит. Участники выполняют практические задания и получают письменную обратную связь.",
-    "Участники выполняют практические задания и получают персональную обратную связь.",
-    "Возможно, " + CERAMICS_TRUTH,
-    CERAMICS_TRUTH + " Изделие можно забрать сразу.",
-    "Условия нужно уточнить.",
-])
-def test_unknown_conditional_or_modified_truth_does_not_enable_specific_feature_angle(truth):
-    choices = build_strategy_choices(choice_evidence(truth))
-    assert all("evd_truth" not in row["required_source_ids"] for rows in choices.values() for row in rows)
-    assert "ясность выбора и следующего шага" in choices["value_proposition"][0]["text"]
-
-
-def test_demonstration_cannot_enable_a_product_feature_angle():
+def test_demonstration_cannot_bind_owner_terms():
     evidence = choice_evidence()
     evidence["evd_truth"]["role"] = "demonstration"
     choices = build_strategy_choices(evidence)
-    assert "письменная обратная связь" not in choices["positioning_statement"][0]["text"]
+    assert all("evd_truth" not in row["required_source_ids"] for rows in choices.values() for row in rows)
 
 
 def test_no_raw_source_prose_or_numeric_identity_is_inserted_in_mixed_strategic_text():
@@ -151,8 +208,9 @@ def test_ambiguous_identity_slots_do_not_select_an_arbitrary_product():
     evidence = choice_evidence()
     evidence["evd_another_product"] = {"role": "product_identity", "text": "Другой продукт"}
     choices = build_strategy_choices(evidence)
-    assert "«Курс ФотоСтарт»" not in choices["positioning_statement"][0]["text"]
-    assert "«Другой продукт»" not in choices["positioning_statement"][0]["text"]
+    rendered = "\n".join(row["text"] for rows in choices.values() for row in rows)
+    assert "«Курс ФотоСтарт»" not in rendered
+    assert "«Другой продукт»" not in rendered
 
 
 def test_choices_are_deterministic_bounded_and_do_not_mutate_source_evidence():
@@ -172,186 +230,19 @@ def test_unknown_sources_cannot_introduce_new_features_via_keyword_matching():
     assert "вебинар" not in rendered and "сертификат" not in rendered and "гарантирует" not in rendered
 
 
-PROFILE_CASES = {
-    "photography": choice_evidence(COURSE_TRUTH, "Курс мобильной фотографии ФотоСтарт", "Начинающие взрослые"),
-    "ceramics": choice_evidence(CERAMICS_TRUTH, "Мастер-класс по керамике Тёплая глина", "Взрослые без опыта лепки"),
-}
-
-
-@pytest.mark.parametrize("profile", PROFILE_CASES)
-def test_profiles_replace_generic_research_filler_with_distinct_grounded_outputs(profile):
+def test_choices_assert_no_product_assurance_or_known_factual_premise():
     from app.module_execution.executors.positioning_assurance import has_product_assurance
+    from app.orchestration_runtime.claim_premises import factual_premise
 
-    evidence = PROFILE_CASES[profile]
-    choices = build_strategy_choices(evidence)
-    strategic_names = set(STRATEGY_OPTIONS) - {"offer", "RTB"}
-    assert set(choices) == set(STRATEGY_OPTIONS)
-    assert choices["offer"] == choices["RTB"] == ()
-    assert len(strategic_names) == 14
-    assert all(len(choices[name]) == 1 for name in strategic_names)
-    rows = {name: choices[name][0] for name in strategic_names}
-    assert len({row["text"] for row in rows.values()}) == 14
-    assert all(row["required_source_ids"] == sorted(evidence) for row in rows.values())
-    assert all(0 < len(row["text"]) <= 4000 and not has_product_assurance(row["text"])
-               and not any(char.isdigit() for char in row["text"]) for row in rows.values())
-    assert "освоение новой практики" not in rows["category"]["text"]
-    assert "«" + evidence["evd_identity"]["text"] + "»" in rows["positioning_statement"]["text"]
-    assert "«" + evidence["evd_audience"]["text"] + "»" in rows["positioning_statement"]["text"]
-    assert "ещё" in rows["differentiation"]["text"]
-    assert rows["points_of_parity"]["text"].startswith("Гипотеза")
-    assert rows["USP_directions"]["text"].count(";") == 2
-    assert "Главное сообщение" in rows["message_hierarchy"]["text"]
-    assert "Следующий шаг" in rows["message_hierarchy"]["text"]
-    assert rows["claim_risks"]["text"].startswith("Рекомендация перед публикацией — проверить, не")
-    assert "В беседах проверить" in rows["validation_plan."]["text"]
+    for domain in DOMAINS:
+        for rows in domain_choices(domain).values():
+            for row in rows:
+                assert not has_product_assurance(row["text"]), row["text"]
+                assert not factual_premise(row["text"]), row["text"]
 
 
-def test_photography_profile_keeps_roles_useful_without_strengthening_source_terms():
-    choices = build_strategy_choices(PROFILE_CASES["photography"])
-    rows = {name: options[0]["text"] for name, options in choices.items() if options}
-    assert "обучение фотографии" in rows["category"]
-    assert "самостоятельным изучением" in rows["frame_of_reference"]
-    assert "пробует фотографировать" in rows["demand_context"]
-    assert "что пробовать менять в своих фотографиях" in rows["JTBD_frame"]
-    assert "письменной обратной связи" in rows["value_proposition"]
-    assert "домашними" in rows["claim_risks"] and "персональным" in rows["claim_risks"]
-    assert "сверить с владельцем" in rows["validation_plan."]
-    assertions = "\n".join(text for name, text in rows.items() if name not in {"claim_risks", "validation_plan."})
-    for unsupported in ("домашние задания", "персональная обратная связь", "онлайн", "композиции", "освещения", "быстро", "сертификат"):
-        assert unsupported not in assertions
+def test_acceptance_texts_have_no_special_strategy_or_source_decomposition():
+    import app.module_execution.executors.positioning_strategy as strategy
 
-
-def test_ceramics_profile_preserves_later_collection_and_does_not_invent_technique():
-    choices = build_strategy_choices(PROFILE_CASES["ceramics"])
-    rows = {name: options[0]["text"] for name, options in choices.items() if options}
-    assert "знакомство с керамикой" in rows["category"]
-    assert "самостоятельным знакомством" in rows["frame_of_reference"]
-    assert "вписать последующее получение" in rows["demand_context"]
-    for name in ("value_proposition", "positioning_statement", "USP_directions", "message_hierarchy", "validation_plan."):
-        assert "друг" in rows[name]
-    assert "не создаёт ли сообщение ожидание выдачи изделия в день занятия" in rows["claim_risks"]
-    assert "технику" in rows["claim_risks"] and "уточнить" in rows["claim_risks"] and "у владельца" in rows["claim_risks"]
-    rendered = "\n".join(rows.values())
-    for unsupported in ("гончарный круг", "ручная пластика", "инструктаж", "расслабление", "не потребуется", "не придётся"):
-        assert unsupported not in rendered
-
-
-@pytest.mark.parametrize("product,truth", [
-    ("ФотоСтарт", COURSE_TRUTH),
-    ("Бренд Курс фотографии ФотоСтарт", COURSE_TRUTH),
-    ("Название с фотографией", COURSE_TRUTH),
-    ("Курс кулинарии ФотоСтарт", COURSE_TRUTH),
-    ("Мастер-класс керамики Тёплая глина", COURSE_TRUTH),
-    ("Курс фотографии ФотоСтарт", CERAMICS_TRUTH),
-    ("Тёплая глина", CERAMICS_TRUTH),
-    ("Изделия после обжига", CERAMICS_TRUTH),
-])
-def test_domain_profile_requires_explicit_matching_product_identity_and_complete_truth(product, truth):
-    choices = build_strategy_choices(choice_evidence(truth, product))
-    assert choices["category"][0]["text"] == "Предлагаем проверить категорию «освоение новой практики»."
-    assert all("evd_identity" in row["required_source_ids"] for options in choices.values() for row in options)
-
-
-@pytest.mark.parametrize("profile", PROFILE_CASES)
-@pytest.mark.parametrize("invalid", ["demo", "conditional", "another_truth", "missing_audience"])
-def test_profiles_do_not_select_unconfirmed_or_ambiguous_context(profile, invalid):
-    from copy import deepcopy
-
-    evidence = deepcopy(PROFILE_CASES[profile])
-    if invalid == "demo":
-        evidence["evd_truth"]["role"] = "demonstration"
-    elif invalid == "conditional":
-        evidence["evd_truth"]["text"] = "Возможно, " + evidence["evd_truth"]["text"]
-    elif invalid == "another_truth":
-        evidence["evd_another_truth"] = {"role": "product_truth", "text": "Условия нужно уточнить."}
-    else:
-        del evidence["evd_audience"]
-    choices = build_strategy_choices(evidence)
-    assert choices["category"][0]["text"] == "Предлагаем проверить категорию «освоение новой практики»."
-
-
-@pytest.mark.parametrize("product,profile", [
-    ("Курс фотографии ФотоСтарт", "photography"),
-    ("Курс мобильной фотографии ФотоСтарт", "photography"),
-    ("Мастер-класс керамики Тёплая глина", "ceramics"),
-    ("Мастер-класс по керамике Тёплая глина", "ceramics"),
-])
-def test_explicit_domain_prefix_variants_enable_the_correct_profile(product, profile):
-    truth = COURSE_TRUTH if profile == "photography" else CERAMICS_TRUTH
-    choices = build_strategy_choices(choice_evidence(truth, product))
-    assert "освоение новой практики" not in choices["category"][0]["text"]
-
-
-@pytest.mark.parametrize("duration,equipment,expected", [
-    (False, True, ("practical_tasks", "written_feedback", "no_equipment")),
-    (False, False, ("practical_tasks", "written_feedback")),
-    (True, True, ("duration", "practical_tasks", "written_feedback", "no_equipment")),
-    (True, False, ("duration", "practical_tasks", "written_feedback")),
-])
-def test_known_course_source_has_separate_semantic_units(duration, equipment, expected):
-    from app.module_execution.executors.positioning_strategy import source_fact_units
-
-    text = ("Курс ФотоСтарт длится 6 недель. " if duration else "")
-    text += "Участники выполняют практические задания и получают письменную обратную связь."
-    if equipment:
-        text += " Для занятий не требуется профессиональное оборудование."
-    units = source_fact_units(text)
-    assert tuple(row["unit_id"] for row in units) == expected
-    slices = {row["unit_id"]: text[row["start_char"]:row["end_char"]] for row in units}
-    assert slices["practical_tasks"] == "Участники выполняют практические задания"
-    assert slices["written_feedback"] == "и получают письменную обратную связь."
-    if duration:
-        assert slices["duration"] == "Курс ФотоСтарт длится 6 недель."
-    if equipment:
-        assert slices["no_equipment"] == "Для занятий не требуется профессиональное оборудование."
-    assert all(set(row) == {"unit_id", "label", "start_char", "end_char"}
-               and 0 <= row["start_char"] < row["end_char"] <= len(text) for row in units)
-
-
-def test_ceramics_materials_and_firing_are_distinct_units_with_a_shared_anchor():
-    from app.module_execution.executors.positioning_strategy import source_fact_units
-
-    materials, firing, collection = source_fact_units(CERAMICS_TRUTH)
-    assert materials["unit_id"] == "materials_included"
-    assert firing["unit_id"] == "firing_included"
-    assert (materials["start_char"], materials["end_char"]) == (firing["start_char"], firing["end_char"])
-    assert materials["label"] != firing["label"]
-    assert CERAMICS_TRUTH[materials["start_char"]:materials["end_char"]] == "Материалы и обжиг включены."
-    assert collection["unit_id"] == "later_collection"
-    assert CERAMICS_TRUTH[collection["start_char"]:collection["end_char"]] == (
-        "Участники забирают изделия после обжига в другой день."
-    )
-
-
-@pytest.mark.parametrize("name", ["Фото📷Старт", "Свет cafe\u0301 👩🏽‍🎨", "Участники выполняют практические задания"])
-def test_source_units_use_original_unicode_codepoints_even_with_repeated_words_in_title(name):
-    from app.module_execution.executors.positioning_strategy import source_fact_units
-
-    prefix = f"Курс {name} длится 6 недель."
-    text = prefix + " Участники выполняют практические задания и получают письменную обратную связь."
-    duration, practical, feedback = source_fact_units(text)
-    assert duration["start_char"] == 0 and duration["end_char"] == len(prefix)
-    assert practical["start_char"] == len(prefix) + 1
-    assert text[duration["start_char"]:duration["end_char"]] == prefix
-    assert text[practical["start_char"]:practical["end_char"]] == "Участники выполняют практические задания"
-    assert text[feedback["start_char"]:feedback["end_char"]] == "и получают письменную обратную связь."
-
-
-@pytest.mark.parametrize("text", [
-    "Возможно, " + COURSE_TRUTH,
-    "Пример: " + COURSE_TRUTH,
-    COURSE_TRUTH + " Дополнительные условия нужно уточнить.",
-    COURSE_TRUTH.replace("6 недель", "7 недель"),
-    COURSE_TRUTH.replace("письменную", "персональную"),
-    COURSE_TRUTH.replace("оборудование.", "оборудование?"),
-    "Если участник согласен. " + CERAMICS_TRUTH,
-    CERAMICS_TRUTH.replace("в другой день", "в тот же день"),
-    "Материалы и обжиг включены.",
-    "Получение после обжига.",
-    " ",
-    None,
-])
-def test_unknown_or_altered_whole_source_has_no_unit_plan(text):
-    from app.module_execution.executors.positioning_strategy import source_fact_units
-
-    assert source_fact_units(text) == ()
+    assert not hasattr(strategy, "source_fact_units")
+    assert template_shape("course") == template_shape("ceramics") == template_shape("bakery")

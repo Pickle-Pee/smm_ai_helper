@@ -73,26 +73,26 @@ STRATEGY_OPTIONS: dict[str, tuple[str, ...]] = {
         "Research which alternatives the audience considers when making a choice.",
     ),
     "target": (
-        "Проверить интерес среди людей, которые рассматривают знакомство с новой практикой.",
+        "Проверить интерес среди людей, которые уже решают задачу, на которую направлено предложение.",
         "Исследовать, кому важно понять следующий шаг перед выбором.",
-        "Test which prospective audience groups express interest in learning more.",
+        "Test which prospective audience groups express interest in the offer.",
     ),
     "demand_context": (
         "Проверить, в каких ситуациях возникает интерес к предложению.",
         "Исследовать, какие сомнения мешают аудитории сделать выбор.",
-        "Проверить интерес к практике фотографии.",
+        "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору.",
         "Research which situations prompt the audience to consider the offer.",
     ),
     "JTBD_frame": (
         "Исследовать, какую задачу аудитория хочет решить при выборе.",
         "Проверить, какой следующий шаг аудитория считает полезным.",
-        "Test whether beginners value knowing what to practice next.",
+        "Test which task the audience wants to complete when choosing.",
     ),
     "value_proposition": (
-        "Тестировать акцент на применении навыков.",
+        "Тестировать акцент на полноте условий предложения.",
         "Проверить, помогает ли ясность следующего шага объяснить ценность предложения.",
         "Гипотеза: аудитории может быть важна ясность следующего шага.",
-        "Test whether clarity about the next step increases interest in learning more.",
+        "Test whether clarity about the next step increases interest in the offer.",
     ),
     "differentiation": (
         "Проверить, какие критерии выбора аудитория считает значимыми при сравнении.",
@@ -116,13 +116,13 @@ STRATEGY_OPTIONS: dict[str, tuple[str, ...]] = {
     ),
     "positioning_statement": (
         "Тестировать позиционирование через ясность выбора и следующего шага.",
-        "Проверить позиционирование через интерес к знакомству с практикой.",
+        "Проверить позиционирование через задачу, которую аудитория решает при выборе.",
         "Test a positioning angle centered on clarity of choice and the next step.",
     ),
     "USP_directions": (
-        "Сравнить интерес к сообщениям о выборе, практике и следующем шаге.",
+        "Сравнить интерес к сообщениям о задаче, условиях и следующем шаге.",
         "Проверить разные направления сообщения до выбора основного акцента.",
-        "Compare interest in messaging about choice, practice, and the next step.",
+        "Compare interest in messaging about the task, conditions, and the next step.",
     ),
     "offer": (
         "Проверить, какая информация об условиях нужна аудитории перед решением.",
@@ -135,14 +135,14 @@ STRATEGY_OPTIONS: dict[str, tuple[str, ...]] = {
         "Test a message sequence covering interest, conditions, substantiation, and the next step.",
     ),
     "claim_risks": (
-        "Уточнить, что именно получает участник после курса.",
+        "Уточнить у владельца, что именно входит в предложение.",
         "Проверить фактические основания каждого обещания перед публикацией.",
         "Review the factual basis of each proposed promise before publication.",
     ),
     "validation_plan.": (
         "Собрать вопросы аудитории и проверить понимание сообщения до публикации.",
         "Сравнить отклик на разные акценты и уточнить причины выбора.",
-        "Ask participants whether the timing meets their needs.",
+        "Ask the audience whether the stated conditions meet their needs.",
     ),
 }
 
@@ -180,113 +180,23 @@ def safe_strategy_statement(text: str) -> bool:
     return statement in _SAFE_STATEMENTS or _PROSPECTIVE_QUESTION.fullmatch(statement) is not None
 
 
-_COURSE_TRUTH = re.compile(
-    r"(?:Курс [^.!?\n]{1,120} длится 6 недель\. )?"
-    r"Участники выполняют практические задания и получают письменную обратную связь\."
-    r"(?: Для занятий не требуется профессиональное оборудование\.)?"
-)
-_CERAMICS_TRUTH = (
-    "Материалы и обжиг включены. Участники забирают изделия после обжига в другой день."
-)
-_PHOTOGRAPHY_IDENTITY = re.compile(r"Курс (?:мобильной )?фотографии(?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
-_CERAMICS_IDENTITY = re.compile(r"Мастер-класс (?:по )?керамик[еи](?: [^.!?\r\n]{1,120})?", re.IGNORECASE)
-
-
-def source_fact_units(text: str) -> tuple[dict, ...]:
-    """Plan known source propositions only after a complete closed-text match.
-
-    Offsets are half-open Python Unicode codepoint ranges in the original source,
-    for server use only. Sharing an anchor does not merge semantic propositions:
-    materials and firing remain separate units even though their sentence is
-    shared. This is a bounded source plan, not general semantic extraction. The
-    caller must independently establish the source's authorized role.
-    """
-    if type(text) is not str:
-        return ()
-
-    def unit(identity, label, start, end):
-        return {"unit_id": identity, "label": label, "start_char": start, "end_char": end}
-
-    if text == _CERAMICS_TRUTH:
-        first = "Материалы и обжиг включены."
-        end = len(first)
-        return (
-            unit("materials_included", "Материалы включены", 0, end),
-            unit("firing_included", "Обжиг включён", 0, end),
-            unit("later_collection", "Получение после обжига в другой день", end + 1, len(text)),
-        )
-    if not _COURSE_TRUTH.fullmatch(text):
-        return ()
-    practical = "Участники выполняют практические задания"
-    feedback = "и получают письменную обратную связь."
-    equipment = "Для занятий не требуется профессиональное оборудование."
-    # A permitted course title can itself contain the practical-task words.
-    # The actual assertion is the final occurrence after the duration prefix.
-    practical_start = text.rindex(practical)
-    feedback_start = practical_start + len(practical) + 1
-    units = []
-    if practical_start:
-        units.append(unit("duration", "Длительность курса", 0, practical_start - 1))
-    units.extend((
-        unit("practical_tasks", "Практические задания", practical_start, practical_start + len(practical)),
-        unit("written_feedback", "Письменная обратная связь", feedback_start, feedback_start + len(feedback)),
-    ))
-    if text.endswith(equipment):
-        units.append(unit("no_equipment", "Отсутствие требования к профессиональному оборудованию", len(text) - len(equipment), len(text)))
-    return tuple(units)
-
-
-def _profile_statements(profile: str, product: str, audience: str) -> dict[str, str]:
-    """Propose distinct output roles; do not assert researched demand or superiority.
-
-    These profiles are available only after complete identity and owner-truth
-    checks below. Domain proposals stay tentative; operational statements use
-    only the supplied terms. Offer and RTB are rendered by the exact-source wire.
-    """
-    if profile == "photography":
-        return {
-            "category": "Предлагаем категорию «обучение фотографии через практику с письменной обратной связью».",
-            "frame_of_reference": "Предлагаем сравнивать курс фотографии с самостоятельным изучением приёмов съёмки; рамка выбора — сочетание практических заданий и письменной обратной связи.",
-            "target": f"Предлагаем ориентировать сообщение курса фотографии на аудиторию «{audience}».",
-            "demand_context": "Гипотеза ситуации спроса — человек пробует фотографировать и ищет ориентир для дальнейшей практики вместо накопления разрозненных советов.",
-            "JTBD_frame": "Гипотеза задачи аудитории — понять, что пробовать менять в своих фотографиях после практики, опираясь на письменную обратную связь.",
-            "value_proposition": "Предлагаем проверить ценность ориентира для дальнейшей фотопрактики через сочетание практических заданий и письменной обратной связи; важность этого акцента нужно выяснить у аудитории.",
-            "differentiation": "Гипотеза отличия — сделать сочетание практических заданий и письменной обратной связи центральной темой сравнения курсов фотографии; заметность этого акцента ещё нужно проверить.",
-            "points_of_parity": "Гипотеза базовых ожиданий от обучения фотографии — возможность практиковаться и понимать условия получения обратной связи; проверить эти критерии у аудитории.",
-            "points_of_difference": "Предлагаем проверить различимость темы «практические задания и письменный отклик» в описании курса фотографии, не приписывая другим курсам отсутствие обратной связи.",
-            "positioning_statement": f"Для аудитории «{audience}» предлагаем позиционирование «{product}» в категории «обучение фотографии через практику» с акцентом на сочетании практических заданий и письменной обратной связи как ориентире дальнейшей практики; ценность акцента требует проверки.",
-            "USP_directions": "Направления сообщения для проверки: практика фотографии вместо накопления советов; письменная обратная связь как ориентир; осмысленный выбор следующего упражнения.",
-            "message_hierarchy": "Главное сообщение для теста — курс фотографии с практическими заданиями и письменной обратной связью. Поддерживающий акцент — поиск направления дальнейшей практики. Условия участия — привести полный текст владельца. Следующий шаг — уточнить содержание заданий и порядок обратной связи.",
-            "claim_risks": "Рекомендация перед публикацией — проверить, не подменяет ли сообщение практические задания домашними, а письменную обратную связь персональным разбором; уточнить темы курса и темп освоения у владельца.",
-            "validation_plan.": "В беседах проверить, что аудитория понимает под письменной обратной связью и практическими заданиями, отличает их от домашних заданий и связывает предложенный акцент с задачей своей фотопрактики; спорные формулировки сверить с владельцем.",
-        }
-    return {
-        "category": "Предлагаем категорию «знакомство с керамикой с заранее понятными условиями получения изделия».",
-        "frame_of_reference": "Предлагаем сравнивать мастер-класс по керамике с самостоятельным знакомством с ремеслом и другими творческими занятиями; рамка выбора — ясность условий участия и получения изделия.",
-        "target": f"Предлагаем ориентировать сообщение мастер-класса по керамике на аудиторию «{audience}».",
-        "demand_context": "Гипотеза ситуации спроса — человек выбирает творческое занятие и хочет заранее понять, как вписать последующее получение изделия в свои планы.",
-        "JTBD_frame": "Гипотеза задачи аудитории — познакомиться с керамикой и заранее согласовать ожидания по получению изделия после обжига.",
-        "value_proposition": "Предлагаем проверить ценность понятного планирования участия: материалы и обжиг включены, а получение изделия относится к другому дню; акцент сообщения — понимать путь участия до записи.",
-        "differentiation": "Гипотеза отличия сообщения — сделать последующее получение изделия заметной частью выбора мастер-класса по керамике; сравнение с другими предложениями ещё предстоит проверить.",
-        "points_of_parity": "Гипотеза базовых ожиданий от творческого мастер-класса — понятные условия материалов, обжига и получения изделия; проверить важность этих критериев у аудитории.",
-        "points_of_difference": "Предлагаем проверить, выделяет ли описание мастер-класса по керамике открытое обозначение получения изделия в другой день, не утверждая, что остальные скрывают свои условия.",
-        "positioning_statement": f"Для аудитории «{audience}» предлагаем позиционирование «{product}» в категории «знакомство с керамикой» с акцентом на ясных условиях материалов, обжига и получения изделия в другой день; ценность такого акцента требует проверки.",
-        "USP_directions": "Направления сообщения для проверки: знакомство с керамикой; включённые материалы и обжиг; заранее понятное получение изделия в другой день.",
-        "message_hierarchy": "Главное сообщение для теста — мастер-класс по керамике с ясными условиями получения изделия. Поддержка — материалы и обжиг включены. Условие — забрать изделие после обжига в другой день. Следующий шаг — уточнить порядок получения до записи.",
-        "claim_risks": "Рекомендация перед публикацией — проверить, не создаёт ли сообщение ожидание выдачи изделия в день занятия и не приписывает ли конкретную технику работы с глиной или помощь мастера; сохранить условие другого дня и уточнить содержание занятия у владельца.",
-        "validation_plan.": "В беседах проверить понимание получения изделия в другой день, влияние этого условия на выбор занятия и оставшиеся вопросы о работе с глиной; порядок получения и содержание занятия сверить с владельцем.",
-    }
+def _quoted(text: str) -> str:
+    """Quote complete owner text; only a trailing sentence period is display punctuation."""
+    return "«" + text.strip().removesuffix(".").rstrip() + "»"
 
 
 def build_strategy_choices(evidence: dict[str, dict]) -> dict[str, tuple[dict, ...]]:
-    """Render bounded, request-scoped positioning proposals from trusted slots.
+    """Render bounded, request-scoped, domain-neutral positioning proposals.
 
     Identity/audience slots quote complete authorized source text; they do not
-    create product proof. Feature-bearing angles require a full, closed owner
-    truth pattern and carry that entire source's identity. The caller must bind
-    these choices to its immutable draft and enforce all required citations.
-    Unknown source language enables only prospective generic strategic angles.
-    Offer and RTB remain exact-source outputs and have no generated alternatives.
+    create product proof. No proposal depends on recognizing a product domain or
+    a particular owner wording: the same templates serve a course, a bakery or a
+    B2B service. Owner terms are referenced as a whole, never paraphrased or
+    fragmented; their exact text stays in the SOURCE offer and RTB outputs. The
+    caller must bind these choices to its immutable draft and enforce all
+    required citations. Offer and RTB have no generated alternatives.
+    Product-specific market hypotheses are a separate, independently verified
+    design (docs/development/positioning-domain-generalization-design.md).
     """
     choices: dict[str, list[dict]] = {name: [] for name in STRATEGY_OPTIONS}
     identity_dependencies = ()
@@ -305,65 +215,55 @@ def build_strategy_choices(evidence: dict[str, dict]) -> dict[str, tuple[dict, .
                 if row.get("role") == role and type(row.get("text")) is str and row["text"].strip()]
         return rows[0] if len(rows) == 1 else None
 
-    product, audience = single("product_identity"), single("audience")
+    product, audience, truth = single("product_identity"), single("audience"), single("product_truth")
     if product:
         identity_dependencies = (product[0],)
-    truth = single("product_truth")
-    profile = None
-    if product and audience and truth:
-        if _PHOTOGRAPHY_IDENTITY.fullmatch(product[1]) and _COURSE_TRUTH.fullmatch(truth[1]):
-            profile = "photography"
-        elif _CERAMICS_IDENTITY.fullmatch(product[1]) and truth[1] == _CERAMICS_TRUTH:
-            profile = "ceramics"
-    if profile:
-        required = (product[0], audience[0], truth[0])
-        for name, text in _profile_statements(profile, product[1], audience[1]).items():
-            add(name, text, required)
-        return {name: tuple(options) for name, options in choices.items()}
-    # A source-specific angle is deliberately gated by the WHOLE owner text.
-    # A quotation, hypothetical example or conditional prefix cannot enable it.
-    angles = []
-    for identity, row in sorted(evidence.items()):
-        if row.get("role") != "product_truth" or type(row.get("text")) is not str:
-            continue
-        if _COURSE_TRUTH.fullmatch(row["text"]):
-            angles.append(("письменная обратная связь как ориентир для практики", identity))
-        elif row["text"] == _CERAMICS_TRUTH:
-            angles.append(("прозрачность условий получения изделия", identity))
-    if not angles:
-        angles.append(("ясность выбора и следующего шага", None))
+    terms = (truth[0],) if truth else ()
 
-    add("category", "Предлагаем проверить категорию «освоение новой практики».")
-    add("frame_of_reference", "Предлагаем сравнивать подходы к знакомству с новой практикой.")
-    add("JTBD_frame", "Гипотеза задачи аудитории — понять, интересно ли продолжать знакомство с новой практикой.")
-    add("demand_context", "Гипотеза ситуации выбора — поиск следующего шага при знакомстве с новой практикой.")
-    add("points_of_parity", "Предлагаемые критерии сравнения — понятность условий и следующего шага.")
-    add("USP_directions", "Предлагаемые направления сообщения — ясность выбора и интерес к практике.")
-    add("message_hierarchy", "Рекомендуемый порядок сообщения — интерес, полные условия, подтверждение и следующий шаг.")
-    add("claim_risks", "Рекомендуем отделять подтверждённые условия от гипотез о ценности перед публикацией.")
-    add("validation_plan.", "Проверить понимание предложенной категории, ценности и причин выбора в беседах с аудиторией.")
+    add("category", "Предлагаем рабочую категорию — описание предложения словами владельца; "
+        "проверить, теми ли словами аудитория ищет такие предложения.")
+    add("frame_of_reference", "Предлагаем рамку сравнения — способы, которыми аудитория решает ту же задачу сейчас, "
+        "включая вариант ничего не менять; состав альтернатив проверить в беседах.")
+    add("demand_context", "Гипотеза ситуации спроса — аудитория начинает искать предложение, когда текущий способ "
+        "решения задачи перестаёт её устраивать; проверить, какие ситуации к этому приводят.")
+    add("JTBD_frame", "Гипотеза задачи аудитории — решить свою задачу с меньшими усилиями и неопределённостью, "
+        "чем при текущем способе; конкретную формулировку задачи проверить в интервью.")
+    add("points_of_parity", "Гипотеза базовых ожиданий от альтернатив — понятные условия, предсказуемый следующий шаг "
+        "и отсутствие скрытых требований; проверить эти критерии у аудитории.")
+    add("USP_directions", "Направления сообщения для проверки: задача аудитории её словами; полные условия владельца "
+        "без сокращений; понятный следующий шаг.")
+    add("message_hierarchy", "Рекомендуемый порядок сообщения — задача аудитории, полные условия владельца, "
+        "подтверждение и следующий шаг.")
+    add("claim_risks", "Рекомендуем перед публикацией сверить каждое обещание с полными условиями владельца "
+        "и не сокращать их оговорки.")
+    add("validation_plan.", "Проверить в беседах с аудиторией понимание категории, рамки сравнения и полных условий, "
+        "а также причины выбора или отказа.")
+    if product:
+        add("category", f"Предлагаем проверить рабочую категорию {_quoted(product[1])} — так владелец описывает "
+            "предложение; выяснить, теми ли словами аудитория ищет такие предложения.")
     if audience:
-        identity, text = audience
-        add("target", f"Предлагаем проверить позиционирование для аудитории «{text}».", (identity,))
-        add("JTBD_frame", f"Для аудитории «{text}» предлагаем проверить задачу — выбрать следующий шаг в знакомстве с практикой.", (identity,))
+        audience_id, audience_text = audience
+        add("target", f"Предлагаем ориентировать позиционирование на аудиторию {_quoted(audience_text)}.", (audience_id,))
+        add("JTBD_frame", f"Гипотеза задачи аудитории {_quoted(audience_text)} — решить свою задачу с меньшими "
+            "усилиями и неопределённостью, чем при текущем способе; формулировку задачи проверить в интервью.",
+            (audience_id,))
     else:
-        add("target", "Предлагаем проверить аудиторию людей, выбирающих знакомство с новой практикой.")
+        add("target", "Предлагаем проверить, какие группы аудитории уже решают задачу, на которую направлено предложение.")
 
-    for angle, truth_id in angles:
-        required = (truth_id,) if truth_id else ()
-        add("value_proposition", f"Предлагаемый акцент ценности для проверки — {angle}.", required)
-        add("differentiation", f"Гипотеза отличия для проверки — акцент на теме «{angle}», без утверждения превосходства.", required)
-        add("points_of_difference", f"Предлагаем проверить, помогает ли акцент «{angle}» различать альтернативы при выборе.", required)
-        if product:
-            identity, text = product
-            add("value_proposition", f"Для «{text}» предлагаем проверить акцент ценности «{angle}».", (*required, identity))
-        if product and audience:
-            product_id, product_text = product
-            audience_id, audience_text = audience
-            add("positioning_statement",
-                f"Для аудитории «{audience_text}» предлагаем проверить позиционирование «{product_text}» "
-                f"в категории «освоение новой практики» с акцентом на теме «{angle}».",
-                (*required, product_id, audience_id))
-        else:
-            add("positioning_statement", f"Рекомендуемая территория позиционирования для проверки — {angle}.", required)
+    # Feature-free angles reference the owner's terms as a whole; they never
+    # restate, strengthen or select a fragment of those terms.
+    angle = "полное изложение условий владельца без сокращений" if truth else "ясность выбора и следующего шага"
+    add("value_proposition", f"Предлагаемый акцент ценности для проверки — {angle}; результат не обещается.", terms)
+    add("differentiation", f"Гипотеза отличия для проверки — акцент на теме «{angle}», "
+        "без утверждения превосходства и без приписывания альтернативам скрытых условий.", terms)
+    add("points_of_difference", f"Предлагаем проверить, помогает ли акцент «{angle}» различать альтернативы при выборе.",
+        terms)
+    if product:
+        add("value_proposition", f"Для {_quoted(product[1])} предлагаем проверить акцент ценности «{angle}».", terms)
+    if product and audience:
+        add("positioning_statement",
+            f"Для аудитории {_quoted(audience[1])} предлагаем проверить позиционирование {_quoted(product[1])} "
+            f"с акцентом на теме «{angle}»; ценность акцента требует проверки.", (*terms, audience[0]))
+    else:
+        add("positioning_statement", f"Рекомендуемая территория позиционирования для проверки — {angle}.", terms)
     return {name: tuple(options) for name, options in choices.items()}
