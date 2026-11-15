@@ -20,6 +20,7 @@ from .numeric_grounding import (
 )
 from .claim_support import StrategyClaim, StoredNumericContext
 from .downstream_fidelity import FIDELITY_INSTRUCTION
+from .provider_language import language_projection, with_output_language
 from .numeric_diagnostics import observe
 from .cmo_provider_contract import cmo_provider_schema
 from .cmo_source_selection import owner_terms_catalog, source_selection_catalog
@@ -145,7 +146,7 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
                 {e.record.evidence_id: e for e in evidence}, parents))
             if terms and "strategic_bets" in request.expected_outputs:
                 data["cmo_owner_terms_catalog"] = terms
-            return data
+            return with_output_language(data, request)
         if not self._numeric_quote_catalog_enabled:
             return data
         return {**data,
@@ -188,7 +189,8 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def provider_schema_for(self, request, validation_schema):
         if self._support_selection_wire:
-            return deepcopy(validation_schema)
+            # Provider-only narrowing to the request language; the wire schema stays authoritative.
+            return language_projection(deepcopy(validation_schema), request)
         # Reuse the exact quotation selector without enabling catalog advice or
         # citation binding. The original local schema/gates remain authoritative.
         evidence = first_party_evidence(request, scoped_facts(request))

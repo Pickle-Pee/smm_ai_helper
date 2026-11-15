@@ -28,6 +28,7 @@ from .intelligence_common import IntelligenceExecutor, require_supported_numbers
 from .intelligence_schemas import ExperimentsOutput
 from .claim_support import assertion_support
 from .downstream_fidelity import FIDELITY_INSTRUCTION
+from .provider_language import language_projection, with_output_language
 
 
 def strategic_parents(request):
@@ -127,8 +128,8 @@ Keep all original grounding, design and exact constraint requirements."""
 
     def model_input_for(self, request, data, evidence, parents):
         if self._support_selection_wire:
-            return {**data, "experiments_support_selection_catalog": support_selection_catalog(
-                (e.record.evidence_id for e in evidence), parents)}
+            return with_output_language({**data, "experiments_support_selection_catalog": support_selection_catalog(
+                (e.record.evidence_id for e in evidence), parents)}, request)
         return data
 
     def wire_schema_for(self, request, validation_schema, evidence):
@@ -192,6 +193,9 @@ Keep all original grounding, design and exact constraint requirements."""
             "provider_schema_bytes": provider["bytes"], "provider_schema_sha256": provider["sha256"]}
         log.info("EXPERIMENTS provider schema " + " ".join(f"{key}=%s" for key in fields),
                  *fields.values(), extra=fields)
+        if self._support_selection_wire:
+            # Provider-only narrowing to the request language; the wire schema stays authoritative.
+            return language_projection(provider_schema, request)
         return provider_schema
 
     def output_budget_for(self, request) -> ModuleOutputBudget:
