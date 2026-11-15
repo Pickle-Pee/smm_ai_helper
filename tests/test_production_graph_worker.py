@@ -86,6 +86,17 @@ def test_settings_bounds_and_legacy_fixed_concurrency():
             Settings(_env_file=None, **{**config, **updates})
 
 
+def test_env_template_time_budget_covers_two_provider_calls_per_node():
+    # POSITIONING runs generation and verification inside one node, each bounded by HTTP_TIMEOUT.
+    template = dict(line.split("=", 1) for line in Path(".env.example").read_text(encoding="utf-8").splitlines()
+                    if line and not line.startswith("#") and "=" in line)
+    loaded = Settings(_env_file=None, DATABASE_URL="postgresql://offline", TELEGRAM_BOT_TOKEN="offline",
+                      OPENAI_API_KEY="offline", **{name: template[name] for name in
+                      ("HTTP_TIMEOUT", "GRAPH_TIMEOUT_SECONDS", "GRAPH_LEASE_SECONDS")})
+    assert (loaded.HTTP_TIMEOUT, loaded.GRAPH_TIMEOUT_SECONDS, loaded.GRAPH_LEASE_SECONDS) == (180, 420, 450)
+    assert 2 * loaded.HTTP_TIMEOUT < loaded.GRAPH_TIMEOUT_SECONDS < loaded.GRAPH_LEASE_SECONDS
+
+
 @pytest.mark.parametrize("status", [400, 401, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504])
 def test_transient_http_status_and_wrapped_equivalent(status):
     response = httpx.Response(status, request=httpx.Request("POST", "https://provider.test"))

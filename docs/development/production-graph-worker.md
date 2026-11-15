@@ -80,7 +80,10 @@ exhaustion fails the Job and required graph run with `provider_transient`.
 See [structured response diagnostics and capacity](structured-model-responses.md).
 
 Startup requires `0 < HTTP_TIMEOUT < GRAPH_TIMEOUT_SECONDS < GRAPH_LEASE_SECONDS`.
-Defaults are 60 / 300 / 330 seconds; the outer graph timeout bounds the complete
+Code defaults are 60 / 300 / 330 seconds; the production release set is 180 / 420 / 450
+(`.env.example`, [latency diagnosis](experiments-latency-diagnosis.md)): POSITIONING makes two
+provider calls in one node, so the graph timeout must also exceed twice `HTTP_TIMEOUT`.
+The outer graph timeout bounds the complete
 dispatch (including source acquisition). Graph timeout is bounded to 5–900s,
 lease to 6–960s. Completion/failure remains fenced by claim token and lease.
 Stale workers cannot persist results after replacement. External effects still
