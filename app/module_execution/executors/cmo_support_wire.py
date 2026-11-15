@@ -10,7 +10,7 @@ from .provider_schema import collapse_single_support_anyof
 from .support_schema import check_schema_bounds
 from .cmo_source_selection import (
     source_text_schema, validate_source_catalog, render_source_leaf, reject_reserved_marker,
-    SOURCE_ITEMS_DESCRIPTION,
+    SOURCE_ITEMS_DESCRIPTION, validate_owner_terms,
 )
 from .cmo_source_bets import BET_DEFINITION, owner_bet_choices, source_bet_statement_schema, render_source_bet
 from .cmo_source_diagnoses import (
@@ -18,7 +18,7 @@ from .cmo_source_diagnoses import (
 )
 from .cmo_demo_plans import DEMO_ITEMS_NOTE, DEMO_TEXT_NOTE, demo_free_prose, with_note
 
-WIRE_VERSION = "virtual_cmo.support_selection.v13"
+WIRE_VERSION = "virtual_cmo.support_selection.v14"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
@@ -137,12 +137,14 @@ def _outputs(expected_outputs, definitions):
 
 
 def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
-                                  source_choices=None):
+                                  source_choices=None, owner_terms=None):
     """Generate full closed boolean selections, not model-owned citation arrays."""
     try:
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         source_choices = {} if source_choices is None else source_choices
+        owner_terms = {} if owner_terms is None else owner_terms
         validate_source_catalog(source_choices, aliases["evidence"])
+        validate_owner_terms(owner_terms, aliases["evidence"], catalog)
         schema = collapse_single_support_anyof(cmo_provider_schema(canonical_schema, catalog))
         definitions = schema["$defs"]
         if (any(name in definitions for name in (PARENT_MAP, EVIDENCE_MAP, RISKS_DEFINITION, TRADEOFFS_DEFINITION,
@@ -191,7 +193,7 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
                 props["items"]["items"] = demo_free_prose(props["items"]["items"], plans=plans)
                 props["items"]["description"] = with_note(props["items"].get("description"),
                                                           DEMO_ITEMS_NOTE if plans else DEMO_TEXT_NOTE)
-        bets = owner_bet_choices(source_choices) if "strategic_bets" in names else {}
+        bets = owner_bet_choices(source_choices, owner_terms) if "strategic_bets" in names else {}
         if bets:
             definitions[BET_DEFINITION] = source_bet_statement_schema(definitions[STATEMENTS[1]], bets)
         diagnoses = demo_diagnosis_choices(source_choices) if "strategic_diagnosis" in names else {}
@@ -215,7 +217,7 @@ def support_selection_wire_schema(canonical_schema, expected_outputs, evidence_i
 
 
 def decode_support_selection_wire(payload, canonical_schema, expected_outputs, evidence_ids, parent_ids, catalog,
-                                  source_choices=None):
+                                  source_choices=None, owner_terms=None):
     """Decode explicit typed source sets, including explicitly selected quote pairs.
 
     Canonical arrays are absent and forbidden in wire input. Overlapping explicit
@@ -227,8 +229,10 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
         aliases = support_selection_catalog(evidence_ids, parent_ids)
         names = tuple(expected_outputs)
         source_choices = {} if source_choices is None else source_choices
-        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog, source_choices)
-        bets = owner_bet_choices(source_choices) if "strategic_bets" in names else {}
+        owner_terms = {} if owner_terms is None else owner_terms
+        wire_schema = support_selection_wire_schema(canonical_schema, names, evidence_ids, parent_ids, catalog,
+                                                    source_choices, owner_terms)
+        bets = owner_bet_choices(source_choices, owner_terms) if "strategic_bets" in names else {}
         diagnoses = demo_diagnosis_choices(source_choices) if "strategic_diagnosis" in names else {}
         if type(payload) is not dict or not Draft202012Validator(wire_schema).is_valid(payload):
             _fail()
@@ -281,8 +285,14 @@ def decode_support_selection_wire(payload, canonical_schema, expected_outputs, e
                 items, source_id = render_source_diagnosis(statement["items"][0], diagnoses)
                 selected["evidence"].add(source_id)
             elif name == "strategic_bets" and bets:
-                items, source_id = render_source_bet(statement["items"][0], bets)
+                items, source_id, contexts = render_source_bet(statement["items"][0], bets)
                 selected["evidence"].add(source_id)
+                # Quantity-bearing owner terms stay whole and only in numeric_context.
+                for context in contexts:
+                    if (context["support_id"], context["quote"]) not in pairs:
+                        _fail()
+                    if context not in canonical["numeric_context"]:
+                        canonical["numeric_context"].append(context)
             structured_items = (name == "strategic_bets" and bets or name == "strategic_diagnosis" and diagnoses)
             for text in (() if structured_items else statement["items"]):
                 rendered, source_id = render_source_leaf(text, 300, source_choices,

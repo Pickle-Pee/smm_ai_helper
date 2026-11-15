@@ -400,3 +400,30 @@ saved live CMO responses, 6 of 7 rejected ones used demo vocabulary in free pros
 (5 of 15 accepted ones did too). Counterfactual replays of both failed responses,
 changing only the version and the offending leaves to closed plans, are fully
 accepted (9/9) by the normal executor and Quality Gates.
+
+## Wire v14 · owner terms with quantities in strategic bets
+
+Problem: the SOURCE catalog excludes any owner text with a quantity, because the
+canonical v1 rule keeps digits and count words out of statement text and items.
+Telegram owner terms usually carry one («заказ принимается до 18:00 накануне;
+…»). The bakery run therefore had no closed bet recipe, the model wrote free
+bet items, and one item was the bare technical key `audience_understanding_ru`
+(copied from the diagnosis enum).
+
+v14 keeps the canonical rule and adds a second, closed choice for bets only:
+
+- `owner_terms_catalog()` lists `TERMS:eNNN` choices: complete first-party
+  `product_truth`/`confirmed_business_fact` leaves (≤ 300 characters) that
+  contain a quantity and whose whole text is already an exact pair in the numeric
+  quote catalog. Demonstrations, audience slots and other roles are excluded.
+- A `TERMS` bet renders the selected hypothesis as the only item and appends the
+  complete leaf to `numeric_context` as `{support_id, quote}`; the owner evidence
+  is cited on this output. Nothing is split at «;» or at sentence boundaries, the
+  model writes no number, and an identical model-supplied context is one entry.
+- Free prose still forbids digits by pattern; the decoder rejects a TERMS catalog
+  or quote pair that is altered, partial or absent from the numeric catalog.
+- `cmo_owner_terms_catalog` is shown to the model only when bets are requested
+  and at least one such leaf exists. SOURCE bets are unchanged.
+
+Canonical v1 payloads, `validate_numeric_context`, Quality Gates and EXPERIMENTS
+are unchanged. Older wire versions are rejected.

@@ -88,6 +88,68 @@ def validate_source_catalog(catalog, evidence_aliases):
         _fail()
 
 
+TERMS_PREFIX = "TERMS:"
+MAX_TERMS_TEXT = 300
+
+
+def owner_terms_catalog(evidence, evidence_aliases, numeric_catalog):
+    """Owner terms that carry a quantity: selectable only as an exact numeric_context quote.
+
+    The canonical v1 rule keeps digits and count words out of statement text and
+    items, so such terms never become SOURCE leaves. A TERMS choice names one
+    complete first-party owner leaf whose whole text is already an exact pair in
+    the numeric quote catalog. The server places that pair in numeric_context;
+    nothing is split at ";" or sentence boundaries, and no number can be written
+    by the model. Demonstrations and other roles are excluded.
+    """
+    evidence = tuple(evidence)
+    if type(evidence_aliases) is not dict or type(numeric_catalog) not in (list, tuple):
+        _fail()
+    aliases = {identity: key for key, identity in evidence_aliases.items()}
+    pairs = {(row.get("support_id"), row.get("exact_quote")) for row in numeric_catalog if type(row) is dict}
+    local = {item.record.evidence_id: item for item in evidence}
+    catalog = {}
+    for item in evidence:
+        text, identity = item.value, item.record.evidence_id
+        owner, _ = typed_literal_sources((identity,), local)
+        if (not owner or identity not in aliases or type(text) is not str
+                or not 1 <= len(text) <= MAX_TERMS_TEXT or text != text.strip()
+                or not has_numeric_quantity(text) or (identity, text) not in pairs
+                or contains_reserved_source_syntax(text)):
+            continue
+        key = aliases[identity]
+        catalog[TERMS_PREFIX + key] = {"text": text, "evidence_id": identity, "evidence_key": key,
+            "input_key": item.input_key, "source_class": EvidenceSourceClass.FIRST_PARTY.value}
+    catalog = dict(sorted(catalog.items()))
+    validate_owner_terms(catalog, evidence_aliases, numeric_catalog)
+    return catalog
+
+
+def validate_owner_terms(catalog, evidence_aliases, numeric_catalog):
+    if (type(evidence_aliases) is not dict or type(catalog) is not dict
+            or type(numeric_catalog) not in (list, tuple) or len(catalog) > MAX_SOURCE_CHOICES):
+        _fail()
+    pairs = {(row.get("support_id"), row.get("exact_quote")) for row in numeric_catalog if type(row) is dict}
+    for marker, row in catalog.items():
+        if type(marker) is not str or type(row) is not dict or set(row) != _FIELDS:
+            _fail()
+        key, text = row["evidence_key"], row["text"]
+        if (type(key) is not str or re.fullmatch(r"e[0-9]{3}", key) is None
+                or marker != TERMS_PREFIX + key or key not in evidence_aliases
+                or row["evidence_id"] != evidence_aliases[key]
+                or row["input_key"] not in {"product_truth", "confirmed_business_fact"}
+                or row["source_class"] != EvidenceSourceClass.FIRST_PARTY.value
+                or type(text) is not str or not 1 <= len(text) <= MAX_TERMS_TEXT or text != text.strip()
+                or not has_numeric_quantity(text) or (row["evidence_id"], text) not in pairs
+                or contains_reserved_source_syntax(text)):
+            _fail()
+    try:
+        if len(json.dumps(catalog, ensure_ascii=False, allow_nan=False).encode("utf-8")) > MAX_SOURCE_BYTES:
+            _fail()
+    except (TypeError, ValueError, UnicodeError):
+        _fail()
+
+
 def source_text_schema(field, maximum, catalog):
     """Keep the productive prose branch exact; marker enums contain digits."""
     if (type(field) is not dict

@@ -25,7 +25,7 @@ from app.orchestration_runtime.serialization import result_to_json, result_from_
 from app.orchestration_runtime.service import evaluate_result
 from tests.test_cmo_generation_policy import source_request, source_contracts
 from tests.test_cmo_provider_contract import PRICE
-from tests.test_cmo_support_wire import wire_output
+from tests.test_cmo_support_wire import owner_terms_for, wire_output
 from tests.test_graph_model_adapter import install_transport
 from tests.test_module_executors import fact
 
@@ -59,7 +59,8 @@ def forbid_uncontrolled_io(monkeypatch):
 
 def prepared(req, relation=None):
     canonical, schema, ids, parents, numeric, sources = source_contracts(req)
-    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents), sources)
+    value = wire_output(req.expected_outputs, support_selection_catalog(ids, parents), sources,
+                        owner_terms=owner_terms_for(req))
     if relation is not None:
         value['outputs']['strategic_diagnosis']['items'][0]['diagnostic_relation'] = relation
     return canonical, schema, ids, parents, numeric, sources, value
@@ -257,7 +258,7 @@ def test_real_http_adapter_exposes_demo_only_recipe_and_uses_one_attempt(monkeyp
         body = json.loads(request.content)
         data = json.loads(body['input'][1]['content'])
         schema = body['text']['format']['schema']
-        value = wire_output(req.expected_outputs, data['support_selection_catalog'], data['cmo_source_selection_catalog'])
+        value = wire_output(req.expected_outputs, data['support_selection_catalog'], data['cmo_source_selection_catalog'], owner_terms=data.get("cmo_owner_terms_catalog"))
         assert schema['properties']['outputs']['properties']['strategic_diagnosis'] == {'$ref': '#/$defs/' + DIAGNOSIS_DEFINITION}
         assert Draft202012Validator(schema).is_valid(value)
         if invalid:
