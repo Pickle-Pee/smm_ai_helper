@@ -30,8 +30,12 @@ def _character_class(letters):
     return "[" + "".join(ranges) + "]"
 
 
-def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=()):
+def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=(), *, alphabet=_ALPHABET,
+                         word_character=_WORD_CHARACTER):
     """Complement a small forbidden-word trie using regular expressions.
+
+    `alphabet` / `word_character` narrow the letters a word may consist of
+    (a single-script alphabet for language-bound provider prose).
 
     A word is allowed when it ends at a nonterminal prefix, diverges from the
     trie, or continues beyond a terminal leaf. Entries in `prefixes` forbid
@@ -42,7 +46,7 @@ def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=()):
     trie = {}
     for word, terminal in (*((word, True) for word in sorted(words)),
                            *((prefix, "prefix") for prefix in sorted(prefixes))):
-        if not word or set(word) - set(_ALPHABET):
+        if not word or set(word) - set(alphabet):
             raise ValueError("Forbidden generation words use the lowercase finite alphabet")
         node = trie
         for letter in word:
@@ -62,11 +66,11 @@ def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=()):
         if not children:
             # Every leaf is a complete forbidden word: another character is
             # necessary before this word can be accepted.
-            return _WORD_CHARACTER + "+"
+            return word_character + "+"
         branches = [""] if not root and "" not in node else []
-        other_letters = set(_ALPHABET) - set(children)
+        other_letters = set(alphabet) - set(children)
         if other_letters:
-            branches.append(_character_class(other_letters) + _WORD_CHARACTER + "*")
+            branches.append(_character_class(other_letters) + word_character + "*")
         for letter in children:
             tail = suffix(node[letter])
             if tail is not None:
