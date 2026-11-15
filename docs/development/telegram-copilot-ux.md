@@ -28,8 +28,8 @@ remains the ownership authority; foreign and unknown runs have the same generic
 «Результат не найден.» presentation. No caller-provided status URL is fetched:
 GET paths are built from a validated run ID against the configured backend.
 
-The client has a 10-second connection timeout, a 300-second read/write/pool timeout
-and a 310-second total bound. This accommodates the API's default 300-second
+The client has a 10-second connection timeout, a read/write/pool timeout equal to `GRAPH_TIMEOUT_SECONDS`
+and a total bound 10 seconds longer (300/310 with code defaults, 420/430 with the production release values). The bot process must therefore receive the same `GRAPH_TIMEOUT_SECONDS` as the backend. This accommodates the API's
 execution budget. There are no hidden HTTP retries. It validates public responses
 and keeps errors free of response bodies. Logs contain only actor, request key,
 result kind, run ID and HTTP status, not message/context/site/token/provider data.

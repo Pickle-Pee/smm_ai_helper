@@ -133,6 +133,21 @@ def test_http_network_and_malformed_response(monkeypatch, failure):
     assert exc.value.category == ("unavailable" if failure == "network" else "invalid_response")
 
 
+@pytest.mark.parametrize("graph_timeout", [300, 420])
+def test_client_waits_for_the_backend_execution_window(monkeypatch, graph_timeout):
+    # The API bounds /copilot/execute by GRAPH_TIMEOUT_SECONDS; a shorter bot window would report
+    # «unavailable» while the backend is still inside its own budget.
+    totals, real_timeout = [], asyncio.timeout
+    monkeypatch.setattr(asyncio, "timeout", lambda delay: totals.append(delay) or real_timeout(delay))
+    monkeypatch.setattr(settings, "GRAPH_TIMEOUT_SECONDS", graph_timeout)
+    configurations = patch_http(monkeypatch, lambda _: httpx.Response(404))
+    with pytest.raises(CopilotError):
+        asyncio.run(CopilotClient().run(123, RID))
+    timeout = configurations[0]["timeout"]
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (10, graph_timeout, graph_timeout, graph_timeout)
+    assert totals == [graph_timeout + 10]
+
+
 def test_direct_http_routing_auth_rendering_and_duplicate(monkeypatch):
     calls = []
     def respond(request):

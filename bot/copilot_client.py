@@ -32,9 +32,12 @@ class CopilotClient:
             raise CopilotError("invalid_response") from None
 
     async def _request(self, method, path, actor, *, payload=None):
+        # The API bounds one execution by GRAPH_TIMEOUT_SECONDS; the bot waits exactly that long plus a
+        # 10-second margin, so it never gives up before the backend can answer.
+        wait = settings.GRAPH_TIMEOUT_SECONDS
         try:
             # Total wall-clock bound as well as connect/read/write/pool timeouts.
-            async with asyncio.timeout(310), httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
+            async with asyncio.timeout(wait + 10), httpx.AsyncClient(timeout=httpx.Timeout(wait, connect=10)) as client:
                 response = await client.request(method, settings.API_BASE_URL.rstrip("/") + path,
                     headers=actor_headers(actor), json=payload)
         except (httpx.HTTPError, TimeoutError):
