@@ -12,13 +12,17 @@ from copy import deepcopy
 
 from app.module_execution.errors import ModuleExecutionContractError
 from .qualitative_generation import (
-    GENERATION_COUNT_WORDS, QUALITATIVE_GENERATION_PATTERN, allowed_word_pattern, generation_pattern,
+    GENERATION_COUNT_WORDS, PROSE_SEPARATOR, QUALITATIVE_GENERATION_PATTERN, allowed_word_pattern, generation_pattern,
 )
 
 # Whole forbidden words and forbidden stems (every word starting with them).
 DEMO_WORDS = frozenset(("демо", "demo", "demos", "proof", "proofs"))
 DEMO_STEMS = ("демонс", "demonst")
-DEMO_FREE_PATTERN = generation_pattern(allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS, DEMO_STEMS))
+# Free CMO prose (v15): no demo vocabulary, no "_" (schema keys such as
+# audience_understanding_ru) and at least two words (no bare RECOMMENDATION /
+# HYPOTHESIS label in place of content).
+DEMO_FREE_PATTERN = generation_pattern(allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS, DEMO_STEMS),
+                                       separator=PROSE_SEPARATOR, min_words=2)
 
 DEMO_PLAN_NOTES = (
     "Подготовить новый демонстрационный материал строго по полному подтверждённому описанию владельца, "
@@ -36,9 +40,11 @@ DEMO_PLAN_NOTES = (
 )
 # Appended to the existing field descriptions; SOURCE/digit guidance is kept verbatim.
 DEMO_TEXT_NOTE = ("Free prose must not mention demonstration or demo materials; "
-                  "a current demo fact uses its exact SOURCE token where listed.")
+                  "a current demo fact uses its exact SOURCE token where listed. "
+                  "Write at least two words of content; never a kind label or a schema key.")
 DEMO_ITEMS_NOTE = ("Free prose must not mention demonstration or demo materials. To plan a NEW demo "
-                   "material, choose one exact listed demo-plan sentence.")
+                   "material, choose one exact listed demo-plan sentence. "
+                   "Write at least two words of content; never a kind label or a schema key.")
 
 
 def with_note(description, note):
