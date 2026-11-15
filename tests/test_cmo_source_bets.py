@@ -20,6 +20,15 @@ from tests.test_cmo_support_wire import owner_terms_for, wire_output
 from tests.test_module_executors import fact
 
 
+@pytest.fixture(autouse=True)
+def wire_mechanics_in_both_languages(monkeypatch):
+    # These tests exercise bet mechanics with English and Russian fixtures against the provider
+    # schema. The request-language projection (tests/test_provider_language.py) would narrow a
+    # Russian request to Russian generation, so it is switched off here.
+    from app.module_execution.executors import provider_language
+    monkeypatch.setattr(provider_language, "request_language", lambda request: None)
+
+
 OWNER = ('Участники выполняют практические задания и получают письменную обратную связь. '
          'Для занятий не требуется профессиональное оборудование.')
 
