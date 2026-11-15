@@ -76,13 +76,14 @@ def allowed_word_pattern(words=GENERATION_COUNT_WORDS, prefixes=()):
     return suffix(trie, root=True)
 
 
-def generation_pattern(word_pattern, *, separator=_SEPARATOR, min_words=0):
-    """Anchor allowed words; min_words=2 rejects bare labels such as RECOMMENDATION."""
-    if min_words not in (0, 2):
-        raise ValueError("Unsupported minimum word count")
-    if min_words == 2:
-        return ("^" + separator + "*" + word_pattern + "(?:" + separator + "+" + word_pattern + ")+"
-                + separator + "*$")
+def generation_pattern(word_pattern, *, separator=_SEPARATOR):
+    """Anchor allowed words in the only structure the provider is known to accept.
+
+    A two-word minimum written as ``W(?:SEP+W)+`` made the provider return an empty
+    ``incomplete`` response with zero tokens, even for the smaller accepted vocabulary
+    (live probes of 15.11.2026, docs/development/cmo-support-selection-wire.md, wire v17).
+    Forbid unwanted single words through the word trie instead of changing this structure.
+    """
     return "^" + separator + "*(?:" + word_pattern + "(?:" + separator + "+" + word_pattern + ")*)?" + separator + "*$"
 
 

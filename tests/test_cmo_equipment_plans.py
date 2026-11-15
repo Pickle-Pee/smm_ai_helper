@@ -31,7 +31,8 @@ OWNER_EQUIPMENT = ("Участники выполняют практически
 
 
 def test_equipment_vocabulary_covers_the_downstream_absence_detector():
-    assert EQUIPMENT_STEMS == ("оборудован", "equipment") and EQUIPMENT_WORDS == {"gear"}
+    assert EQUIPMENT_STEMS == ("оборуд", "equipm") and EQUIPMENT_WORDS == {"gear"}
+    assert re.fullmatch(DEMO_FREE_PATTERN, "Мастерскую оборудуют заново.") is None
     for leaf in FREE_EQUIPMENT_LEAVES:
         assert re.fullmatch(DEMO_FREE_PATTERN, leaf) is None, leaf
     for phrase in ("без оборудования обучение проще", "оборудование не требуется вовсе",

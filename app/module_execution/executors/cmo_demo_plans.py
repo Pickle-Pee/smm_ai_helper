@@ -18,17 +18,23 @@ from .qualitative_generation import (
 # Whole forbidden words and forbidden stems (every word starting with them).
 DEMO_WORDS = frozenset(("демо", "demo", "demos", "proof", "proofs"))
 DEMO_STEMS = ("демонс", "demonst")
-# Free CMO prose (v15): no demo vocabulary, no "_" (schema keys such as
-# audience_understanding_ru) and at least two words (no bare RECOMMENDATION /
-# HYPOTHESIS label in place of content).
+# Free CMO prose (v15): no demo vocabulary and no "_" (schema keys such as
+# audience_understanding_ru).
 # v16: equipment conditions are owner terms. Free paraphrases repeatedly lost
 # their qualifiers or stated a fragment of a ";"-joined leaf, so the vocabulary
 # aligned with positioning_assurance.equipment_absence_spans is closed as well.
 EQUIPMENT_WORDS = frozenset(("gear",))
-EQUIPMENT_STEMS = ("оборудован", "equipment")
+EQUIPMENT_STEMS = ("оборуд", "equipm")
+# v17: a bare kind label (RECOMMENDATION / HYPOTHESIS) in place of content is
+# excluded through the same word trie. The v15 two-word structure was rejected by
+# the provider (empty incomplete response), so the accepted structure is kept.
+LABEL_STEMS = ("recomm", "hypoth")
+# Changing this pattern requires a new provider capability probe: structure, not
+# size, decided acceptance. The exact value below was accepted on 15.11.2026.
 DEMO_FREE_PATTERN = generation_pattern(
-    allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS | EQUIPMENT_WORDS, DEMO_STEMS + EQUIPMENT_STEMS),
-    separator=PROSE_SEPARATOR, min_words=2)
+    allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS | EQUIPMENT_WORDS,
+                         DEMO_STEMS + EQUIPMENT_STEMS + LABEL_STEMS),
+    separator=PROSE_SEPARATOR)
 
 DEMO_PLAN_NOTES = (
     "Подготовить новый демонстрационный материал строго по полному подтверждённому описанию владельца, "
@@ -60,12 +66,12 @@ PLAN_NOTES = DEMO_PLAN_NOTES + EQUIPMENT_PLAN_NOTES
 # Appended to the existing field descriptions; SOURCE/digit guidance is kept verbatim.
 DEMO_TEXT_NOTE = ("Free prose must not mention demonstration or demo materials; "
                   "a current demo fact uses its exact SOURCE token where listed. "
-                  "Write at least two words of content; never a kind label or a schema key. "
+                  "Write the content itself; never a kind label or a schema key. "
                   "Free prose must not mention equipment; an owner equipment condition appears only "
                   "through its exact SOURCE token where listed.")
 DEMO_ITEMS_NOTE = ("Free prose must not mention demonstration or demo materials. To plan a NEW demo "
                    "material, choose one exact listed demo-plan sentence. "
-                   "Write at least two words of content; never a kind label or a schema key. "
+                   "Write the content itself; never a kind label or a schema key. "
                    "Free prose must not mention equipment; use an exact SOURCE token for an owner "
                    "equipment condition, or one exact listed equipment-plan sentence.")
 
