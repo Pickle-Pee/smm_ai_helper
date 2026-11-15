@@ -6,7 +6,8 @@ compound («двухвариантных») that the unchanged numeric guard rej
 are generation problems, so they are closed where generation is constrained: the
 schema sent to the provider. For a Russian request
 
-- free prose may consist of Cyrillic words only (no Latin letter, digit or "_"),
+- free prose may consist of Cyrillic words and listed punctuation only (no Latin
+  letter, no digit of any script, no "_"),
 - count compounds are excluded as word prefixes, matching the numeric guard,
 - closed server sentences and relation keys are offered only in Russian.
 
@@ -22,7 +23,7 @@ from .cmo_demo_plans import DEMO_FREE_PATTERN, DEMO_STEMS, DEMO_WORDS, EQUIPMENT
 from .common import plain
 from .provider_schema import nodes
 from .qualitative_generation import (
-    GENERATION_COUNT_WORDS, PROSE_SEPARATOR, QUALITATIVE_GENERATION_PATTERN, allowed_word_pattern, generation_pattern,
+    GENERATION_COUNT_WORDS, QUALITATIVE_GENERATION_PATTERN, allowed_word_pattern, generation_pattern,
 )
 
 _CYRILLIC = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
@@ -32,6 +33,10 @@ _LATIN_LETTER = re.compile("[A-Za-z]")
 # numeric guard recognizes cardinal+unit concatenations; generation avoids the
 # whole word family instead of guessing the unit.
 RU_COUNT_PREFIXES = ("двух", "трёх", "трех", "четырёх", "четырех")
+# A positive list of separators. A negated class admits every other Unicode character:
+# the model wrote a time with Arabic-Indic digits («۱۸:۰۰») when ASCII digits were excluded.
+# ASCII hyphen stays last so that it needs no escape.
+RU_SEPARATOR = "[ .,;:!?()«»\"'/…‐‑–—-]"
 _RU_COUNT_WORDS = frozenset(word for word in GENERATION_COUNT_WORDS if not set(word) - set(_CYRILLIC))
 _RU_DEMO_WORDS = frozenset(word for word in DEMO_WORDS if not set(word) - set(_CYRILLIC))
 
@@ -39,8 +44,9 @@ _RU_DEMO_WORDS = frozenset(word for word in DEMO_WORDS if not set(word) - set(_C
 def _ru_pattern(words, prefixes):
     stems = tuple(stem for stem in prefixes if not set(stem) - set(_CYRILLIC))
     word = allowed_word_pattern(words, stems + RU_COUNT_PREFIXES, alphabet=_CYRILLIC, word_character="[А-Яа-яЁё]")
-    # Latin letters are neither separators nor word characters: they cannot be generated.
-    return generation_pattern(word, separator=PROSE_SEPARATOR)
+    # Only Cyrillic words and listed punctuation exist: no Latin letter, no digit of any
+    # script, no underscore and no other symbol can be generated.
+    return generation_pattern(word, separator=RU_SEPARATOR)
 
 
 # Changing either pattern requires a new provider capability probe (see
@@ -119,9 +125,12 @@ def language_projection(schema, request):
 
 
 LANGUAGE_GUIDANCE = {
-    "ru": ("Write every free-text field in Russian. Free text accepts Cyrillic words only: Latin letters, "
-           "digits and underscores cannot be generated. Never start a text with a kind label or a field "
-           "name. Name channels and brands in Russian spelling or describe them."),
+    "ru": ("Write every free-text field in Russian. Free text accepts Cyrillic words and ordinary "
+           "punctuation only: Latin letters, digits and underscores cannot be generated. Never start a "
+           "text with a kind label or a field name. Name channels and brands in Russian spelling or "
+           "describe them. Never restate or spell out a time, date, price or count in free text: refer "
+           "to it as the owner's complete terms; exact owner wording is available only through the "
+           "listed exact choices."),
 }
 
 

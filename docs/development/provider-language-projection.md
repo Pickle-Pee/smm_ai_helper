@@ -28,8 +28,10 @@ VIRTUAL_CMO and EXPERIMENTS (support-selection wires only). When the owner's own
 inputs (objective, constraints, authorized facts) are predominantly Cyrillic:
 
 1. free-prose patterns are replaced by Cyrillic-only patterns: a word consists of
-   Cyrillic letters, Latin letters, digits and `_` are neither word characters nor
-   separators, so they cannot be generated;
+   Cyrillic letters and separators are a positive list of ordinary punctuation and
+   the space, so Latin letters, digits of any script, `_` and other symbols cannot
+   be generated. (A negated separator class admitted Arabic-Indic digits: on
+   `6778cd7` the model wrote a time as «۱۸:۰۰» and the numeric guard rejected it.);
 2. the count stems `двух`, `трёх`, `трех`, `четырёх`, `четырех` are forbidden as
    word prefixes (the whole compound family, matching the numeric guard);
 3. closed server sentences that come in translated pairs keep only the Russian
@@ -51,9 +53,8 @@ Other request languages get the unchanged schema.
   schema is sent.
 - **Provider compatibility is pinned.** The provider answers an unsupported
   pattern with an empty `incomplete` response; offline tests cannot see that.
-  `tests/test_provider_language.py` pins the SHA-256 of both patterns after probes
-  `req_049844e21e6449f58f0cdded8a632174` and
-  `req_928d05bb1963441bab5812ba8e95b55f`. Changing a pattern requires a new probe.
+  `tests/test_provider_language.py` pins the SHA-256 of both patterns after probe
+  `req_d32ef29ee0984035a6a5b148829d221d`. Changing a pattern requires a new probe.
 
 ## Trade-offs and limits
 

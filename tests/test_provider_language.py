@@ -27,6 +27,9 @@ OBSERVED = (
     "HYPOT HYP: prioritize testing message variants.",
     "Баланс между скоростью проверки и точностью product description.",
     "Working diagnosis: there may be a gap between the supplied sample and the audience.",
+    # 6778cd7, bakery: ASCII digits were excluded, so the time came out in Arabic-Indic digits.
+    'Полное подтверждённое формулирование условий владельца: "заказ принимается до ۱۸:۰۰ накануне"',
+    "ＨＹＰ проверить спрос", "Проверить спрос ✅", "шаг + условия", "Строка" + chr(10) + "вторая",
 )
 
 
@@ -48,6 +51,7 @@ def test_observed_generation_defects_cannot_be_generated_for_a_russian_request(p
     "Рекомендуем сохранить полные условия владельца; гипотезу проверить в беседах.",
     "Качественные интервью — понимание, причины, сомнения.",
     "Сравнить контрольное и тестовое сообщения на сопоставимой аудитории",
+    "Провести беседы (очно), затем — сравнить «ответы»; из‑за сроков.",
 ])
 def test_ordinary_russian_prose_is_available_and_valid_for_the_unchanged_wire(text):
     for pattern in RU:
@@ -65,11 +69,11 @@ def test_cmo_pattern_keeps_the_demo_and_equipment_classes_closed():
 
 def test_patterns_are_the_ones_the_provider_accepted():
     # Offline tests cannot observe provider acceptance (an unsupported pattern returns an empty
-    # incomplete response). Both exact patterns completed on 15.11.2026 in a five-field schema:
-    # req_049844e21e6449f58f0cdded8a632174 (CMO), req_928d05bb1963441bab5812ba8e95b55f (qualitative).
-    # Re-probe the provider before changing a pin.
-    assert hashlib.sha256(language.RU_CMO_PATTERN.encode()).hexdigest().startswith("cdfca714f2677beb")
-    assert hashlib.sha256(language.RU_QUALITATIVE_PATTERN.encode()).hexdigest().startswith("f72ff195904118ed")
+    # incomplete response). Both exact patterns completed on 15.11.2026 in one five-field schema
+    # (req_d32ef29ee0984035a6a5b148829d221d). Re-probe the provider before changing a pin.
+    assert hashlib.sha256(language.RU_CMO_PATTERN.encode()).hexdigest().startswith("b4a71bcffe157460")
+    assert hashlib.sha256(language.RU_QUALITATIVE_PATTERN.encode()).hexdigest().startswith("7392310e4aa1fab4")
+    assert "[^" not in language.RU_QUALITATIVE_PATTERN and "[^" not in language.RU_CMO_PATTERN
     for pattern in RU:
         assert ")+" not in pattern and "(?!" not in pattern and "(?=" not in pattern and pattern.count("$") == 1
 
