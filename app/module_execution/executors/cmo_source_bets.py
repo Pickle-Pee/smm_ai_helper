@@ -49,6 +49,12 @@ def source_bet_statement_schema(base, choices):
             "source_choice": {"type": "string", "enum": sorted(choices)},
             "test_relation": {"type": "string", "enum": list(BET_RELATIONS)},
         }, "required": ["source_choice", "test_relation"], "additionalProperties": False}}
+    context = props.get("numeric_context")
+    if any(key.startswith(TERMS_PREFIX) for key in choices):
+        # Leave room for the complete owner terms the server appends for a TERMS choice.
+        if type(context) is not dict or context.get("type") != "array" or type(context.get("maxItems")) is not int:
+            raise ModuleExecutionContractError("Invalid CMO source-bound bet context")
+        context["maxItems"] = context["maxItems"] - 1
     return result
 
 

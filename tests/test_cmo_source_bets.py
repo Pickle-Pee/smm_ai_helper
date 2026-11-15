@@ -264,3 +264,13 @@ def test_model_numeric_context_for_the_same_terms_is_one_citation_not_a_duplicat
     value['outputs']['strategic_bets']['numeric_context'] = [{'support_id': identity, 'quote': TERMS}]
     decoded = decode_support_selection_wire(value, canonical, req.expected_outputs, ids, parents, numeric, sources, terms)
     assert decoded['outputs'][0]['numeric_context'] == [{'support_id': identity, 'quote': TERMS}]
+
+
+def test_terms_bet_schema_reserves_room_for_the_server_appended_quote():
+    req = source_request('product_truth', TERMS, names=('strategic_bets',))
+    canonical, schema, ids, parents, numeric, sources, terms, value = terms_prepared(req)
+    assert schema['$defs'][BET_DEFINITION]['properties']['numeric_context']['maxItems'] == 2
+    assert schema['$defs']['OtherStrategyStatement']['properties']['numeric_context']['maxItems'] == 3
+    plain = source_request('product_truth', OWNER, names=('strategic_bets',))
+    _, plain_schema, *_ = source_contracts(plain)
+    assert plain_schema['$defs'][BET_DEFINITION]['properties']['numeric_context']['maxItems'] == 3
