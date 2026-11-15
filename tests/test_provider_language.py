@@ -61,6 +61,16 @@ def test_ordinary_russian_prose_is_available_and_valid_for_the_unchanged_wire(te
     assert not has_numeric_quantity(text)
 
 
+def test_experiments_prose_cannot_embed_a_demo_quotation():
+    # 33e6918, course release proof: rejected downstream with DEMONSTRATION_ASSERTION_REQUIRES_SOURCE.
+    observed = ('Документировать полные тексты сообщений, полные заметки бесед с аудиторией, '
+                'и точную цитату: "Демонстрационный образец показывает сравнение снимков."')
+    assert re.fullmatch(language.RU_QUALITATIVE_PATTERN, observed) is None
+    assert re.fullmatch(language.RU_QUALITATIVE_PATTERN, "Показать предоставленный образец в беседе и записать реакцию.")
+    # Equipment stays a CMO-only closure.
+    assert re.fullmatch(language.RU_QUALITATIVE_PATTERN, "Уточнить оборудование у владельца")
+
+
 def test_cmo_pattern_keeps_the_demo_and_equipment_classes_closed():
     for text in ("Новый демонстрационный материал", "Уточнить оборудование у владельца", "демо для аудитории"):
         assert re.fullmatch(language.RU_CMO_PATTERN, text) is None
@@ -70,9 +80,10 @@ def test_cmo_pattern_keeps_the_demo_and_equipment_classes_closed():
 def test_patterns_are_the_ones_the_provider_accepted():
     # Offline tests cannot observe provider acceptance (an unsupported pattern returns an empty
     # incomplete response). Both exact patterns completed on 15.11.2026 in one five-field schema
-    # (req_d32ef29ee0984035a6a5b148829d221d). Re-probe the provider before changing a pin.
+    # (req_d32ef29ee0984035a6a5b148829d221d); the qualitative pattern with the demo vocabulary
+    # closed completed in req_62cf3c1513b7423da48279f0723fa9be. Re-probe before changing a pin.
     assert hashlib.sha256(language.RU_CMO_PATTERN.encode()).hexdigest().startswith("b4a71bcffe157460")
-    assert hashlib.sha256(language.RU_QUALITATIVE_PATTERN.encode()).hexdigest().startswith("7392310e4aa1fab4")
+    assert hashlib.sha256(language.RU_QUALITATIVE_PATTERN.encode()).hexdigest().startswith("09dcc8cfeb12dcb9")
     assert "[^" not in language.RU_QUALITATIVE_PATTERN and "[^" not in language.RU_CMO_PATTERN
     for pattern in RU:
         assert ")+" not in pattern and "(?!" not in pattern and "(?=" not in pattern and pattern.count("$") == 1

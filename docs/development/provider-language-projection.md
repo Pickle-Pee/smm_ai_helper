@@ -33,7 +33,10 @@ inputs (objective, constraints, authorized facts) are predominantly Cyrillic:
    be generated. (A negated separator class admitted Arabic-Indic digits: on
    `6778cd7` the model wrote a time as «۱۸:۰۰» and the numeric guard rejected it.);
 2. the count stems `двух`, `трёх`, `трех`, `четырёх`, `четырех` are forbidden as
-   word prefixes (the whole compound family, matching the numeric guard);
+   word prefixes (the whole compound family, matching the numeric guard); demo
+   vocabulary is closed in EXPERIMENTS prose as it already is in CMO prose (on
+   `33e6918` the model embedded the owner's demo sentence in a longer text and the
+   node failed with `DEMONSTRATION_ASSERTION_REQUIRES_SOURCE`);
 3. closed server sentences that come in translated pairs keep only the Russian
    member; relation keys keep only the `_ru` member;
 4. the model input carries `output_language` and a one-sentence guidance.
@@ -54,7 +57,9 @@ Other request languages get the unchanged schema.
 - **Provider compatibility is pinned.** The provider answers an unsupported
   pattern with an empty `incomplete` response; offline tests cannot see that.
   `tests/test_provider_language.py` pins the SHA-256 of both patterns after probe
-  `req_d32ef29ee0984035a6a5b148829d221d`. Changing a pattern requires a new probe.
+  `req_d32ef29ee0984035a6a5b148829d221d` (CMO) and
+  `req_62cf3c1513b7423da48279f0723fa9be` (EXPERIMENTS). Changing a pattern requires
+  a new probe.
 
 ## Trade-offs and limits
 

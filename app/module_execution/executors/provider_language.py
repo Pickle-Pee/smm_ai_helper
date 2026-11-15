@@ -51,7 +51,10 @@ def _ru_pattern(words, prefixes):
 
 # Changing either pattern requires a new provider capability probe (see
 # tests/test_provider_language.py and docs/development/provider-language-projection.md).
-RU_QUALITATIVE_PATTERN = _ru_pattern(_RU_COUNT_WORDS, ())
+# EXPERIMENTS prose closes demo vocabulary too: on 33e6918 the model embedded the owner's demo
+# sentence in a longer free text and the unchanged downstream check rejected the node
+# (DEMONSTRATION_ASSERTION_REQUIRES_SOURCE). A demo fact is an owner source, never free prose.
+RU_QUALITATIVE_PATTERN = _ru_pattern(_RU_COUNT_WORDS | _RU_DEMO_WORDS, DEMO_STEMS)
 RU_CMO_PATTERN = _ru_pattern(_RU_COUNT_WORDS | _RU_DEMO_WORDS, DEMO_STEMS + EQUIPMENT_STEMS)
 _RU_PATTERNS = {QUALITATIVE_GENERATION_PATTERN: RU_QUALITATIVE_PATTERN, DEMO_FREE_PATTERN: RU_CMO_PATTERN}
 
@@ -129,8 +132,8 @@ LANGUAGE_GUIDANCE = {
            "punctuation only: Latin letters, digits and underscores cannot be generated. Never start a "
            "text with a kind label or a field name. Name channels and brands in Russian spelling or "
            "describe them. Never restate or spell out a time, date, price or count in free text: refer "
-           "to it as the owner's complete terms; exact owner wording is available only through the "
-           "listed exact choices."),
+           "to it as the owner's complete terms. Never quote or restate an owner text or a demonstration "
+           "material inside free text: owner wording appears only through the listed exact choices."),
 }
 
 
