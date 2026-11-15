@@ -470,3 +470,42 @@ Downstream fidelity validators, canonical v1, Quality Gates and EXPERIMENTS are
 unchanged. The free-prose pattern grows to about 4.3k characters; provider
 acceptance of that pattern is part of the controlled live acceptance. Older wire
 versions are rejected.
+
+## Wire v17 · provider-compatible label guard
+
+The first live CMO call with the v16 schema (multi-domain acceptance, bakery case,
+candidate `6203242`) returned `status=incomplete`, `max_output_tokens`, empty output and
+zero input/output tokens after 2.2 s (`req_0bff369f00e04ed39dc090e1198d1ad2`). This is the
+provider's known signature for a pattern its constrained decoder cannot compile; a retry
+of the same schema cannot succeed.
+
+Differential probes with a one-field schema (one POST each, never repeated):
+
+| Pattern | Length | Result |
+| --- | --- | --- |
+| v16 as shipped (`58090ca0`) | 4339 | empty incomplete, 0 tokens (`req_780ccc3bde1347f687ecb6ecb5e106a8`) |
+| v13 vocabulary, two-word structure, `_`-free separator (`24b2c139`) | 2463 | empty incomplete, 0 tokens (`req_5739cb9c0c254429bc5e7f32834112da`) |
+| v13 vocabulary, accepted structure, `_`-free separator (`5833d83f`) | 2468 | completed (`req_3dccbd8fe3c6494486cb66051d425f2b`) |
+| v17 (`3b0da3a7`) | 4612 | completed (`req_c028d93eb3f54dbaaa1ee2529e34f39d`) |
+
+Cause: the v15 two-word structure `^SEP*W(?:SEP+W)+SEP*$`. Neither the `_`-free
+separator nor the pattern size (v17 is longer than v16) is the problem. The provider
+implementation is unknown; the limit is recorded from differential observation.
+
+v17 keeps the accepted structure `^SEP*(?:W(?:SEP+W)*)?SEP*$` and removes the
+`min_words` option from `generation_pattern`:
+
+- `_` stays excluded from separators, so schema keys still cannot be generated;
+- a bare kind label is excluded through the word trie: the stems `recomm` and `hypoth`
+  are forbidden in free CMO prose. English free prose therefore cannot use
+  "recommendation" or "hypothesis" at all; Russian prose is unaffected and closed
+  English recipe/plan sentences are enums, not free prose;
+- a single ordinary word is free prose again (v15 rejected it); substance is a quality
+  question, not a schema guard;
+- equipment stems are shortened to `оборуд` / `equipm` (same vocabulary, also covers
+  verb forms such as «оборудуют»).
+
+`tests/test_cmo_prose_guard.py` pins the SHA-256 of the accepted pattern: offline tests
+cannot observe provider acceptance, so any change of the pattern needs a new provider
+probe before the pin is updated. Canonical v1, the downstream validators, Quality Gates
+and EXPERIMENTS are unchanged. Older wire versions are rejected.
