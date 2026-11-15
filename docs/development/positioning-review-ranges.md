@@ -40,15 +40,15 @@ saved v4 course with seven UNVERIFIABLE verdicts remains rejected. Its report di
 not include reasons, so confusing untested value with factual uncertainty is an
 inference from independently reviewed content, not known model rationale.
 
-For closed recognized complete owner sources, source_fact_units() plans distinct
-predicates with internal Unicode codepoint ranges. The server resolves anchors
-and prescribes their evidence IDs. Every unit must appear exactly once with its
-assigned anchor and source; duplicates or omissions fail even at full character
-coverage. Materials and firing are separate units sharing a sentence. Collection
-retains its full after-firing/another-day condition. Known source-plan coverage is
-reported separately from model-reported atomic completeness. Unknown source
-shapes have no such deterministic unit guarantee: an empty unit plan does not
-prove semantic completeness. This is bounded typing, not general NLP extraction.
+Owner sources are not decomposed by recognizing particular wording. The former
+source_fact_units() plan matched only the two acceptance texts (photography
+course, ceramics masterclass); real Telegram inputs never reached it, so it was
+removed (positioning-domain-generalization-design.md). Every output, including a
+verbatim offer/RTB source, is audited as free atoms over the complete text: the
+auditor must extract every material premise and report `atoms_complete`. The
+`units` and `known_facts` fields stay in the v5 wire as empty values, so the
+auditor input and `source_unit_coverage` keep their shape. Full token coverage
+still does not prove semantic completeness.
 
 
 APPROVE cannot authorize arbitrary free prose by labeling it HYPOTHESIS.
@@ -81,20 +81,20 @@ from promoting a proposed demand, value or distinction to factual INFERENCE.
 Production string identities enable request-scoped proposals for the actual
 category, task, value, tentative difference and full positioning sentence. Exact
 product/audience slots and each required source ID must match this request and
-be cited. Feature-specific angles are enabled only by closed complete owner
-source patterns; unknown prose enables a prospective generic angle, never a new
-feature. Offer/RTB still carry complete exact source conditions. The
+be cited. Proposals are domain-neutral: no template recognizes a product domain or
+owner wording, and owner terms are referenced as a whole, never fragmented or
+restated. A single owner-terms source binds the value/difference proposals by ID.
+Offer/RTB still carry complete exact source conditions. The
 source-role taxonomy is extended with product identity, which is not proof of
 product properties. Source roles are enforced by output independently of labels.
 
-Explicit photography-course and ceramics-masterclass identities, a single
-audience and matching complete owner truth enable purpose-specific profiles.
-These supply actual category/comparison/value/message/risk proposals rather
-than generic research tasks. Each profile proposal binds all three source IDs;
-the course preserves practical tasks/written feedback, while ceramics preserves
-materials/firing and collection on another day. A complete authorized proposal
-can contain several separately reviewed recommendations. Partial anchors cannot
-remove its qualifiers. Demonstration citations outside RTB are rejected even
+The former photography/ceramics profiles and the education-flavoured generic
+fallback («освоение новой практики») were removed: every Telegram run received the
+fallback, including a bakery. The neutral templates are an interim stage; product-
+specific market hypotheses written by the model and independently verified are
+the next stage (positioning-domain-generalization-design.md). A complete authorized
+proposal can contain several separately reviewed recommendations. Partial anchors
+cannot remove its qualifiers. Demonstration citations outside RTB are rejected even
 when the auditor ignores their lack of relevance.
 
 This restriction can reject useful strategy. Relevance, section purpose and

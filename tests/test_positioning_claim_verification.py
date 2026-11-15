@@ -77,13 +77,13 @@ def test_review_requires_exact_coverage_even_when_the_omitted_text_is_last():
 
 def test_complete_fact_and_distinct_strategic_hypothesis_are_permitted():
     source = ReviewEvidence("Written feedback is included.", "product_truth")
-    strategy = " Test whether beginners value knowing what to practice next."
+    strategy = " Test which task the audience wants to complete when choosing."
     assert not verify(source.text + strategy, source, review(source.text, quote=source.text),
                       review(strategy, category="strategy", kind="hypothesis", status="HYPOTHESIS"))
 
 
 def test_unknown_product_conditions_can_be_an_explicit_validation_recommendation():
-    text = "Ask participants whether the timing meets their needs."
+    text = "Ask the audience whether the stated conditions meet their needs."
     assert not verify(text, ReviewEvidence("", "product_truth"),
                       review(text, category="strategy", kind="recommendation", status="RECOMMENDATION"))
 

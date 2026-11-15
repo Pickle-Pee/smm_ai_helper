@@ -70,7 +70,7 @@ def run_review(rows, evidence, mutate=None):
 def test_dynamic_choice_with_all_dependencies_is_reviewable(case):
     evidence = verification_inputs(invocation(case))
     choice = dynamic_choice(evidence)
-    assert len(choice["required_source_ids"]) == 3
+    assert len(choice["required_source_ids"]) == 2
     decision, captured = run_review([output(choice["text"], choice["required_source_ids"])], evidence)
     assert decision["status"] == "verified"
     assert choice in captured["data"]["outputs"]["value_proposition"]["strategy_choices"]
@@ -107,7 +107,7 @@ def test_several_recommendations_inside_a_complete_bound_message_plan_are_review
     def separate(report, data):
         report["reviews"]["message_hierarchy"]["claims"] = [
             {"span_id": identity, "unit_id": "free", "verdict": "CLEAR", "support_ids": []}
-            for identity in data["outputs"]["message_hierarchy"]["spans"] if identity.startswith("sentence_")
+            for identity in data["outputs"]["message_hierarchy"]["spans"] if identity.startswith("clause_")
         ]
 
     decision, _ = run_review([output(choice["text"], choice["required_source_ids"], name="message_hierarchy")], evidence, separate)
@@ -120,7 +120,7 @@ def test_counterfactual_risk_check_is_reviewable_but_negative_audit_still_blocks
     evidence = verification_inputs(invocation(case))
     choice = dynamic_choice(evidence, "claim_risks")
     row = output(choice["text"], choice["required_source_ids"], name="claim_risks")
-    assert "проверить, не" in choice["text"]
+    assert "сверить каждое обещание" in choice["text"]
 
     def recommendation(report, data):
         report["reviews"]["claim_risks"]["claims"][0]["verdict"] = "CLEAR"
@@ -239,7 +239,7 @@ def test_prospective_scope_cannot_be_obtained_by_a_producer_label(alteration):
     assert decision["status"] == "rejected"
 
 
-def test_source_fact_keeps_unverifiable_verdict_and_all_required_units():
+def test_source_fact_keeps_unverifiable_verdict_over_complete_free_atoms():
     req = invocation("course")
     evidence = verification_inputs(req)
     identity = next(identity for identity, source in evidence.items() if source["role"] == "product_truth")
@@ -250,7 +250,7 @@ def test_source_fact_keeps_unverifiable_verdict_and_all_required_units():
 
     decision, captured = run_review([output(text, [identity], name="offer")], evidence, uncertain)
     assert captured["data"]["outputs"]["offer"]["audit_scope"] == "source_fact"
-    assert len(decision["source_unit_coverage"]["offer"]) == 4
+    assert decision["source_unit_coverage"]["offer"] == []
     assert decision["status"] == "rejected"
     assert decision["findings"][0]["status"] == "UNVERIFIABLE"
 
@@ -276,7 +276,7 @@ def test_choice_for_another_output_does_not_fulfill_this_output():
 
 def test_static_generic_research_task_cannot_replace_the_category():
     evidence = verification_inputs(invocation("course"))
-    decision, _ = run_review([output("Test whether beginners value knowing what to practice next.", (), name="category")], evidence)
+    decision, _ = run_review([output("Test which task the audience wants to complete when choosing.", (), name="category")], evidence)
     assert decision["status"] == "rejected"
 
 

@@ -44,8 +44,8 @@ def test_known_product_premise_survives_hypothesis_or_recommendation_label(text)
 
 
 @pytest.mark.parametrize("text", [
-    "Test whether beginners value knowing what to practice next.",
-    "Ask participants whether the timing meets their needs.",
+    "Test which task the audience wants to complete when choosing.",
+    "Ask the audience whether the stated conditions meet their needs.",
     "Гипотеза: аудитории может быть важна ясность следующего шага.",
     "Проверить, нужен ли аудитории онлайн-формат.",
     "Выяснить, важна ли участникам персональная обратная связь.",

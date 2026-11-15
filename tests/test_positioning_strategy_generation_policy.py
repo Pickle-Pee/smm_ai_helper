@@ -36,7 +36,7 @@ def test_observed_equipment_paraphrases_still_fail_before_verification(name, tex
 
 def test_neutral_strategy_and_exact_terms_reach_canonical_without_relaxing_guards():
     names = ("demand_context", "value_proposition", "differentiation", "positioning_statement", "offer", "RTB")
-    angle = "Проверить интерес к практике фотографии."
+    angle = "Проверить, какие ситуации заставляют аудиторию искать альтернативу текущему выбору."
 
     def select(payload, data):
         for name in names[:4]:
@@ -54,7 +54,7 @@ def test_neutral_strategy_and_exact_terms_reach_canonical_without_relaxing_guard
     assert rows["offer"]["evidence_ids"] == rows["RTB"]["evidence_ids"]
     instruction = model.calls[0]["instruction"]
     assert "demand_context describes a need to investigate" in instruction
-    assert "not a promise that the course gives" in instruction
+    assert "not a promise that the product" in instruction
     assert "differentiation proposes a comparison to validate" in instruction
     assert "positioning_statement\nrecommends an angle" in instruction
     assert "Keep equipment conditions in the exact SOURCE offer or RTB" in instruction

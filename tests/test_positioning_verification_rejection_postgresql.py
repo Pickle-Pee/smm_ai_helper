@@ -38,7 +38,7 @@ def test_worker_blocks_fulfillment_contradiction_despite_approve(mvp_database, m
                 if row["output_name"] == "offer":
                     row.update(text=promise, kind="RECOMMENDATION")
                 elif row["output_name"] != "RTB":
-                    row["text"] = "Test whether beginners value knowing what to practice next."
+                    row["text"] = "Test which task the audience wants to complete when choosing."
 
     model = FakeModel(draft, use_parents=True)
     calls = []
