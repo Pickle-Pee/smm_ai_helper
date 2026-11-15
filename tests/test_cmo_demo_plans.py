@@ -15,7 +15,7 @@ import pytest
 from app.module_execution.acceptance import fully_accepted
 from app.module_execution.errors import ModuleExecutionContractError
 from app.module_execution.executors.cmo_demo_plans import (
-    DEMO_FREE_PATTERN, DEMO_PLAN_NOTES, DEMO_STEMS, DEMO_WORDS,
+    DEMO_FREE_PATTERN, DEMO_PLAN_NOTES, DEMO_STEMS, DEMO_WORDS, PLAN_NOTES,
 )
 from app.module_execution.executors.cmo_support_wire import (
     RISKS_DEFINITION, STATEMENTS, TRADEOFFS_DEFINITION, WIRE_VERSION, support_selection_catalog,
@@ -74,7 +74,7 @@ def test_demo_free_pattern_is_a_strict_restriction_of_the_shared_pattern():
     assert {"демо", "demo", "proof"} <= DEMO_WORDS and DEMO_STEMS == ("демонс", "demonst")
 
 
-@pytest.mark.parametrize("note", DEMO_PLAN_NOTES)
+@pytest.mark.parametrize("note", PLAN_NOTES)
 def test_closed_plans_are_bounded_digit_free_and_pass_unchanged_leaf_checks(note):
     assert 1 <= len(note) <= 300 and not has_numeric_quantity(note)
     assert re.fullmatch(QUALITATIVE_GENERATION_PATTERN, note)
@@ -88,20 +88,20 @@ def test_schema_offers_plans_only_on_other_strategy_items():
     _, schema, ids, parents, _ = contracts(scoped_request())
     defs = schema["$defs"]
     other = defs[STATEMENTS[1]]["properties"]["items"]["items"]["anyOf"]
-    assert other[-1]["enum"] == list(DEMO_PLAN_NOTES)
+    assert other[-1]["enum"] == list(PLAN_NOTES)
     main = defs[STATEMENTS[0]]["properties"]["items"]["items"]
     assert "anyOf" not in main and main["pattern"] == DEMO_FREE_PATTERN
     for name in (RISKS_DEFINITION, TRADEOFFS_DEFINITION):
         assert "anyOf" not in defs[name]["properties"]["items"]["items"]
-        assert not set(defs[name]["properties"]["items"]["items"]["enum"]) & set(DEMO_PLAN_NOTES)
+        assert not set(defs[name]["properties"]["items"]["items"]["enum"]) & set(PLAN_NOTES)
     for definition in (STATEMENTS[0], STATEMENTS[1], TRADEOFFS_DEFINITION):
         assert defs[definition]["properties"]["text"]["pattern"] == DEMO_FREE_PATTERN
     assert schema["properties"]["wire_contract_version"]["enum"] == [WIRE_VERSION]
-    assert WIRE_VERSION == "virtual_cmo.support_selection.v15"
+    assert WIRE_VERSION == "virtual_cmo.support_selection.v16"
 
 
 @pytest.mark.parametrize("name", PLAN_OUTPUTS)
-@pytest.mark.parametrize("note", DEMO_PLAN_NOTES)
+@pytest.mark.parametrize("note", PLAN_NOTES)
 def test_closed_plan_passes_normal_executor_and_quality(name, note):
     req = scoped_request()
     async def model(**kwargs):
