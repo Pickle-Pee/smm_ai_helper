@@ -129,6 +129,10 @@ Free CMO prose (texts and items) must not mention demonstration or demo material
 the schema rejects such words. A current demo fact uses its exact SOURCE token.
 To plan a NEW demo material in an item, choose one exact listed demo-plan sentence;
 the server keeps it unchanged. Do not describe what a planned demo will contain or show.
+Free CMO prose must not mention equipment either; the schema rejects such words.
+An owner equipment condition appears only as its exact SOURCE token (or inside a
+TERMS bet); never restate, shorten or negate it. To plan clarifying equipment
+terms in an item, choose one exact listed equipment-plan sentence.
 Keep all original strategy, numerical grounding and uncertainty requirements."""
 
     def model_input_for(self, request, data, evidence, parents):

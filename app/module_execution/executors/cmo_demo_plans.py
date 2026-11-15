@@ -21,8 +21,14 @@ DEMO_STEMS = ("демонс", "demonst")
 # Free CMO prose (v15): no demo vocabulary, no "_" (schema keys such as
 # audience_understanding_ru) and at least two words (no bare RECOMMENDATION /
 # HYPOTHESIS label in place of content).
-DEMO_FREE_PATTERN = generation_pattern(allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS, DEMO_STEMS),
-                                       separator=PROSE_SEPARATOR, min_words=2)
+# v16: equipment conditions are owner terms. Free paraphrases repeatedly lost
+# their qualifiers or stated a fragment of a ";"-joined leaf, so the vocabulary
+# aligned with positioning_assurance.equipment_absence_spans is closed as well.
+EQUIPMENT_WORDS = frozenset(("gear",))
+EQUIPMENT_STEMS = ("оборудован", "equipment")
+DEMO_FREE_PATTERN = generation_pattern(
+    allowed_word_pattern(GENERATION_COUNT_WORDS | DEMO_WORDS | EQUIPMENT_WORDS, DEMO_STEMS + EQUIPMENT_STEMS),
+    separator=PROSE_SEPARATOR, min_words=2)
 
 DEMO_PLAN_NOTES = (
     "Подготовить новый демонстрационный материал строго по полному подтверждённому описанию владельца, "
@@ -38,13 +44,30 @@ DEMO_PLAN_NOTES = (
     "Use the new demonstration material in communication only after owner approval "
     "and a check of audience understanding.",
 )
+# Closed, domain-independent equipment plans: they state no requirement and no
+# absence of one, and send the reader to the complete owner terms.
+EQUIPMENT_PLAN_NOTES = (
+    "Уточнить у владельца требования к оборудованию и использовать в сообщении только полное подтверждённое "
+    "условие владельца.",
+    "Проверить в беседах, какие вопросы об оборудовании возникают у аудитории, и сверить ответы "
+    "с полным описанием владельца.",
+    "Clarify the equipment requirements with the owner and use only the complete confirmed owner terms "
+    "in communication.",
+    "Check in interviews which equipment questions the audience raises and compare the answers "
+    "with the complete owner description.",
+)
+PLAN_NOTES = DEMO_PLAN_NOTES + EQUIPMENT_PLAN_NOTES
 # Appended to the existing field descriptions; SOURCE/digit guidance is kept verbatim.
 DEMO_TEXT_NOTE = ("Free prose must not mention demonstration or demo materials; "
                   "a current demo fact uses its exact SOURCE token where listed. "
-                  "Write at least two words of content; never a kind label or a schema key.")
+                  "Write at least two words of content; never a kind label or a schema key. "
+                  "Free prose must not mention equipment; an owner equipment condition appears only "
+                  "through its exact SOURCE token where listed.")
 DEMO_ITEMS_NOTE = ("Free prose must not mention demonstration or demo materials. To plan a NEW demo "
                    "material, choose one exact listed demo-plan sentence. "
-                   "Write at least two words of content; never a kind label or a schema key.")
+                   "Write at least two words of content; never a kind label or a schema key. "
+                   "Free prose must not mention equipment; use an exact SOURCE token for an owner "
+                   "equipment condition, or one exact listed equipment-plan sentence.")
 
 
 def with_note(description, note):
@@ -72,11 +95,12 @@ def demo_free_prose(field, *, plans=False):
         result["description"] = with_note(result.get("description"), DEMO_TEXT_NOTE)
         return result
     maximum = free["maxLength"]
-    notes = [note for note in DEMO_PLAN_NOTES if len(note) <= maximum]
-    if len(notes) != len(DEMO_PLAN_NOTES):
+    notes = [note for note in PLAN_NOTES if len(note) <= maximum]
+    if len(notes) != len(PLAN_NOTES):
         _fail()
-    plan = {"type": "string", "enum": notes,
-            "description": "Exact closed plan for a NEW demo material; the server keeps the sentence unchanged."}
+    plan = {"type": "string", "enum": notes, "description": (
+        "Exact closed plan for a NEW demo material or for clarifying equipment terms; "
+        "the server keeps the sentence unchanged.")}
     if "anyOf" in result:
         result["anyOf"].append(plan)
         result["description"] = with_note(result.get("description"), DEMO_ITEMS_NOTE)

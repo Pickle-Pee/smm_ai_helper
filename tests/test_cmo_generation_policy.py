@@ -18,7 +18,7 @@ from app.module_execution.executors.cmo_support_wire import (
     TRADEOFFS_DEFINITION, TRADEOFF_ITEM_NOTES, STATEMENTS, WIRE_FIELDS,
     support_selection_catalog, support_selection_wire_schema, decode_support_selection_wire,
 )
-from app.module_execution.executors.cmo_demo_plans import DEMO_FREE_PATTERN, DEMO_ITEMS_NOTE, DEMO_PLAN_NOTES
+from app.module_execution.executors.cmo_demo_plans import DEMO_FREE_PATTERN, DEMO_ITEMS_NOTE, DEMO_PLAN_NOTES, PLAN_NOTES
 from app.module_execution.executors.numeric_quantity import has_numeric_quantity
 from app.module_execution.executors.provider_schema import nodes
 from app.module_execution.executors.qualitative_generation import QUALITATIVE_GENERATION_PATTERN
@@ -484,9 +484,9 @@ def test_source_metadata_digit_exception_is_advertised_only_where_selectors_exis
     assert ("anyOf" in text) == (source_size > 0)
     # v13: OtherStrategyStatement items always offer closed demo plans; SOURCE branch only when eligible.
     branches = items["items"]["anyOf"]
-    source_branches = [b for b in branches if "enum" in b and b["enum"] != list(DEMO_PLAN_NOTES)]
+    source_branches = [b for b in branches if "enum" in b and b["enum"] != list(PLAN_NOTES)]
     assert bool(source_branches) == (0 < source_size <= 300)
-    assert branches[-1]["enum"] == list(DEMO_PLAN_NOTES)
+    assert branches[-1]["enum"] == list(PLAN_NOTES)
     assert items["description"].startswith(SOURCE_ITEMS_DESCRIPTION) == (0 < source_size <= 300)
     assert items["description"].endswith(DEMO_ITEMS_NOTE)
     assert schema["$defs"][TRADEOFFS_DEFINITION]["properties"]["items"]["description"] != SOURCE_ITEMS_DESCRIPTION

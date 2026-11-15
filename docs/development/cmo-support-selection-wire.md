@@ -445,3 +445,28 @@ same wire schema, so a leak fails at `schema_invalid` instead of reaching storag
 Closed enums (risks, trade-off items, bet and diagnosis recipes, demo plans) are
 unchanged. The shared `QUALITATIVE_GENERATION_PATTERN` used by other modules is
 byte-identical. Older wire versions are rejected.
+
+## Wire v16 · equipment conditions are owner terms, not free prose
+
+Telegram course graph `012fa4b7` (`c6c5dc5`) failed in CMO on a fragment of the
+owner's equipment condition. The owner leaf was «;»-joined and carried a duration,
+so it had no SOURCE token; the model restated one clause in free prose and the
+unchanged downstream check rejected it (`PRODUCT_CLAIM_REQUIRES_TRUTH`). Growing
+the closed research grammar for each new paraphrase repeats the v13 demo history.
+
+v16 closes the class the same way as demo materials:
+
+- the free CMO prose branch forbids equipment vocabulary (stems `оборудован`,
+  `equipment`, word `gear`), aligned with `equipment_absence_spans`;
+- an owner equipment condition appears only as its complete SOURCE leaf, or, when
+  the leaf carries a quantity, inside a TERMS bet's `numeric_context` (v14);
+- OtherStrategyStatement items additionally offer four closed equipment-plan
+  sentences (RU/EN): clarify requirements with the owner and use only the complete
+  confirmed terms; check which equipment questions the audience raises and compare
+  the answers with the complete owner description. They state neither a
+  requirement nor its absence and pass the unchanged downstream checks.
+
+Downstream fidelity validators, canonical v1, Quality Gates and EXPERIMENTS are
+unchanged. The free-prose pattern grows to about 4.3k characters; provider
+acceptance of that pattern is part of the controlled live acceptance. Older wire
+versions are rejected.

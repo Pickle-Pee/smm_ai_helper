@@ -42,7 +42,7 @@ def test_ordinary_two_word_prose_remains_available(text):
 def test_shared_qualitative_pattern_used_by_other_modules_is_unchanged():
     assert hashlib.sha256(QUALITATIVE_GENERATION_PATTERN.encode()).hexdigest().startswith("8cfe49af")
     assert re.fullmatch(QUALITATIVE_GENERATION_PATTERN, "audience_understanding_ru")
-    assert WIRE_VERSION == "virtual_cmo.support_selection.v15"
+    assert WIRE_VERSION == "virtual_cmo.support_selection.v16"
 
 
 @pytest.mark.parametrize("field,value", [

@@ -18,7 +18,7 @@ from .cmo_source_diagnoses import (
 )
 from .cmo_demo_plans import DEMO_ITEMS_NOTE, DEMO_TEXT_NOTE, demo_free_prose, with_note
 
-WIRE_VERSION = "virtual_cmo.support_selection.v15"
+WIRE_VERSION = "virtual_cmo.support_selection.v16"
 MAX_SOURCE_CHOICES = 128
 PARENT_MAP = "CMOAdditionalParentSupport"
 EVIDENCE_MAP = "CMOAdditionalEvidenceSupport"
