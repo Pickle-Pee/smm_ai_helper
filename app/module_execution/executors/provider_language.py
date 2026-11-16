@@ -133,7 +133,11 @@ LANGUAGE_GUIDANCE = {
            "text with a kind label or a field name. Name channels and brands in Russian spelling or "
            "describe them. Never restate or spell out a time, date, price or count in free text: refer "
            "to it as the owner's complete terms. Never quote or restate an owner text or a demonstration "
-           "material inside free text: owner wording appears only through the listed exact choices."),
+           "material inside free text: owner wording appears only through the listed exact choices. "
+           "Free text cannot spell «демонстрационный» or «демонстрация» at all: call the owner's "
+           "demonstration material «предоставленный образец» and do not say what it shows or proves. "
+           "When a required input is the owner's demonstration sentence, choose it from the listed exact "
+           "choices and select that source on the first output."),
 }
 
 

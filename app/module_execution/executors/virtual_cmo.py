@@ -226,15 +226,19 @@ Keep all original strategy, numerical grounding and uncertainty requirements."""
         return await self.generate(request, first_party_evidence(request, facts))
 
     def build_result(self, request, output, evidence, parents):
-        from .downstream_fidelity import comparison_quotes, selected_sources, validate_leaf, validate_limitation
+        from .downstream_fidelity import (
+            comparison_quotes, reject_distorted_source_copy, selected_sources, validate_leaf, validate_limitation,
+        )
 
         local = {item.record.evidence_id: item for item in evidence}
         for statement in output.outputs:
             owner, demo = selected_sources(statement, local)
             comparisons = comparison_quotes(request, statement)
             for text in (statement.text, *statement.items):
+                reject_distorted_source_copy(text, local)
                 validate_leaf(text, owner=owner, demo=demo, comparisons=comparisons)
         for text in output.assumptions:
+            reject_distorted_source_copy(text, local)
             validate_leaf(text)
         for text in output.limitations:
             validate_limitation(text, local)

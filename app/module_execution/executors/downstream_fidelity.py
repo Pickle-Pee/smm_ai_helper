@@ -4,6 +4,7 @@ Strategic hypotheses do not prove product outcomes. These checks cover direct
 customer-addressed outcome copy and explicit existing-demo assertions in both
 intelligence executors, including their structured leaf text.
 """
+from difflib import SequenceMatcher
 import re
 
 from .common import EvidenceSourceClass, SemanticRule, StatementSemanticsError, factual_competitor_parents
@@ -283,6 +284,84 @@ _CONTENT_RESEARCH_OR_GOAL = re.compile(
     r"Audience\s+goal:\s*receive\s+written\s+feedback\s+that\s+shows\s+concrete\s+changes\s+in\s+photos)[.?]?", re.I)
 
 
+_DEMO_STEM = "демонстраци"
+_RU_WORD = re.compile(r"[А-Яа-яЁё]+")
+_DISTORTED_DEMO_ADJECTIVE = re.compile(r"демон[а-яё]{1,8}ационн[а-яё]*")
+
+
+def _edit_distance(left, right):
+    previous = list(range(len(right) + 1))
+    for row, first in enumerate(left, 1):
+        current = [row]
+        for column, second in enumerate(right, 1):
+            current.append(min(previous[column] + 1, current[column - 1] + 1, previous[column - 1] + (first != second)))
+        previous = current
+    return previous[-1]
+
+
+def distorted_demo_mention(text):
+    """Recognize a misspelt or split «демонстрация…» noun/adjective.
+
+    Live production output (16.11.2026) spelt the word as «демонрационный»,
+    «демонтрационный», «демонормационный», «демонтации» and split it with a space
+    wherever generation could not produce the exact stem, so the exact-stem check
+    never saw it. A distorted mention is still a demo mention for every rule below;
+    this recognizes it and grants nothing. Real words such as «демонтаж» or
+    «демография» are not near the stem.
+    """
+    words = [word.lower() for word in _RU_WORD.findall(text)]
+    for index, word in enumerate(words):
+        if word.startswith("дем") and len(word) >= 8 and not word.startswith("демонстр"):
+            if (_DISTORTED_DEMO_ADJECTIVE.fullmatch(word)
+                    or min(_edit_distance(word[:size], _DEMO_STEM) for size in range(8, min(len(word), 14) + 1)) <= 2):
+                return True
+        # A split exact word: «демон страция». Each half alone is not a demo word.
+        if index and not word.startswith("демонстр") and not words[index - 1].startswith("демонстр"):
+            if (words[index - 1] + word).startswith(_DEMO_STEM) and len(words[index - 1]) >= 3:
+                return True
+    return False
+
+
+def mentions_demo(text):
+    return bool(_DEMO.search(text)) or distorted_demo_mention(text)
+
+
+_COPY_SOURCE_KEYS = frozenset({"product_truth", "confirmed_business_fact", "existing_proof", "constraints"})
+_COPY_SIMILARITY = 0.9
+_COPY_MINIMUM_LENGTH = 20
+
+
+def _comparable(text):
+    return " ".join(text.casefold().split()).strip(" .«»\"'")
+
+
+def reject_distorted_source_copy(text, local):
+    """An owner sentence is quoted exactly or not at all.
+
+    A leaf that is nearly, but not exactly, one request-local first-party owner
+    sentence is a distorted quotation: production accepted «Есть демонтрационный
+    образец…» and «…из трё х видов хлеба» because the misspelling hid the sentence
+    from every lexical rule. The comparison is domain-independent and needs no
+    vocabulary. An exact copy, an exact copy inside a longer leaf and an ordinary
+    paraphrase are not affected here; their own rules still apply.
+    """
+    value = _comparable(text)
+    if len(value) < _COPY_MINIMUM_LENGTH:
+        return
+    for item in local.values():
+        if (item.input_key not in _COPY_SOURCE_KEYS or not isinstance(item.value, str)
+                or item.record.source_class is not EvidenceSourceClass.FIRST_PARTY):
+            continue
+        source = _comparable(item.value)
+        if len(source) < _COPY_MINIMUM_LENGTH or source in value:
+            continue
+        matcher = SequenceMatcher(None, value, source, autojunk=False)
+        if matcher.real_quick_ratio() >= _COPY_SIMILARITY and matcher.ratio() >= _COPY_SIMILARITY:
+            raise StatementSemanticsError(
+                SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE if item.input_key == "existing_proof"
+                else SemanticRule.PRODUCT_CLAIM_REQUIRES_TRUTH)
+
+
 def typed_literal_sources(evidence_ids, local):
     """Only explicit request-local typed witnesses confer product/demo proof."""
     selected = [local[identity] for identity in evidence_ids if identity in local]
@@ -345,7 +424,7 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
     delivery_formats = tuple(match for match in _DELIVERY_FEEDBACK.finditer(value)
                              if match.span() not in negative_formats)
     if (delivery_formats or _FEEDBACK_CONTENT.search(value)
-            or (_DEMO.search(value) and _DEMO_FEEDBACK_FORMAT.search(value))):
+            or (mentions_demo(value) and _DEMO_FEEDBACK_FORMAT.search(value))):
         format_question = (_FORMAT_RESEARCH_OR_GOAL.fullmatch(value)
                            or _CONTENT_RESEARCH_OR_GOAL.fullmatch(value))
         if not (format_question or value in _FORMAT_POLICY_WARNINGS or _verbatim_leaf(value, owner)):
@@ -380,7 +459,7 @@ def validate_leaf(text, *, owner=(), demo=(), comparisons=(), copy_field=False):
                     start, end = created.span(group)
                     nonassertive.add((offset + start, offset + end))
     demo_facts = tuple(match for match in _DEMO_FACT.finditer(text) if match.span() not in nonassertive)
-    if _DEMO.search(text) and demo_facts:
+    if mentions_demo(text) and demo_facts:
         planned = value in _DEMO_PROPOSALS
         if not planned and not _verbatim_leaf(value, demo):
             raise StatementSemanticsError(SemanticRule.DEMONSTRATION_ASSERTION_REQUIRES_SOURCE)

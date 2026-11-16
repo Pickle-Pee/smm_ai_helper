@@ -1,6 +1,9 @@
 """Traceable experiment design, without campaign execution or invented forecasts."""
+from copy import deepcopy
 from dataclasses import replace
 import json
+
+from jsonschema import Draft202012Validator
 
 from app.marketing_orchestrator.quality_gates.contracts import (
     BlockingReason, ClaimType, Confidence, EvidenceRecord, EvidenceSourceClass,
@@ -42,6 +45,47 @@ def strategic_parents(request):
 def experiment_constraint_evidence(evidence):
     return tuple(e for e in evidence if e.input_key in (
         "constraints", "time_resource_constraint", "budget", "duration"))
+
+
+REQUIRED_INPUT_SOURCE_DEFINITION = "AllowedExperimentRequiredInputSource"
+
+
+def owner_proof_evidence(evidence):
+    """Request-local first-party proof sentences (the existing demonstration of the owner)."""
+    return tuple(e for e in evidence if e.input_key == "existing_proof"
+                 and e.record.source_class is EvidenceSourceClass.FIRST_PARTY
+                 and isinstance(e.value, str) and e.value.strip())
+
+
+def required_input_source_choices(provider_schema, wire_schema, sentences):
+    """Offer complete owner proof sentences as exact required-input choices.
+
+    The instruction asks for the COMPLETE verbatim existing_proof sentence as the
+    whole minimum_required_inputs item. Language-bound free prose cannot spell such
+    a sentence (its vocabulary excludes demonstration words and count compounds),
+    and production then accepted a misspelt copy. A closed choice makes the exact
+    sentence reachable. Only sentences the unchanged wire schema already accepts are
+    listed, so every provider answer stays valid for the wire schema and decoder.
+    """
+    try:
+        wire_items = wire_schema["$defs"]["ExperimentDesign"]["properties"]["minimum_required_inputs"]["items"]
+        accepted = Draft202012Validator({**wire_items, "$defs": wire_schema["$defs"]})
+        choices = sorted({sentence for sentence in sentences if accepted.is_valid(sentence)})
+        if not choices:
+            return provider_schema
+        result = deepcopy(provider_schema)
+        definitions = result["$defs"]
+        field = definitions["ExperimentDesign"]["properties"]["minimum_required_inputs"]
+        if REQUIRED_INPUT_SOURCE_DEFINITION in definitions:
+            raise SchemaProjectionError("required_input_source_definition_exists")
+        definitions[REQUIRED_INPUT_SOURCE_DEFINITION] = {"type": "string", "enum": choices}
+        items = field["items"]
+        field["items"] = {"anyOf": [*(items["anyOf"] if "anyOf" in items else (items,)),
+                                    {"$ref": "#/$defs/" + REQUIRED_INPUT_SOURCE_DEFINITION}]}
+        Draft202012Validator.check_schema(result)
+        return result
+    except (KeyError, TypeError):
+        raise SchemaProjectionError("required_input_source_choices_unavailable") from None
 
 
 class ExperimentsExecutor(IntelligenceExecutor):
@@ -195,7 +239,9 @@ Keep all original grounding, design and exact constraint requirements."""
                  *fields.values(), extra=fields)
         if self._support_selection_wire:
             # Provider-only narrowing to the request language; the wire schema stays authoritative.
-            return language_projection(provider_schema, request)
+            narrowed = language_projection(provider_schema, request)
+            proofs = owner_proof_evidence(first_party_evidence(request, scoped_facts(request)))
+            return required_input_source_choices(narrowed, validation_schema, tuple(e.value for e in proofs))
         return provider_schema
 
     def output_budget_for(self, request) -> ModuleOutputBudget:
@@ -219,11 +265,15 @@ Keep all original grounding, design and exact constraint requirements."""
         return await self.generate(request, evidence)
 
     def build_result(self, request, output, evidence, parents):
-        from .downstream_fidelity import comparison_quotes, selected_sources, text_leaves, validate_leaf, validate_limitation
+        from .downstream_fidelity import (
+            comparison_quotes, reject_distorted_source_copy, selected_sources, text_leaves, validate_leaf,
+            validate_limitation,
+        )
 
         local = {item.record.evidence_id: item for item in evidence}
         for statement in output.outputs:
             owner, demo = selected_sources(statement, local)
+            reject_distorted_source_copy(statement.text, local)
             validate_leaf(statement.text, owner=owner, demo=demo,
                           comparisons=comparison_quotes(request, statement),
                           copy_field=statement.output_name in {"control", "treatment"})
@@ -234,8 +284,10 @@ Keep all original grounding, design and exact constraint requirements."""
         design_comparisons = comparison_quotes(request, output.outputs[0]) if output.outputs else ()
         for experiment in output.experiments:
             for text in text_leaves(experiment.model_dump()):
+                reject_distorted_source_copy(text, local)
                 validate_leaf(text, owner=design_owner, demo=design_demo, comparisons=design_comparisons)
         for text in output.assumptions:
+            reject_distorted_source_copy(text, local)
             validate_leaf(text)
         for text in output.limitations:
             validate_limitation(text, local)
