@@ -16,13 +16,13 @@ from app.module_execution.acceptance import fully_accepted
 from app.module_execution.executors import ExperimentsExecutor
 from app.module_execution.executors import provider_language as language
 from app.module_execution.executors.common import (
-    ExecutorOutputError, OutputFailureStage, SemanticRule, StatementSemanticsError,
+    ExecutorOutputError, stable_id, OutputFailureStage, SemanticRule, StatementSemanticsError,
 )
 from app.module_execution.executors.downstream_fidelity import (
     distorted_demo_mention, mentions_demo, reject_distorted_source_copy, validate_leaf,
 )
 from app.module_execution.executors.experiments import (
-    REQUIRED_INPUT_SOURCE_DEFINITION, required_input_source_choices,
+    REQUIRED_INPUT_SOURCE_DEFINITION, bind_exact_owner_proof, required_input_source_choices,
 )
 from app.orchestration_runtime.service import evaluate_result
 from tests.test_experiments_support_selection import typed_payload
@@ -216,10 +216,67 @@ def test_exact_owner_proof_sentence_is_accepted_as_a_required_input(invocation, 
     assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
 
 
-def test_exact_sentence_that_states_what_the_demo_shows_still_needs_its_selected_source(invocation):
+def owner_proof_id(request, demo):
+    fact_id = next(item.fact_id for item in request.context_packet.known_facts if item.value == demo)
+    return stable_id("evd", request, "fact", fact_id)
+
+
+@pytest.mark.parametrize("select", [False, True])
+def test_exact_closed_choice_selects_its_owner_proof_source(invocation, select):
+    """Regression: production graph 8bda0399 on 1da1814 (Telegram course, 17.11.2026).
+
+    The model chose the exact owner sentence that states what the demo shows but did
+    not also tick its source on the first output; EXPERIMENTS failed closed. The exact
+    closed choice is the source selection, so the server binds it like constraints.
+    """
+    request = russian(invocation, COURSE)
+    result = run_with_required_input(request, COURSE, select=select)
+    assert result.payload["experiments"][0]["minimum_required_inputs"] == (COURSE,)
+    first = result.normalized_result.claims[0]
+    assert owner_proof_id(request, COURSE) in first.evidence_ids
+    quality = evaluate_result(request.execution_id, result, request.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+
+
+@pytest.mark.parametrize("value", [
+    COURSE[:-1] + " и рост вовлечённости учеников.",
+    "Демонстрационный образец показывает сравнение снимков.",
+])
+def test_inexact_sentence_is_not_bound_to_the_owner_proof_source(invocation, value):
     with pytest.raises(ExecutorOutputError) as caught:
-        run_with_required_input(russian(invocation, COURSE), COURSE, select=False)
+        run_with_required_input(russian(invocation, COURSE), value, select=False)
     assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_exact_sentence_outside_required_inputs_is_not_bound(invocation):
+    async def model(**kwargs):
+        payload = typed_payload(json.loads(kwargs["text"]), kwargs["response_schema"])
+        payload["experiments"][0]["hypothesis"] = COURSE
+        return json.dumps(payload)
+
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(ExperimentsExecutor(model_call=model, strategic_parent_wire=True,
+                                        support_selection_wire=True).execute(russian(invocation, COURSE)))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+
+
+def test_binding_appends_only_missing_sources_and_keeps_model_duplicates():
+    proof = SimpleNamespace(value=COURSE, input_key="existing_proof",
+                            record=SimpleNamespace(evidence_id="evd_proof", source_class=EvidenceSourceClass.FIRST_PARTY))
+    other = SimpleNamespace(value=BAKERY, input_key="existing_proof",
+                            record=SimpleNamespace(evidence_id="evd_other", source_class=EvidenceSourceClass.FIRST_PARTY))
+    foreign = SimpleNamespace(value=GROOMING, input_key="existing_proof",
+                              record=SimpleNamespace(evidence_id="evd_foreign", source_class=EvidenceSourceClass.EXTERNAL_SECONDARY))
+    first = SimpleNamespace(evidence_ids=["evd_x", "evd_x"])
+    output = SimpleNamespace(outputs=[first, SimpleNamespace(evidence_ids=[])], experiments=[
+        SimpleNamespace(minimum_required_inputs=[COURSE, GROOMING, COURSE + " "]),
+        SimpleNamespace(minimum_required_inputs=[COURSE]),
+    ])
+    assert bind_exact_owner_proof(output, (proof, other, foreign)) == ("evd_proof",)
+    assert first.evidence_ids == ["evd_x", "evd_x", "evd_proof"]
+    assert output.outputs[1].evidence_ids == []
+    assert bind_exact_owner_proof(output, (proof,)) == ()
+    assert bind_exact_owner_proof(SimpleNamespace(outputs=[], experiments=[]), (proof,)) == ()
 
 
 @pytest.mark.parametrize("original,distorted", ACCEPTED_DISTORTIONS)

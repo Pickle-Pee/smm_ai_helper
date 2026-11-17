@@ -438,6 +438,35 @@ def test_creator_limitation_source_matches_telegram_translation_contract():
     assert render.human(CreatorExecutor.limitation) == CREATOR_LIMITATION_RU
 
 
+def test_strategy_limitation_sources_match_telegram_translation_contract():
+    """CMO stabilization: server limitation constants of a strategy are shown in Russian."""
+    import inspect
+    from app.marketing_copilot import presentation
+    from app.module_execution.executors import virtual_cmo
+    from app.module_execution.executors.experiments import ExperimentsExecutor
+    from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
+
+    economics = ("Economics absent: profitability, budget affordability and unit economics are unknown; "
+                 "resource priorities are qualitative.")
+    assert economics in inspect.getsource(virtual_cmo)
+    assert "Experiments are unavailable." in inspect.getsource(presentation)
+    for source in (VirtualCMOExecutor.limitation, ExperimentsExecutor.limitation, economics):
+        translated = render.human(source)
+        assert translated != source and any("а" <= ch <= "я" for ch in translated.lower())
+        assert not any("a" <= ch <= "z" for ch in translated.lower())
+
+
+def test_unavailable_experiments_are_labeled_explicitly_without_hiding_the_strategy():
+    strategy = dto.Strategy(**{key: dto.StrategySection(text="Текст", items=["Действие"]) for key in render.SECTIONS})
+    result = dto.RunResponse(run_id=RID, status=dto.RunStatus.COMPLETED_WITH_LIMITATIONS, strategy=strategy,
+        evidence_coverage=dto.Coverage(competitors_supplied=1, competitors_accepted=1,
+            limitations=["Experiments are unavailable."]))
+    text = "\n".join(render.run(result))
+    assert all(title in text for title in render.SECTIONS.values())
+    assert "Эксперименты не сформированы" in text and "не прошёл автоматическую проверку" in text
+    assert "Experiments are unavailable." not in text
+
+
 def test_strategy_nine_sections_experiments_coverage_and_long_markup_safe():
     from bot.rendering import split_text
     strategy = dto.Strategy(**{key: dto.StrategySection(text="<b>🙂 & [text](url)\n" * 190, items=["Действие"]) for key in render.SECTIONS})

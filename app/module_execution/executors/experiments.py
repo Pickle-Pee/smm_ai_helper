@@ -57,6 +57,30 @@ def owner_proof_evidence(evidence):
                  and isinstance(e.value, str) and e.value.strip())
 
 
+def bind_exact_owner_proof(output, evidence):
+    """Bind the owner proof source of every exact closed proof choice to the first output.
+
+    A minimum_required_inputs item that equals a request-local first-party
+    existing_proof sentence byte for byte was selected through the closed
+    AllowedExperimentRequiredInputSource choice; that exact text is its provenance.
+    Structured designs are persisted in the first output, so its evidence basis
+    receives the selected source, exactly like request constraints. Extended,
+    shortened or distorted sentences are not bound and keep failing validation.
+    Only missing identities are appended, so duplicated model citations stay
+    visible to the later uniqueness check. Returns the appended identities.
+    """
+    if not output.outputs:
+        return ()
+    proofs = {item.value: item.record.evidence_id for item in owner_proof_evidence(evidence)}
+    chosen = dict.fromkeys(proofs[text] for experiment in output.experiments
+                           for text in experiment.minimum_required_inputs if text in proofs)
+    first = output.outputs[0]
+    added = tuple(identity for identity in chosen if identity not in first.evidence_ids)
+    if added:
+        first.evidence_ids = [*first.evidence_ids, *added]
+    return added
+
+
 def required_input_source_choices(provider_schema, wire_schema, sentences):
     """Offer complete owner proof sentences as exact required-input choices.
 
@@ -280,6 +304,8 @@ Keep all original grounding, design and exact constraint requirements."""
         # Structured designs are persisted in the first claim. Only that claim's
         # explicit local selections can witness their product/demo assertions;
         # another output's quote and strategic HYP parents cannot repair them.
+        # An exact closed owner proof choice is itself the selection of its source.
+        bind_exact_owner_proof(output, evidence)
         design_owner, design_demo = selected_sources(output.outputs[0], local) if output.outputs else ((), ())
         design_comparisons = comparison_quotes(request, output.outputs[0]) if output.outputs else ()
         for experiment in output.experiments:
