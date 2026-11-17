@@ -114,6 +114,9 @@ regardless of model array order. The executor attaches nested design data and
 checks its selected witnesses on that first claim. Only the statement moves:
 content, selected source flags and the relative order of all other outputs are
 preserved. No other output's citations are borrowed or unioned into its evidence.
+The only server additions to that claim's evidence are request constraints and,
+since CMO stabilization cycle 1, the `existing_proof` source of an exact closed
+`minimum_required_inputs` choice (`bind_exact_owner_proof`).
 A full request requires the basis exactly once. Partial requests containing it
 also move it first; partial requests without it retain their original first-output
 ownership contract. Duplicate/missing output rejection and canonical bounds remain.

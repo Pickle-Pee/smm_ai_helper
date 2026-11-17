@@ -56,7 +56,7 @@ TRANSLATIONS = {
     "Economics are unavailable; profitability and affordability remain unknown.": "Данных об экономике нет: прибыльность и доступность ресурсов не оценены.",
     "One competitor analysis is unavailable.": "Анализ одного из конкурентов недоступен.",
     "Market research is unavailable.": "Исследование рынка недоступно.",
-    "Experiments are unavailable.": "Эксперименты недоступны.",
+    "Experiments are unavailable.": "Эксперименты не сформированы: план экспериментов не получен или не прошёл автоматическую проверку, поэтому не показывается. Остальные результаты выше проверены и сохранены; для плана экспериментов можно отправить новый запрос.",
     "An optional result is unavailable.": "Один из дополнительных результатов недоступен.",
     "Evidence coverage is limited.": "Исследование охватывает не все источники.",
     "Public page; published assertions are not independently verified": "Публичная страница; её утверждения независимо не проверены",
@@ -64,6 +64,9 @@ TRANSLATIONS = {
     "Caller-supplied source excerpt; not independently verified": "Предоставленная выдержка из источника; независимо не проверена",
     "All monetary inputs use the same caller-selected currency; no currency conversion or fees.": "Все суммы в одной валюте; обмен валют и комиссии не учитываются.",
     "Constant supplied unit costs and conversion rate; 34 significant decimal digits, fractional expected counts, no rounding to people.": "Стоимость и конверсия считаются постоянными. Результат — ожидаемое число, без округления до целых людей.",
+    "Strategic synthesis of supplied context only; missing market or economics evidence cannot support factual market, profitability or affordability claims.": "Стратегия построена только на предоставленных сведениях: без данных о рынке и экономике выводы о рынке, прибыльности и доступности ресурсов не делаются.",
+    "Economics absent: profitability, budget affordability and unit economics are unknown; resource priorities are qualitative.": "Данных об экономике нет: прибыльность, достаточность бюджета и юнит-экономика неизвестны; приоритеты ресурсов указаны качественно.",
+    "Experiment designs are hypotheses, not forecasts; missing baseline, population, economics and resource inputs prevent formal sizing or causal conclusions.": "Эксперименты — гипотезы, а не прогнозы: без исходных показателей, размера аудитории, экономики и ресурсов нельзя рассчитать объём проверки или делать выводы о причинах.",
 }
 
 

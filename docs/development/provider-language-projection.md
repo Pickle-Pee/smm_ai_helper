@@ -107,10 +107,17 @@ Three changes, none of which relaxes a check:
 The guidance sent with Russian requests now names the neutral reference
 «предоставленный образец» and the exact-choice rule.
 
-Unchanged on purpose: the nested-source ownership contract. An exact sentence that
-states what the demo shows («…который показывает сравнение снимков») is still
-accepted only when the model selects that source on the first output
-(`test_named_basis_owns_nested_sources_independently_of_model_order`).
+Nested-source ownership (changed by CMO stabilization cycle 1, see
+`cmo-stabilization.md`): originally an exact sentence that states what the demo
+shows («…который показывает сравнение снимков») was accepted only when the model
+also selected that source on the first output. Production graph `8bda0399` on
+`1da1814` failed closed on exactly that bookkeeping gap. Now `bind_exact_owner_proof`
+treats an exact closed `minimum_required_inputs` choice as the selection of its own
+`existing_proof` source and appends it to the first output, like request
+constraints. Extended, shortened or distorted sentences and exact sentences in other
+fields are not bound and keep failing
+(`tests/test_owner_sentence_fidelity.py`,
+`test_named_basis_owns_nested_sources_independently_of_model_order`).
 
 Known consequences and limits:
 

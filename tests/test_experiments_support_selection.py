@@ -696,17 +696,17 @@ def test_named_basis_owns_nested_sources_independently_of_model_order(invocation
         assert Draft202012Validator(kwargs["response_schema"]).is_valid(payload)
         return json.dumps(payload)
     executor = ExperimentsExecutor(model_call=model, strategic_parent_wire=True, support_selection_wire=True)
-    if source_output == "hypothesis":
-        with pytest.raises(ExecutorOutputError):
-            asyncio.run(executor.execute(request))
-    else:
-        result = asyncio.run(executor.execute(request))
-        assert [row["output_name"] for row in result.payload["outputs"]] == ["evidence_basis"] + [
-            name for name in raw_names if name != "evidence_basis"]
-        assert result.normalized_result.claims[0].declared_output_name == "evidence_basis"
-        assert "experiments" in json.loads(result.normalized_result.claims[0].value)
-        quality = evaluate_result(request.execution_id, result, request.upstream_results)
-        assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
+    # CMO stabilization cycle 1: the exact closed owner proof choice is itself the
+    # selection of its source, so the design is accepted even when the model ticked
+    # that source on another output (previously ExecutorOutputError). Inexact copies
+    # stay rejected: tests/test_owner_sentence_fidelity.py.
+    result = asyncio.run(executor.execute(request))
+    assert [row["output_name"] for row in result.payload["outputs"]] == ["evidence_basis"] + [
+        name for name in raw_names if name != "evidence_basis"]
+    assert result.normalized_result.claims[0].declared_output_name == "evidence_basis"
+    assert "experiments" in json.loads(result.normalized_result.claims[0].value)
+    quality = evaluate_result(request.execution_id, result, request.upstream_results)
+    assert fully_accepted(result, quality["accepted_result_ids"], quality["accepted_claim_ids"])
 
 
 @pytest.mark.parametrize("names", [("hypothesis",), ("mechanism", "hypothesis")])
