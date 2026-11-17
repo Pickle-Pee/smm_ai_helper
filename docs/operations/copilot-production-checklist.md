@@ -21,6 +21,7 @@ image digest before rollout. Keep `.env` outside source control and logs.
 | `IMAGE_STORAGE_PATH` | Shared persistent backend/worker media volume for retained legacy images |
 | `HTTP_TIMEOUT` | Positive provider timeout, code default 60 seconds; production release value **180** |
 | `GRAPH_TIMEOUT_SECONDS`, `GRAPH_LEASE_SECONDS` | Code defaults 300/330; production release values **420/450**. Provider timeout < execution timeout < lease, and execution timeout > 2 × `HTTP_TIMEOUT` (POSITIONING makes two provider calls in one node). Change the three values only as a set and identically for backend, worker and bot: the bot waits `GRAPH_TIMEOUT_SECONDS` + 10 s. See [latency diagnosis](../development/experiments-latency-diagnosis.md) |
+| `COPILOT_EXPERIMENTS_ENABLED` | Code default `true`; AI Core 1.0 production release value **false** (option D, see [CMO stabilization](../development/cmo-stabilization.md)). Read by backend planning only; set identically for backend, worker and bot. Affects new strategy runs only |
 | `WORKER_CONCURRENCY`, `GRAPH_WORKER_CONCURRENCY` | Independent fixed/graph lane counts, defaults 2/1, each 1–8 |
 
 Other legacy settings remain in `.env.example`. Backend startup checks its service

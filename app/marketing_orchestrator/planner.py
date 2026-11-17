@@ -112,8 +112,9 @@ class MarketingOrchestratorPlanner:
 
     supported_scenarios = SUPPORTED_SCENARIOS
 
-    def __init__(self, registry: ModuleRegistry | None = None) -> None:
+    def __init__(self, registry: ModuleRegistry | None = None, *, experiments_enabled: bool = True) -> None:
         self._registry = registry or ModuleRegistry.load()
+        self._experiments_enabled = experiments_enabled
         self._validator = PlanValidator(self._registry)
         self._registry_fingerprint = self._fingerprint_registry()
 
@@ -244,7 +245,9 @@ class MarketingOrchestratorPlanner:
                               assumptions=context.assumptions)
 
     def _plan_strategy(self, interpretation, context):
-        from .strategy import SCENARIO, REQUIRED_KEYS, MARKET_KEYS, key, nonempty, normalize_competitors, scoped_packet
+        from .strategy import (
+            EXPERIMENTS_DISABLED, SCENARIO, REQUIRED_KEYS, MARKET_KEYS, key, nonempty, normalize_competitors, scoped_packet,
+        )
         from .contracts import Sensitivity
         # Interpretations may contain an explicit goal; UNSPECIFIED is never context.
         all_facts = (*context.project_context, *context.known_facts)
@@ -273,11 +276,13 @@ class MarketingOrchestratorPlanner:
         definitions += [(f"competitor_analysis_{i}", ModuleId.COMPETITOR_ANALYSIS, url)
                         for i, url in enumerate(competitors, 1)]
         roots = tuple(d[0] for d in definitions)
-        definitions += [("positioning", ModuleId.POSITIONING, None),
-                        ("virtual_cmo", ModuleId.VIRTUAL_CMO, None), ("experiments", ModuleId.EXPERIMENTS, None)]
+        definitions += [("positioning", ModuleId.POSITIONING, None), ("virtual_cmo", ModuleId.VIRTUAL_CMO, None)]
+        tail = [("positioning", "virtual_cmo")]
+        if self._experiments_enabled:
+            definitions.append(("experiments", ModuleId.EXPERIMENTS, None))
+            tail.append(("virtual_cmo", "experiments"))
         edges = tuple(GraphDependency(a, b) for a, b in sorted(
-            [(r, "positioning") for r in roots] + [("positioning", "virtual_cmo"), ("virtual_cmo", "experiments")],
-            key=lambda e: (e[1], e[0])))
+            [(r, "positioning") for r in roots] + tail, key=lambda e: (e[1], e[0])))
         nodes = []
         for node_id, module, url in definitions:
             descriptor = self._registry.get(module)
@@ -294,9 +299,12 @@ class MarketingOrchestratorPlanner:
                 parallelizable=node_id in roots, context_packet=packet))
         limitations = (() if market else ("market_research_not_supplied",)) + (
             () if competitors else ("competitor_research_not_supplied",))
+        cmo = next(n for n in nodes if n.module_id is ModuleId.VIRTUAL_CMO)
         if not any(key(f) in {"economics", "unit_economics"} for f in
-                   (*nodes[-2].context_packet.known_facts, *nodes[-2].context_packet.relevant_project_context)):
+                   (*cmo.context_packet.known_facts, *cmo.context_packet.relevant_project_context)):
             limitations += ("economics_unavailable",)
+        if not self._experiments_enabled:
+            limitations += (EXPERIMENTS_DISABLED,)
         return self._finalize(interpretation, SCENARIO, tuple(nodes), edges,
                               assumptions=context.assumptions, base_limitations=limitations)
 
