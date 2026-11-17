@@ -50,6 +50,12 @@ async def cleanup(db, run_id, owner):
         await session.execute(delete(User).where(User.id == owner))
 
 
+async def notices(db, run_id):
+    """Durable terminal notices for a graph run (anchored to one of its Jobs)."""
+    async with db() as session:
+        return (await session.scalars(select(WorkflowDelivery).join(Job).where(Job.marketing_run_id == run_id))).all()
+
+
 async def state(db, run_id):
     async with db() as session:
         run = await session.get(MarketingRun, run_id)
@@ -83,8 +89,13 @@ def test_real_graph_restart_redis_loss_and_concurrent_advance(mvp_database):
             assert data["upstream_results"][0]["producer_node_id"] == "competitor_analysis"
             assert data["allowed_parent_claim_ids"]
             assert await replacement.advance(rid) == ()
-            async with mvp_database() as session:
-                assert await session.scalar(select(func.count()).select_from(WorkflowDelivery).join(Job).where(Job.marketing_run_id == rid)) == 0
+            # Exactly one durable Telegram notice, created by the terminal transition;
+            # repeated/concurrent advance after completion adds none.
+            await asyncio.gather(replacement.advance(rid), service.advance(rid))
+            rows = await notices(mvp_database, rid)
+            assert len(rows) == 1 and rows[0].part == 0 and rows[0].status == "pending"
+            assert rows[0].payload_json["kind"] == "copilot_run" and rows[0].payload_json["run_id"] == rid
+            assert rows[0].job_id == min(j.job_id for j in jobs)
         finally:
             await cleanup(mvp_database, rid, owner)
     asyncio.run(exercise())
@@ -161,6 +172,12 @@ def test_domain_failures_and_provider_retry(mvp_database, mode):
                 if mode == "quality":
                     assert run.error == "quality_rejected"
                 assert await service.advance(rid) == ()
+            if mode != "retry":
+                # Terminal failure also notifies the owner automatically, once.
+                rows = await notices(mvp_database, rid)
+                assert [(r.payload_json["kind"], r.payload_json["run_id"]) for r in rows] == [("copilot_run", rid)]
+            else:
+                assert await notices(mvp_database, rid) == []
         finally:
             await cleanup(mvp_database, rid, owner)
     asyncio.run(exercise())
