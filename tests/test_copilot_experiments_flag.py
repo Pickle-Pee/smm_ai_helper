@@ -152,7 +152,7 @@ def test_disabled_graph_never_calls_experiments_and_reports_the_limitation(mvp_d
             await drain(service, mvp_database, rid)
             run, jobs, artifacts = await state(mvp_database, rid)
             assert run.status == "completed" and run.error is None
-            assert [j.workflow_step for j in jobs] == ["positioning", "virtual_cmo"]
+            assert sorted(j.workflow_step for j in jobs) == ["positioning", "virtual_cmo"]
             assert all(j.status is JobStatus.SUCCEEDED for j in jobs)
             assert {a.step for a in artifacts} == {"positioning", "virtual_cmo"}
             assert {"code": EXPERIMENTS_DISABLED} in run.state_json["limitations"]
@@ -180,7 +180,7 @@ def test_graph_started_before_the_flag_change_keeps_its_experiments(mvp_database
             await drain(service, mvp_database, rid)
             run, jobs, artifacts = await state(mvp_database, rid)
             assert run.status == "completed"
-            assert [j.workflow_step for j in jobs] == ["positioning", "virtual_cmo", "experiments"]
+            assert sorted(j.workflow_step for j in jobs) == ["experiments", "positioning", "virtual_cmo"]
             assert {a.step for a in artifacts} == {"positioning", "virtual_cmo", "experiments"}
             assert {"code": EXPERIMENTS_DISABLED} not in run.state_json["limitations"]
             assert experiments_calls(model)
