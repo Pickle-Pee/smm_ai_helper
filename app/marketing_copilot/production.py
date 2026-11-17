@@ -1,4 +1,5 @@
 """API process composition; it creates Jobs and hints, never a graph worker."""
+from app.config import settings
 from app.db import AsyncSessionLocal
 from app.orchestration_runtime.composition import build_production_graph_runtime
 from app.product_context import OwnedProductEvidenceService, build_owned_site_analyzer
@@ -23,7 +24,8 @@ def build_production_copilot_api(*, sessions=AsyncSessionLocal, queue=None,
     if not callable(intent_model) or not callable(extractor):
         raise ValueError("Copilot intent and owned-site extractor capabilities are required")
     copilot = build_marketing_copilot_service(intent_model=intent_model,
-        executor_registry=graph.executors, graph_service=graph.service, registry_version=graph.metadata.version)
+        executor_registry=graph.executors, graph_service=graph.service, registry_version=graph.metadata.version,
+        experiments_enabled=settings.COPILOT_EXPERIMENTS_ENABLED)
     copilot.interpreter = PublicIntentInterpreter(intent_model)
     acquisition = OwnedProductEvidenceService(analyzer=owned_analyzer if owned_analyzer is not None else build_owned_site_analyzer(),
                                              extractor=extractor)

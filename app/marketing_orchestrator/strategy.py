@@ -54,8 +54,15 @@ def normalize_competitors(values):
     return tuple(sorted(result))
 
 
-def strategy_topology(nodes, edges):
-    """Validate both source and compiled graphs; returns research node identities."""
+EXPERIMENTS_DISABLED = "experiments_disabled"
+
+
+def strategy_topology(nodes, edges, limitations=()):
+    """Validate both source and compiled graphs; returns research node identities.
+
+    The EXPERIMENTS tail is omitted exactly when the plan records experiments_disabled.
+    """
+    disabled = EXPERIMENTS_DISABLED in limitations
     pairs = [(n.node_id, n.module_id) for n in nodes]
     research = []
     if pairs and pairs[0] == ("market_analysis", ModuleId.MARKET_ANALYSIS):
@@ -65,11 +72,13 @@ def strategy_topology(nodes, edges):
             research.append(pairs.pop(0)[0])
         else:
             break
-    if pairs != [("positioning", ModuleId.POSITIONING), ("virtual_cmo", ModuleId.VIRTUAL_CMO),
-                 ("experiments", ModuleId.EXPERIMENTS)]:
+    tail = [("positioning", ModuleId.POSITIONING), ("virtual_cmo", ModuleId.VIRTUAL_CMO)]
+    if not disabled:
+        tail.append(("experiments", ModuleId.EXPERIMENTS))
+    if pairs != tail:
         raise ValueError("invalid strategy nodes")
-    expected = sorted([(n, "positioning") for n in research] +
-                      [("positioning", "virtual_cmo"), ("virtual_cmo", "experiments")], key=lambda e: (e[1], e[0]))
+    expected = sorted([(n, "positioning") for n in research] + [("positioning", "virtual_cmo")] + (
+        [] if disabled else [("virtual_cmo", "experiments")]), key=lambda e: (e[1], e[0]))
     if [(e.upstream_node_id, e.downstream_node_id) for e in edges] != expected:
         raise ValueError("invalid strategy edges")
     urls = []
