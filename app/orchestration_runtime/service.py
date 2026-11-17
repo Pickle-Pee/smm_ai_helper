@@ -14,7 +14,7 @@ from sqlalchemy import exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import AsyncSessionLocal
-from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, PositioningVerification, User
+from app.models import Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, OrchestrationPlanRecord, PositioningVerification, User, WorkflowDelivery
 from app.services.job_persistence_service import JobPersistenceService
 from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.module_execution import ModuleExecutionRequest, UpstreamExecutionResult
@@ -31,6 +31,10 @@ from .serialization import bounded, fingerprint, plan_from_json, plan_to_json, r
 log = logging.getLogger(__name__)
 VERIFICATION_OPERATION = "positioning_verification.v1"
 TERMINAL = {"completed", "completed_with_limitations", "blocked", "failed"}
+# Durable Telegram notice for a terminal graph run. The bot delivery poller reads
+# the persisted result through the owner-scoped read-only run endpoint; it never
+# re-executes the graph or calls a provider.
+RUN_NOTICE_KIND = "copilot_run"
 
 
 def utcnow():
@@ -247,6 +251,7 @@ class GraphExecutionService:
         jobs, accepted = await self._graph_state(session, run.run_id, revision, plan)
         if any(n.node_id in jobs and jobs[n.node_id].status is JobStatus.FAILED and not optional(n) for n in plan.nodes):
             run.status, run.error = "failed", "node_failed"
+            await self._queue_run_notice(session, run)
             return []
         coverage = self._coverage(plan, jobs, accepted)
         if coverage is not None:
@@ -265,8 +270,30 @@ class GraphExecutionService:
             "running" if any(j.status is JobStatus.RUNNING for j in jobs.values()) else "queued")
         if complete:
             run.error = None
+            await self._queue_run_notice(session, run)
         run.updated_at = self.clock().replace(tzinfo=None)
         return wake
+
+    async def _queue_run_notice(self, session, run):
+        """Record one durable delivery notice in the terminal-transition transaction.
+
+        The row is anchored to the run's smallest graph Job id (deterministic and
+        immutable once the run is terminal), so ``uq_delivery_job_part`` makes the
+        notice unique per run. Owners without a Telegram identity get no notice;
+        the read-only status endpoint remains their path.
+        """
+        anchor = await session.scalar(select(Job.job_id).where(
+            Job.marketing_run_id == run.run_id, Job.kind == JOB_KIND).order_by(Job.job_id).limit(1))
+        actor = await session.scalar(select(User.telegram_id).where(User.id == run.user_id))
+        if anchor is None or actor is None:
+            return
+        title = run.input_json.get("history_title") if isinstance(run.input_json, dict) else None
+        payload = {"kind": RUN_NOTICE_KIND, "run_id": run.run_id}
+        if isinstance(title, str) and title.strip():
+            payload["title"] = " ".join(title.split())[:160]
+        await session.execute(insert(WorkflowDelivery).values(
+            delivery_id=uuid.uuid4().hex, job_id=anchor, part=0, payload_json=payload, available_at=self.clock(),
+        ).on_conflict_do_nothing(index_elements=[WorkflowDelivery.job_id, WorkflowDelivery.part]))
 
     async def advance(self, run_id):
         async with self.sessions() as session, session.begin():
@@ -555,6 +582,8 @@ class GraphExecutionService:
         run.status, run.error = ("blocked" if blocked else "failed"), code
         run.state_json = {"failure": {"code": code, "node_id": job.workflow_step, "blocking_reasons": list(reasons)}}
         run.updated_at = self.clock().replace(tzinfo=None)
+        await session.flush()
+        await self._queue_run_notice(session, run)
 
     async def fail(self, item, *, code, retryable=False, blocking_reasons=()):
         from app.marketing_orchestrator.quality_gates.contracts import BlockingReason
