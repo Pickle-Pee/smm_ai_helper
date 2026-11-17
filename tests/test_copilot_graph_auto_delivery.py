@@ -270,8 +270,15 @@ def test_terminal_notice_claim_isolation_progress_and_bounded_attempts(mvp_datab
 
 # --------------------------------------------------------------------------- end to end
 
-def test_telegram_request_result_arrives_without_pressing_status(mvp_database, monkeypatch):
-    """Telegram -> API -> PostgreSQL -> graph worker -> notice -> poller -> fake Telegram."""
+@pytest.mark.parametrize("experiments_enabled", [True, False], ids=["experiments", "ai_core_1_0_release"])
+def test_telegram_request_result_arrives_without_pressing_status(mvp_database, monkeypatch, experiments_enabled):
+    """Telegram -> API -> PostgreSQL -> graph worker -> notice -> poller -> fake Telegram.
+
+    The ai_core_1_0_release case uses the release configuration COPILOT_EXPERIMENTS_ENABLED=false:
+    the graph has no EXPERIMENTS node, no EXPERIMENTS request reaches the model, and the
+    automatically delivered result carries the temporary-limitation notice.
+    """
+    monkeypatch.setattr(settings, "COPILOT_EXPERIMENTS_ENABLED", experiments_enabled)
     from fastapi import FastAPI
     from app.routers import workflows
     from app.routers.copilot import router as copilot_router
@@ -306,8 +313,14 @@ def test_telegram_request_result_arrives_without_pressing_status(mvp_database, m
                 if (await state(mvp_database, rid))[0].status in TERMINAL:
                     break
                 assert await ModuleGraphWorker(api.copilot.graph_service).once()
-            run, _, _ = await state(mvp_database, rid)
+            run, jobs, _ = await state(mvp_database, rid)
             assert run.status in {"completed", "completed_with_limitations"}
+            steps = {job.workflow_step for job in jobs}
+            asked_experiments = [c for c in model.calls if "experiments_support_selection_catalog" in c["text"]
+                                 or "evidence_basis" in json.loads(c["text"]).get("expected_outputs", [])]
+            assert ("experiments" in steps) is experiments_enabled
+            assert bool(asked_experiments) is experiments_enabled
+            assert ({"code": "experiments_disabled"} in run.state_json["limitations"]) is not experiments_enabled
             model_calls = len(model.calls)
             async with mvp_database() as session, session.begin():
                 # Isolate from leftovers of other tests sharing the disposable database.
@@ -322,6 +335,7 @@ def test_telegram_request_result_arrives_without_pressing_status(mvp_database, m
             assert bot.sent and {chat for chat, _, _ in bot.sent} == {actor}
             text = "\n".join(t for _, t, _ in bot.sent)
             assert "Стратегия готова" in text and "Стратегический диагноз" in text
+            assert ("План экспериментов временно не формируется" in text) is not experiments_enabled
             assert len(model.calls) == model_calls  # delivery never generates
             [row] = await notices(mvp_database, rid)
             assert row.status == "delivered" and row.attempts == 1
