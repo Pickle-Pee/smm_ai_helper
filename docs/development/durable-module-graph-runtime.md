@@ -137,10 +137,30 @@ For manual internal verification, create a User in a disposable migrated databas
 compile a validated competitive positioning plan with explicit injected
 capabilities, start the run and call `ModuleGraphWorker(service).once()` twice.
 After the first call recreate the entire composition. Expect two succeeded Jobs,
-two accepted artifacts, a completed run, and zero WorkflowDelivery rows.
+two accepted artifacts, a completed run, and exactly one pending WorkflowDelivery
+row with payload `{"kind": "copilot_run", "run_id": ...}` (see "Terminal result
+notice" below).
 
-Fixed `MarketingWorkflowService`, production worker main, standalone tasks,
-public DTOs and delivery remain unchanged. There is no public ingress, generic
+### Terminal result notice
+
+The transaction that moves a graph run to `completed`, `completed_with_limitations`,
+`failed` or `blocked` also inserts one `workflow_deliveries` row (part 0) with
+payload `{"kind": "copilot_run", "run_id", "title"?}`. There is no migration: the
+row is anchored to the run's smallest graph Job id, which is deterministic once
+the run is terminal, so `uq_delivery_job_part` plus `ON CONFLICT DO NOTHING`
+make the notice unique per run; terminal transitions themselves happen once under
+the run row lock. Owners without a Telegram identity get no notice. The existing
+bot delivery poller claims it (90 s lease, at most 8 attempts, exponential
+back-off), reads the persisted result through the owner-scoped read-only
+`GET /copilot/runs/{id}` and sends the same messages as the status button. The
+ack may carry `sent_parts`, stored forward-only in the payload, so a retry
+resumes after the messages Telegram confirmed; a send whose outcome is unknown
+may repeat that one message (at-least-once, not exactly-once). Delivery never
+executes a node, wakes Redis or calls a provider. Runs that became terminal
+before this change have no notice and are not backfilled.
+
+Fixed `MarketingWorkflowService`, production worker main, standalone tasks
+and public DTOs remain unchanged. There is no public ingress, generic
 synthesis, replanning, resume/clarification, MARKET_ANALYSIS implementation or
 automatic production traffic. External model/site calls can repeat after lease
 expiry; exactly-once external effects are not promised. Quality Gates validate
