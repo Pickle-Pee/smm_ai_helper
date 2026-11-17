@@ -84,6 +84,7 @@ class DeliveryAck(BaseModel):
     message_id: int | None = Field(default=None, ge=1, lt=2**63)
     retryable: bool = True
     retry_after: int = Field(default=0, ge=0, le=3600)
+    sent_parts: int | None = Field(default=None, ge=0, le=256)
 
 
 @delivery_router.post("/claim")
@@ -94,4 +95,5 @@ async def claim_delivery():
 @delivery_router.post("/{delivery_id}/ack")
 async def ack_delivery(delivery_id: OpaqueId, payload: DeliveryAck):
     return {"accepted": await delivery.acknowledge(delivery_id, payload.claim_token,
-        message_id=payload.message_id, retryable=payload.retryable, retry_after=payload.retry_after)}
+        message_id=payload.message_id, retryable=payload.retryable, retry_after=payload.retry_after,
+        sent_parts=payload.sent_parts)}

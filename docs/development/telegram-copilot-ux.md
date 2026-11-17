@@ -196,9 +196,21 @@ separately from forecasts, with deterministic arithmetic only for valid labelled
 inputs and a common period. Missing facts trigger clarification; reports never
 prove causal effects or automatically update BrandProfile.
 
-No automatic status polling or new delivery loop is introduced. User-triggered GETs
-are the only Copilot status checks; the existing fixed-workflow delivery poller is
-unchanged. Backend PostgreSQL is authoritative and workers continue independently.
+Automatic result delivery: when a graph run becomes terminal, the backend records
+one durable notice in the same PostgreSQL transaction, and the existing delivery
+poller (`bot/delivery.py`, the one that already serves the fixed workflow) sends the
+result to the run owner without any button press, FSM state or open chat. Failed or
+blocked runs are notified the same way. The poller reads the saved result through
+the read-only run endpoint, so delivery never re-executes the graph or calls a
+provider. «Проверить готовность», `/copilot_runs` and `/copilot_status` stay as
+additional read-only ways to see the status or re-read a saved result; pressing the
+button while automatic delivery is sending shows the result twice by design (two
+explicit reads). Telegram outages are retried with back-off for at most 8 attempts;
+progress is kept per message, so a retry continues after the messages Telegram
+confirmed (an ambiguous send may repeat one message). Backend PostgreSQL is
+authoritative and workers continue independently. Before this change graph results
+were shown only when the user pressed the status button (owner report of
+16.11.2026); older runs are not re-sent.
 
 A bot restart loses unfinished clarification, candidate selections, source roles,
 the recent event ledger and the convenience pointer for `/copilot_status` without
