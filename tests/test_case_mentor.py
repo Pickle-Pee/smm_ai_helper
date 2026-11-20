@@ -23,22 +23,26 @@ class DialogueModel:
         assert data["schema_version"] == "case_mentor_context.v1"
         sections = {row["key"]: row["text"] for row in data["accepted_case"]}
         q = data["current_question"].casefold()
-        prior = " ".join(row["user"] for row in data["dialogue"])
+        prior = "\n".join(row["user"] for row in data["dialogue"])
         focus = "overview"
+        quantities = []
         if "почему не" in q:
             focus, response = "alternative", "Каналы не сравнивались: Telegram Ads — непроверенная альтернатива; сравним качество заявок в контролируемом тесте."
         elif "активнее" in q:
             focus, response = "resources", "Если аудитория активнее в Telegram, это новая предпосылка пользователя, а не подтверждённый факт; проверить охват и качество заявок до переноса бюджета."
         elif "бюджет" in q:
-            focus, response = "resources", "50 000 ₽ — заданный бюджет, не прогноз продаж. При предпосылке активности в Telegram проведём ограниченный сравнительный тест; для распределения нужны стоимость входа, география и допустимая стоимость заявки."
+            focus, response = "resources", "Заданный бюджет — не прогноз продаж. При предпосылке активности в Telegram проведём ограниченный сравнительный тест; для распределения нужны стоимость входа, география и допустимая стоимость заявки."
+            quantities = ["50 000 ₽"]
         elif "сегмент" in q:
-            focus, response = "resources", "Для ранее названного сегмента: " + prior + "; проверим его отклик отдельно от общей аудитории."
+            focus, response = "resources", "Для ранее названного сегмента:\n" + prior + "\nПроверим его отклик отдельно от общей аудитории."
         elif any(w in q for w in ("провер", "метрик", "cpl")):
             focus, response = "verification", "Сравните стоимость квалифицированной заявки и конверсию в продажу за общий период; не приписывайте причинность без контрольной группы. " + sections["verification"][:500]
         else:
             response = "VK Реклама — сохранённая гипотеза привлечения, а не доказанный лучший канал. Проверим соответствие аудитории и бизнес-цели."
-        reports = ["Обратная связь (не независимо проверено): " + row["notes"] + " " + row["metrics"] + " " + json.dumps(row["analysis"], ensure_ascii=False) for row in data["feedback"]]
-        return json.dumps({"focus": focus, "paragraphs": [response, sections["goal"][:1000], *reports],
+        reports = ["\n".join(value for value in (
+            "Обратная связь (не независимо проверено):", row["notes"], row["metrics"],
+            json.dumps(row["analysis"], ensure_ascii=False)) if value) for row in data["feedback"]]
+        return json.dumps({"focus": focus, "paragraphs": [response, *quantities, sections["goal"][:1000], *reports],
             "source_sections": ["goal", "verification"], "unknowns": ["Фактическая эффективность каналов без сопоставимого теста неизвестна."]}, ensure_ascii=False)
 
 

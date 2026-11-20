@@ -89,6 +89,7 @@ COVERAGE_MESSAGES = {
     "competitor_research_not_supplied": "Competitor research was not supplied.",
     "only_one_competitor_analyzed": "Only one competitor was analyzed.",
     "economics_unavailable": "Economics are unavailable; profitability and affordability remain unknown.",
+    "experiments_disabled": "Experiments are temporarily disabled.",
 }
 
 

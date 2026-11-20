@@ -48,6 +48,8 @@ class IntelligenceModel(FakeModel):
         data = json.loads(kwargs["text"])
         # The inherited fake invokes mutate too early for structured additions.
         for statement in raw["outputs"]:
+            if statement["output_name"] == "RTB":
+                continue  # The base fake quotes supplied substantiation verbatim.
             statement["text"] = "Validate the supplied scheduling hypothesis"
             if "MainGrowthConstraintStatement" in kwargs["response_schema"].get("$defs", {}):
                 statement["items"] = ["Prioritize validation of the supplied scheduling constraint"]

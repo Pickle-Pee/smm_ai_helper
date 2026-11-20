@@ -18,6 +18,7 @@ from tools.positioning_diagnostics import (
 )
 from app.module_execution import ModuleExecutionRequest
 from app.module_execution.executors import PositioningExecutor
+from app.module_execution.executors.positioning_observation_schema import positioning_observation_schema
 from app.module_registry import ModuleId
 from app.orchestration_runtime.contracts import ARTIFACT_SCHEMA, JOB_KIND, WORKFLOW_TYPE, artifact_key, module_job_id
 from app.orchestration_runtime.model_adapter import production_model_call
@@ -77,8 +78,9 @@ def test_terminal_replay_matches_load_work_and_wire(monkeypatch, upstream):
         assert "optional_node_failed" in invocation.context_packet.open_questions[-1]
     report = metadata(replay)
     assert report["core_copies"] == 1 and report["core_sections_count"] == 59
-    assert report["components"]["instructions"] == {"bytes": 53151,
-        "sha256": "33a422ace7494db1953b3736a8ba83b9399b2b6a8eb7126801dc7d3f1ac865a3"}
+    # Current runtime instruction golden; historical incident measurements are unchanged.
+    assert report["components"]["instructions"] == {"bytes": 57190,
+        "sha256": "18269fe547bf6d74384eefb4f1a89c252e2efa72a824d577c1e36a4fb48a7be7"}
     assert report["output_fields_count"] == 16 and report["facts_count"] > 0
     assert report["evidence_ids_count"] == report["facts_count"]
     assert "Supplied" not in json.dumps(report)
@@ -117,7 +119,11 @@ def test_terminal_replay_matches_load_work_and_wire(monkeypatch, upstream):
     from app.llm.openai_text import ModelResponseError
     with pytest.raises(ModelResponseError):
         asyncio.run(PositioningExecutor(model_call=production_model_call).execute(production_request))
-    assert calls == [replay.payload]
+    # The diagnostic control retains canonical kinds; production intentionally
+    # excludes generated OBS without changing any other serialized argument.
+    expected = copy.deepcopy(replay.payload)
+    expected["text"]["format"]["schema"] = positioning_observation_schema(expected["text"]["format"]["schema"])
+    assert calls == [expected]
     assert set(calls[0]) == {"model", "input", "reasoning", "max_output_tokens", "text"}
     assert calls[0]["model"] == "gpt-5-mini"
     assert [v["role"] for v in calls[0]["input"]] == ["system", "user"]
@@ -271,7 +277,7 @@ def test_public_module_cli_offline_blocks_clients_and_hides_private_values(tmp_p
     assert completed.returncode == 0
     assert not marker.exists()
     report = json.loads(completed.stdout)
-    assert report["components"]["instructions"]["bytes"] == 53151
+    assert report["components"]["instructions"]["bytes"] == 57190
     assert report["core_copies"] == 1 and "probes" not in report
     assert report["baseline_mode"] == "original_unprojected"
     if schema_only:

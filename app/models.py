@@ -475,6 +475,17 @@ class UrlCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class PositioningVerification(Base):
+    __tablename__ = "positioning_verifications"
+
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("jobs.job_id", ondelete="CASCADE"), primary_key=True,
+    )
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    checkpoint: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class JobExecution(Base):
     """Lease/retry metadata for the fixed workflow, separate from Job lifecycle."""
     __tablename__ = "job_executions"

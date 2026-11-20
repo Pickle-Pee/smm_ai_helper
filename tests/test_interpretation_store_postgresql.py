@@ -57,3 +57,34 @@ def test_restart_revisions_owners_race_and_corruption(mvp_database):
                 await session.execute(delete(User).where(User.id.in_(owners)))
             await engine.dispose()
     asyncio.run(check())
+
+
+def test_projection_masks_survive_jsonb_restart(mvp_database):
+    """Retries/continuation reload the mask, so BrandProfile never refills a masked slot."""
+    from app.marketing_copilot.context_projection import InterpretedRequest, NaturalLanguageContextProjection
+
+    async def check():
+        engine = create_async_engine(mvp_database.kw["bind"].url, poolclass=NullPool)
+        restarted = async_sessionmaker(engine, expire_on_commit=False)
+        owner, key = None, uuid.uuid4().hex
+        try:
+            async with mvp_database() as session, session.begin():
+                user = User(telegram_id=int(uuid.uuid4().hex[:12], 16))
+                session.add(user)
+                await session.flush()
+                owner = user.id
+            base = interpretation()
+            masked = InterpretedRequest(intent=base.intent, projection=NaturalLanguageContextProjection(
+                facts=base.projection.facts, masked_keys=("target_or_target_hypothesis", "business_goal")))
+            assert await InterpretationStore(mvp_database).save(owner, key, MESSAGE, masked) == masked
+            loaded = await InterpretationStore(restarted).load(owner, key, MESSAGE)
+            assert loaded == masked and loaded.projection.masked_keys == ("target_or_target_hypothesis", "business_goal")
+            async with mvp_database() as session:
+                raw = await session.scalar(select(InterpretedRequestRecord.interpretation_json).where(
+                    InterpretedRequestRecord.owner_id == owner))
+            assert raw["projection"]["masked_keys"] == ["target_or_target_hypothesis", "business_goal"]
+        finally:
+            async with mvp_database() as session, session.begin():
+                await session.execute(delete(User).where(User.id == owner))
+            await engine.dispose()
+    asyncio.run(check())

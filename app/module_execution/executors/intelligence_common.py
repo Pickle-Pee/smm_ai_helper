@@ -1,6 +1,5 @@
 """Additional conservative output checks; acceptance still belongs to Quality Gates."""
 import json
-import re
 from pydantic import ValidationError
 
 from .common import (
@@ -8,6 +7,7 @@ from .common import (
     StatementSemanticsError, plain,
 )
 from .claim_support import assertion_support
+from .numeric_quantity import has_numeric_quantity
 
 
 def supported_text(statement, local, parents):
@@ -19,7 +19,7 @@ def supported_text(statement, local, parents):
 def require_supported_numbers(text, supports):
     # Numerical statements must be supplied verbatim, not assembled by a model
     # from unrelated numbers (including budgets, sample sizes and percentages).
-    if re.search(r"\d", text) and not any(text in source for source in supports):
+    if has_numeric_quantity(text) and not any(text in source for source in supports):
         raise StatementSemanticsError(SemanticRule.NUMERICAL_SUPPORT_REQUIRED)
 
 

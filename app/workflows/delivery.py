@@ -43,12 +43,17 @@ class DeliveryService:
             row.attempts += 1
             return {"delivery_id": row.delivery_id, "claim_token": row.claim_token, "telegram_id": actor, "payload": row.payload_json}
 
-    async def acknowledge(self, delivery_id, token, *, message_id=None, retryable=True, retry_after=0):
+    async def acknowledge(self, delivery_id, token, *, message_id=None, retryable=True, retry_after=0, sent_parts=None):
         async with self.sessions() as session, session.begin():
             row = await session.scalar(select(WorkflowDelivery).where(WorkflowDelivery.delivery_id == delivery_id).with_for_update())
             if row is None or row.claim_token != token or row.lease_until <= self.clock():
                 return False
             row.claim_token = row.lease_until = None
+            # Multi-message notices record how many messages Telegram confirmed,
+            # so a retry resumes after them. Progress only moves forward.
+            if (message_id is None and type(sent_parts) is int and isinstance(row.payload_json, dict)
+                    and sent_parts > row.payload_json.get("sent_parts", 0)):
+                row.payload_json = {**row.payload_json, "sent_parts": sent_parts}
             if message_id is not None:
                 row.status, row.telegram_message_id, row.error = "delivered", message_id, None
             else:

@@ -71,6 +71,27 @@ mapping and the internal legacy literal-competitor URL behavior are unchanged.
 Owned-site observations are never sent to this extraction call and still require
 explicit confirmation before becoming product truth.
 
+**Ungrounded slots mask lower layers.** A non-null provider slot whose value is not
+a verbatim excerpt (for example a nominative paraphrase «курс фотографии …» of
+«курса фотографии …») is still dropped as a fact, but its key is recorded in
+`NaturalLanguageContextProjection.masked_keys`. Merging turns each masked key into an
+empty `request.projection` current-request entry, so `ContextResolver` does not fill
+that field from PROJECT_RUN, BRAND_PROFILE or CONVERSATION. Keys supplied by the
+owned site declared in the same request (OWNED_SITE site claims) are not masked: they
+describe the same subject and keep their site-claim trust. The existing planner/policy
+then asks for the field (Telegram: «Какой у вас продукт или услуга?»); an explicit
+answer in the current request supersedes the mask. A slot the provider left null
+creates no mask, so a request that does not mention its product keeps durable brand
+context unchanged. Masks carry no value and are logged as field names only
+(`masked_fields=[...]`).
+
+Reason: Telegram acceptance graph `2ad59a05…` on `a602f4e` dropped the paraphrased
+course product and published a POSITIONING statement naming the account BrandProfile
+product instead. `masked_keys` is persisted with the interpretation so retries and
+continuation remain deterministic. It is serialized only when non-empty: unmasked rows
+keep the previous JSON shape; a masked row is unreadable by releases before this change
+and fails closed there as an invalid persisted interpretation (no substitution).
+
 Extraction instructions require direct business assertions and omit missing facts,
 third-party/site claims, examples and hypothetical claims. Literal grounding prevents
 model-invented values; semantic classification of an excerpt still depends on the

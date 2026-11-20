@@ -55,8 +55,9 @@ class MarketingCopilotService:
                 interpreted = await self.interpreter.interpret_request(request.message)
         interpreted = validate_interpreted_request(interpreted, request.message)
         intent = interpreted.intent
-        entries = list(merge_projected_context(source_entries(request.current_request),
-                                              interpreted.projection, request.message))
+        entries = list(merge_projected_context(
+            source_entries(request.current_request), interpreted.projection, request.message,
+            request_scoped=frozenset(entry.semantic_key for entry in request.owned_site_context)))
         # Only literal request references, verified by the interpreter, enter as targets.
         # Existing explicit entries (including empty masks) retain precedence.
         # An owned-source declaration requires explicitly scoped competitor context;

@@ -19,11 +19,11 @@ from app.module_execution.executors.common import (
 )
 from app.module_execution.executors.experiments import ExperimentsExecutor
 from app.module_execution.executors.intelligence_schemas import ExperimentsOutput
-from app.module_execution.executors.provider_schema import schema_measurement
+from app.module_execution.executors.provider_schema import schema_measurement, collapse_redundant_support_anyof, collapse_single_support_anyof
 from app.module_execution.executors.schema_annotations import strip_schema_annotations
 from app.orchestration_runtime.model_adapter import production_model_call
 from app.orchestration_runtime.worker import transient
-from tests.experiments_provider import ExperimentsProvider
+from tests.experiments_provider import ExperimentsProvider, with_nonstrategic_parent
 from tests.test_experiments_diagnostics import restored
 from tests.test_graph_model_adapter import install_transport
 from tools import experiments_diagnostics
@@ -31,11 +31,11 @@ from tools import experiments_diagnostics
 
 @pytest.fixture(scope="module")
 def invocation():
-    return restored()
+    return with_nonstrategic_parent(restored())
 
 
 CASES = [
-    ("output_missing_strategic_parent", lambda p: p["outputs"][2].update(parent_claim_ids=[]), 2, None),
+    ("output_missing_strategic_parent", lambda p: p["outputs"][2].update(parent_claim_ids=["clm_z_additional_recommendation"]), 2, None),
     ("experiment_invalid_strategic_references", lambda p: p["experiments"][1].update(related_strategic_claim_ids=["clm_private_unknown"]), None, 1),
     ("experiment_duplicate_strategic_references", lambda p: p["experiments"][1].update(related_strategic_claim_ids=p["experiments"][1]["related_strategic_claim_ids"][:1] * 2), None, 1),
     ("experiment_constraints_mismatch", lambda p: p["experiments"][1].update(time_resource_constraints=["PRIVATE_CONSTRAINT"]), None, 1),
@@ -77,7 +77,7 @@ def test_exact_trigger_safe_error_log_and_unchanged_wire(monkeypatch, caplog, in
     assert str(error) == "Invalid structured module output"
     expected = deepcopy(baseline.payload)
     if enabled:
-        expected["text"]["format"]["schema"] = strip_schema_annotations(baseline.arguments["response_schema"])[0]
+        expected["text"]["format"]["schema"] = strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(baseline.arguments["response_schema"])))[0]
     assert provider.calls == [expected] and all(c.is_closed for c in clients)
     assert wire_bytes == [httpx.Request("POST", "https://offline.test/responses", json=expected).content]
     rejection = [r for r in caplog.records if r.getMessage().startswith("Module output rejected")]
@@ -177,7 +177,7 @@ def run_recipe(monkeypatch, invocation, provider, *, mismatch=None, approved=Tru
     try:
         exec(recipe.rsplit("\ntry:\n", 1)[0], namespace)
         namespace.update(APPROVED=approved, APPROVED_HASHES=hashes,
-            APPROVED_PROVIDER_SCHEMA_HASH=schema_measurement(strip_schema_annotations(baseline.arguments["response_schema"])[0])["sha256"])
+            APPROVED_PROVIDER_SCHEMA_HASH=schema_measurement(strip_schema_annotations(collapse_single_support_anyof(collapse_redundant_support_anyof(baseline.arguments["response_schema"])))[0])["sha256"])
         if mismatch == "provider":
             namespace["APPROVED_PROVIDER_SCHEMA_HASH"] = "0" * 64
         elif mismatch:
@@ -264,7 +264,7 @@ def test_runbook_other_result_rules(monkeypatch, invocation, cause):
     elif cause == "mutation":
         original = ExperimentsExecutor.build_result
         def mutate(self, request, output, evidence, parents):
-            output.outputs[1].parent_claim_ids *= 33
+            output.outputs[1].text = "x" * 4001
             return original(self, request, output, evidence, parents)
         monkeypatch.setattr(ExperimentsExecutor, "build_result", mutate)
         expected = "post_mutation_pydantic_invalid"
@@ -282,7 +282,7 @@ def test_runbook_other_result_rules(monkeypatch, invocation, cause):
 
 def test_first_actual_check_wins(monkeypatch, invocation):
     def mutate(payload):
-        payload["outputs"][2]["parent_claim_ids"] = []
+        payload["outputs"][2]["parent_claim_ids"] = ["clm_z_additional_recommendation"]
         payload["experiments"][0]["related_strategic_claim_ids"] = ["clm_unknown", "clm_unknown"]
     provider = provider_for(invocation, mutate)
     install_transport(monkeypatch, provider)

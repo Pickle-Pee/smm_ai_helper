@@ -132,6 +132,9 @@ def test_bounded_strategy_rule_logging_after_internal_schema_bypass(name, change
     # Explicitly emulate a legacy internal wire type and generic support policy.
     monkeypatch.setattr(VirtualCMOExecutor, "output_type", BypassOutput)
     monkeypatch.setattr(VirtualCMOExecutor, "support_requirement_for", lambda *_: SupportRequirement.ANY)
+    # This test intentionally bypasses structural safeguards to reach the
+    # independent semantic defenses, including the canonical-only projection.
+    monkeypatch.setattr(VirtualCMOExecutor, "provider_schema_for", BaseExecutor.provider_schema_for)
     warning = Mock()
     monkeypatch.setattr("app.module_execution.executors.common.log.warning", warning)
     def invalid(raw, data):

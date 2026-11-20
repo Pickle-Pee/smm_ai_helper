@@ -133,6 +133,21 @@ def test_http_network_and_malformed_response(monkeypatch, failure):
     assert exc.value.category == ("unavailable" if failure == "network" else "invalid_response")
 
 
+@pytest.mark.parametrize("graph_timeout", [300, 420])
+def test_client_waits_for_the_backend_execution_window(monkeypatch, graph_timeout):
+    # The API bounds /copilot/execute by GRAPH_TIMEOUT_SECONDS; a shorter bot window would report
+    # «unavailable» while the backend is still inside its own budget.
+    totals, real_timeout = [], asyncio.timeout
+    monkeypatch.setattr(asyncio, "timeout", lambda delay: totals.append(delay) or real_timeout(delay))
+    monkeypatch.setattr(settings, "GRAPH_TIMEOUT_SECONDS", graph_timeout)
+    configurations = patch_http(monkeypatch, lambda _: httpx.Response(404))
+    with pytest.raises(CopilotError):
+        asyncio.run(CopilotClient().run(123, RID))
+    timeout = configurations[0]["timeout"]
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (10, graph_timeout, graph_timeout, graph_timeout)
+    assert totals == [graph_timeout + 10]
+
+
 def test_direct_http_routing_auth_rendering_and_duplicate(monkeypatch):
     calls = []
     def respond(request):
@@ -421,6 +436,35 @@ def test_creator_limitation_source_matches_telegram_translation_contract():
 
     assert CreatorExecutor.limitation == CREATOR_LIMITATION
     assert render.human(CreatorExecutor.limitation) == CREATOR_LIMITATION_RU
+
+
+def test_strategy_limitation_sources_match_telegram_translation_contract():
+    """CMO stabilization: server limitation constants of a strategy are shown in Russian."""
+    import inspect
+    from app.marketing_copilot import presentation
+    from app.module_execution.executors import virtual_cmo
+    from app.module_execution.executors.experiments import ExperimentsExecutor
+    from app.module_execution.executors.virtual_cmo import VirtualCMOExecutor
+
+    economics = ("Economics absent: profitability, budget affordability and unit economics are unknown; "
+                 "resource priorities are qualitative.")
+    assert economics in inspect.getsource(virtual_cmo)
+    assert "Experiments are unavailable." in inspect.getsource(presentation)
+    for source in (VirtualCMOExecutor.limitation, ExperimentsExecutor.limitation, economics):
+        translated = render.human(source)
+        assert translated != source and any("а" <= ch <= "я" for ch in translated.lower())
+        assert not any("a" <= ch <= "z" for ch in translated.lower())
+
+
+def test_unavailable_experiments_are_labeled_explicitly_without_hiding_the_strategy():
+    strategy = dto.Strategy(**{key: dto.StrategySection(text="Текст", items=["Действие"]) for key in render.SECTIONS})
+    result = dto.RunResponse(run_id=RID, status=dto.RunStatus.COMPLETED_WITH_LIMITATIONS, strategy=strategy,
+        evidence_coverage=dto.Coverage(competitors_supplied=1, competitors_accepted=1,
+            limitations=["Experiments are unavailable."]))
+    text = "\n".join(render.run(result))
+    assert all(title in text for title in render.SECTIONS.values())
+    assert "Эксперименты не сформированы" in text and "не прошёл автоматическую проверку" in text
+    assert "Experiments are unavailable." not in text
 
 
 def test_strategy_nine_sections_experiments_coverage_and_long_markup_safe():

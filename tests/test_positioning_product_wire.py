@@ -54,6 +54,14 @@ class ProductModel(FakeModel):
                 statement["parent_claim_ids"] = data["allowed_parent_claim_ids"][:1]
             if self.mode == "mixed":
                 statement["evidence_ids"] = [ids["product"], ids["existing_proof"]]
+        # Positive OBS cases and RTB must quote their actual selected product
+        # source, including proof-mode selection rather than another source.
+        for statement in payload["outputs"]:
+            if self.kind == "OBSERVATION" or statement["output_name"] == "RTB":
+                selected = statement.get("product_support_id")
+                source = next((e for e in data["local_evidence"] if e["evidence_id"] == selected), None)
+                if source is not None:
+                    statement["text"] = source["value"]
         if self.change:
             self.change(payload, data)
         self.payload = deepcopy(payload)
@@ -100,7 +108,7 @@ def test_product_matrix(name, kind, job, alternative, mode):
         assert caught.value.stage.value == "schema_invalid"
         assert not transient(caught.value)
     assert len(model.calls) == 1
-    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.payload) is valid
+    assert Draft202012Validator(model.calls[0]["response_schema"]).is_valid(model.payload) is (valid and kind != "OBSERVATION")
 
 
 @pytest.mark.parametrize("job,alternative", STATES)

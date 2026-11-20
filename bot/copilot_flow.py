@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from bot import copilot_contracts as dto, copilot_rendering as render
 from bot.copilot_client import CopilotClient, CopilotError, RUN_ID
-from bot.rendering import send_text
+from bot.rendering import send_text, split_text
 
 client = CopilotClient()
 URL = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
@@ -256,7 +256,9 @@ async def execute(message, actor, state, pending, *, processing_text=None):
         await state.update_data(copilot_run={"run_id": response.run_id, "status_url": response.status_url,
             "request_key": payload.request_key})
         await finish(state)
-        await send_text(message, "Начал собирать стратегию. Анализ выполняется по шагам.", reply_markup=status_keyboard(response.run_id))
+        await send_text(message, "Начал собирать стратегию. Анализ выполняется по шагам. "
+            "Результат пришлю сюда автоматически, как только он будет готов — ничего нажимать не нужно. "
+            "Кнопка ниже показывает текущий статус.", reply_markup=status_keyboard(response.run_id))
         return
     await finish(state)
     if isinstance(response, dto.ConversationResponse):
@@ -407,18 +409,27 @@ async def callback_action(callback, state):
                 processing_text="Подтверждение принято. Продолжаю анализ…")
 
 
+def run_messages(response, *, title=None):
+    """Telegram-sized (text, markup) pairs for a persisted run; shared by the status
+    button and automatic delivery so both show the same accepted artifacts."""
+    sections = render.run(response)
+    if title and sections:
+        sections = [sections[0] + "\nЗапрос: " + title, *sections[1:]]
+    markup = status_keyboard(response.run_id) if response.status in {dto.RunStatus.QUEUED, dto.RunStatus.RUNNING} else None
+    if response.strategy and response.status in {dto.RunStatus.COMPLETED, dto.RunStatus.COMPLETED_WITH_LIMITATIONS}:
+        markup = keyboard([("Объяснить решение", run_callback(response.run_id).replace("cs:", "cm:", 1))])
+    chunks = [chunk for section in sections for chunk in split_text(section)]
+    return [(chunk, markup if i == len(chunks) - 1 else None) for i, chunk in enumerate(chunks)]
+
+
 async def status(message, actor, run_id):
     try:
         response = await client.run(actor, run_id)
     except CopilotError as exc:
         await send_text(message, ERRORS.get(exc.category, ERRORS["server"]))
         return
-    sections = render.run(response)
-    markup = status_keyboard(run_id) if response.status in {dto.RunStatus.QUEUED, dto.RunStatus.RUNNING} else None
-    if response.strategy and response.status in {dto.RunStatus.COMPLETED, dto.RunStatus.COMPLETED_WITH_LIMITATIONS}:
-        markup = keyboard([("Объяснить решение", run_callback(run_id).replace("cs:", "cm:", 1))])
-    for i, section in enumerate(sections):
-        await send_text(message, section, reply_markup=markup if i == len(sections) - 1 else None)
+    for text, markup in run_messages(response):
+        await send_text(message, text, reply_markup=markup)
 
 
 async def saved_result(message, actor, request_key):

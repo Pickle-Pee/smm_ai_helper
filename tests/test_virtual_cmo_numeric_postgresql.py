@@ -92,7 +92,13 @@ class DaycareProvider:
         elif self.failure == "combination":
             outputs[0]["numeric_context"][1]["quote"] = "Для детей от 2 до 7 лет цена 18 000 рублей."
         assert body["text"]["format"]["strict"] is True
-        assert Draft202012Validator(schema).is_valid(payload)
+        provider_valid = Draft202012Validator(schema).is_valid(payload)
+        if self.failure in ("text", "items", "combination"):
+            # Deliberately emulate a noncompliant provider so PostgreSQL execution
+            # still exercises the independent original semantic/persistence guard.
+            assert not provider_valid
+        else:
+            assert provider_valid
         # Every object in the actual provider wire has all properties required.
         def strict(node):
             if isinstance(node, dict):

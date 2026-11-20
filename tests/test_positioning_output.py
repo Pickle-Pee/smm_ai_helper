@@ -30,6 +30,27 @@ from tests.test_copilot_application import (
 from tests.test_strategy_builder import strategy_compiled, strategy_executors
 
 
+@pytest.mark.parametrize("family", ["evidence_ids", "parent_claim_ids"])
+def test_positioning_instructs_unique_citations_and_still_rejects_duplicates(family):
+    from app.module_execution import UpstreamExecutionResult
+    parent = dispatch(request(ModuleId.POSITIONING))
+    invocation = request(ModuleId.POSITIONING, upstream=(
+        UpstreamExecutionResult(producer_node_id="accepted_positioning", result=parent),))
+
+    def duplicate(payload, data):
+        ids = payload["outputs"][0][family]
+        assert ids
+        ids.append(ids[0])
+
+    model = FakeModel(duplicate, use_parents=True)
+    with pytest.raises(ExecutorOutputError) as caught:
+        dispatch(invocation, model)
+    assert caught.value.stage is OutputFailureStage.SUPPORT_IDENTITY_INVALID
+    assert len(model.calls) == 1
+    assert "evidence_ids and parent_claim_ids must each contain unique" in model.calls[0]["instruction"]
+    assert "do not repeat the product-truth ID" in model.calls[0]["instruction"]
+
+
 @pytest.fixture(params=[False, True], ids=["logger-enabled", "logger-disabled"])
 def rejection_log(monkeypatch, request):
     from app.module_execution.executors.common import log
@@ -172,7 +193,10 @@ def test_safe_failure_stages_fail_closed_without_retry(monkeypatch, rejection_lo
 def test_product_claim_support_remains_required(name, input_key, valid):
     from tests.test_module_executors import fact, facts_for_module
     def support(payload, data):
-        payload["outputs"][0]["evidence_ids"] = [next(e["evidence_id"] for e in data["local_evidence"] if e["input_key"] == input_key)]
+        source = next(e for e in data["local_evidence"] if e["input_key"] == input_key)
+        payload["outputs"][0]["evidence_ids"] = [source["evidence_id"]]
+        if name == "RTB" and valid:
+            payload["outputs"][0]["text"] = source["value"]
     invocation = request(ModuleId.POSITIONING, outputs=(name,),
         facts=(*facts_for_module(ModuleId.POSITIONING), fact("existing_proof")))
     if valid:
@@ -207,3 +231,23 @@ def test_result_construction_diagnostics_are_safe(monkeypatch, rejection_log):
         "POSITIONING", "result_contract_invalid", "result_normalization_invalid", 0, None)
     assert "PRIVATE_SENTINEL" not in str(rejection_log.call_args)
     assert "PRIVATE_SENTINEL" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.parametrize("projection", [False, True])
+def test_invented_numeric_validation_plan_fails_through_production_transport(monkeypatch, rejection_log, projection):
+    from tests.test_positioning_numeric_grounding import UNSUPPORTED_VALIDATION_PLAN
+
+    def mutate(payload, data):
+        statement = next(item for item in payload["outputs"] if item["output_name"] == "validation_plan.")
+        statement["text"] = UNSUPPORTED_VALIDATION_PLAN
+
+    provider = PositioningProvider(mutate)
+    install_transport(monkeypatch, provider)
+    with pytest.raises(ExecutorOutputError) as caught:
+        asyncio.run(PositioningExecutor(model_call=production_model_call,
+            provider_schema_projection=projection).execute(request(ModuleId.POSITIONING)))
+    assert caught.value.stage is OutputFailureStage.STATEMENT_SEMANTICS_INVALID
+    assert len(provider.calls) == 1 and not transient(caught.value)
+    rejection_log.assert_called_once_with("Module output rejected module=%s stage=%s rule=%s",
+        "POSITIONING", "statement_semantics_invalid", "numerical_support_required")
+    assert UNSUPPORTED_VALIDATION_PLAN not in str(rejection_log.call_args)

@@ -103,9 +103,10 @@ def validate_compiled_plan(plan, executors=None):
         from app.marketing_orchestrator.strategy import strategy_topology, key, nonempty
         if type(plan) is not CompiledExecutionPlanV2 or plan.registry_version not in _STRATEGY_KEYS_BY_REGISTRY:
             raise CompilationError("strategy requires approved strategy Registry and compiled v2")
-        if not set(plan.limitations) <= {"market_research_not_supplied", "competitor_research_not_supplied", "economics_unavailable"}:
+        if not set(plan.limitations) <= {"market_research_not_supplied", "competitor_research_not_supplied",
+                                         "economics_unavailable", "experiments_disabled"}:
             raise CompilationError("unknown strategy planning limitation")
-        strategy_topology(plan.nodes, plan.dependencies)
+        strategy_topology(plan.nodes, plan.dependencies, plan.limitations)
         for node in plan.nodes:
             required = node.module_id in {ModuleId.POSITIONING, ModuleId.VIRTUAL_CMO}
             if optional(node) == required:

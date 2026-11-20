@@ -56,8 +56,16 @@ async def capture_request(request, *, model, minimal_provider_schema=False):
         arguments.update(kwargs)
         raise _Captured()
 
+    class DiagnosticExecutor(PositioningExecutor):
+        def provider_schema_for(self, request, validation_schema):
+            # Explicit offline control: retain the original canonical schema.
+            # Production always applies its observation-generation subset.
+            if not minimal_provider_schema:
+                return copy.deepcopy(validation_schema)
+            return super().provider_schema_for(request, validation_schema)
+
     try:
-        await PositioningExecutor(model_call=capture, provider_schema_projection=False,
+        await DiagnosticExecutor(model_call=capture, provider_schema_projection=False,
             minimal_provider_schema=minimal_provider_schema).execute(request)
     except _Captured:
         pass
@@ -202,6 +210,17 @@ async def restore_snapshot(snapshot, *, run_id, job_id, module_id=None):
         raise DiagnosticError("snapshot_duplicate_identity")
 
     class SnapshotSession:
+        async def get(self, entity, identity):
+            from app.models import MarketingRun
+            if entity is not MarketingRun or identity != run_id:
+                raise DiagnosticError("unexpected_snapshot_query")
+            # v1 diagnostic exports precede durable verification. A marked run
+            # cannot be replayed from a snapshot without its private checkpoint.
+            run_input = snapshot["run"].get("input_json", {})
+            if "positioning_verification" in run_input:
+                raise DiagnosticError("verification_checkpoint_not_in_snapshot")
+            return SimpleNamespace(input_json=run_input)
+
         async def scalar(self, query):
             if query.column_descriptions[0]["entity"] is not OrchestrationPlanRecord:
                 raise DiagnosticError("unexpected_snapshot_query")

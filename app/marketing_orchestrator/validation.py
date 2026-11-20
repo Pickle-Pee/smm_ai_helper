@@ -110,7 +110,7 @@ class PlanValidator:
         if plan.scenario_key == "strategy_builder_v1":
             from .strategy import strategy_topology
             try:
-                strategy_topology(plan.nodes, plan.dependencies)
+                strategy_topology(plan.nodes, plan.dependencies, plan.limitations)
             except ValueError as exc:
                 raise InvalidPlanError(str(exc)) from exc
         if plan.scenario_key == "explicit_single_module_v1":

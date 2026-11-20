@@ -11,6 +11,7 @@ from .schemas import OutputStatement
 
 from .common import NumericLocation, NumericContextFailureReason, SemanticRule, StatementSemanticsError
 from .claim_support import strategy_claim, assertion_support
+from .numeric_quantity import has_numeric_quantity
 
 
 def context_units(value):
@@ -21,7 +22,7 @@ def context_units(value):
     No sentence splitting, normalization, substring matching or calculations.
     """
     if isinstance(value, str):
-        if (1 <= len(value) <= 1000 and re.search(r"\d", value)
+        if (1 <= len(value) <= 1000 and has_numeric_quantity(value)
                 and re.search(r"[^\W\d_]", value) and value == value.strip()):
             yield value
     elif isinstance(value, Mapping):
@@ -41,7 +42,7 @@ def validate_numeric_context(statement, local, parents):
     for location, texts in ((NumericLocation.TEXT, [statement.text]),
                             (NumericLocation.ITEMS, statement.items)):
         for text in texts:
-            if re.search(r"\d", text):
+            if has_numeric_quantity(text):
                 raise StatementSemanticsError(SemanticRule.NUMERICAL_SUPPORT_REQUIRED,
                                               numeric_location=location)
     for index, context in enumerate(getattr(statement, "numeric_context", ())):

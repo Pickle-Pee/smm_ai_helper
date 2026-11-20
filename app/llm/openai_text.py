@@ -304,7 +304,10 @@ async def _post_response(client, url, *, headers, payload, single_attempt):
             _log_provider_event(fields, level=logging.INFO if outcome == "success" else logging.WARNING)
         if hooks:
             try:
-                await hooks[1](fields)
+                if len(hooks) == 3 and outcome == "success":
+                    await hooks[1](fields, _single_attempt_output(data), payload)
+                else:
+                    await hooks[1](fields)
             except Exception as diagnostic_error:
                 log.error("Provider receipt persistence failed provider_call_id=%s error_type=%s",
                           fields["provider_call_id"], type(diagnostic_error).__name__)
@@ -404,7 +407,12 @@ async def chat(
         payload["reasoning"] = {"effort": "low"}
 
     # A governed workflow accounts for every POST, including nested capabilities.
-    single_attempt = single_attempt or provider_hooks() is not None
+    hooks = provider_hooks()
+    single_attempt = single_attempt or hooks is not None
+    if hooks is not None and len(hooks) == 3:
+        saved = await hooks[2](payload)
+        if saved is not None:
+            return saved, {}
     timeout = httpx.Timeout(settings.HTTP_TIMEOUT)
     posts = 1 if single_attempt else min(MAX_LEGACY_POSTS, max(1, settings.HTTP_RETRIES + 1))
 

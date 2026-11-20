@@ -25,8 +25,16 @@ class Settings(BaseSettings):
     POSITIONING_SCHEMA_PROJECTION_ENABLED: bool = False
     POSITIONING_MINIMAL_PROVIDER_SCHEMA_ENABLED: bool = False
     POSITIONING_PRODUCT_SUPPORT_WIRE_ENABLED: bool = False
+    POSITIONING_DURABLE_VERIFICATION_ENABLED: bool = False
+    POSITIONING_SUPPORT_SELECTION_WIRE_ENABLED: bool = False
     EXPERIMENTS_SCHEMA_PROJECTION_ENABLED: bool = False
+    EXPERIMENTS_STRATEGIC_PARENT_WIRE_ENABLED: bool = False
+    EXPERIMENTS_SUPPORT_SELECTION_WIRE_ENABLED: bool = False
     VIRTUAL_CMO_NUMERIC_QUOTE_CATALOG_ENABLED: bool = False
+    VIRTUAL_CMO_SUPPORT_SELECTION_WIRE_ENABLED: bool = False
+    # AI Core 1.0 release gate: false plans new strategy graphs without the EXPERIMENTS node
+    # and records the explicit limitation experiments_disabled. Started graphs keep their plan.
+    COPILOT_EXPERIMENTS_ENABLED: bool = True
 
     DEFAULT_TEXT_MODEL_LIGHT: str = "gpt-5-mini"
     DEFAULT_TEXT_MODEL_HARD: str = "gpt-5"

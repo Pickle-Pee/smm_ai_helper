@@ -84,6 +84,10 @@ class FakeModel:
                                "kind": "HYPOTHESIS", "confidence": "HIGH", "evidence_ids": ids,
                                "parent_claim_ids": parents} for name in data["expected_outputs"]],
                   "assumptions": [], "limitations": []}
+        for statement in result["outputs"]:
+            if statement["output_name"] == "RTB":
+                source = next(e for e in local if e["input_key"] in {"product_truth", "existing_proof"})
+                statement["text"] = source["value"] if isinstance(source["value"], str) else json.dumps(source["value"], ensure_ascii=False)
         if "post" in kwargs["response_schema"]["properties"]:
             result["post"] = {"headline": "Plan your next post", "body": "Use the supplied product to prepare your content.", "cta": "Learn more"}
         if self.mutate:
@@ -429,14 +433,17 @@ def test_positioning_missing_seed_rejects_unmarked_reasoning(seed, name, kind):
 ])
 def test_positioning_missing_seed_requires_matching_factual_parent(parent_kind, parent_output, allowed):
     from app.module_execution.executors.schemas import OutputStatement
-    parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)),
-                      FakeModel(lambda r, d: r["outputs"][0].update(kind=parent_kind)))
+    def parent_statement(payload, data):
+        payload["outputs"][0].update(kind=parent_kind)
+        if parent_kind == "OBSERVATION":
+            payload["outputs"][0]["text"] = data["local_evidence"][0]["value"]
+    parent = dispatch(request(ModuleId.POSITIONING, outputs=(parent_output,)), FakeModel(parent_statement))
     facts = tuple(f for f in facts_for_module(ModuleId.POSITIONING) if f.label != "customer_job_or_need")
     req = request(ModuleId.POSITIONING, facts=facts, outputs=("JTBD_frame",),
                   identity="child.positioning", upstream=(UpstreamExecutionResult(producer_node_id="parent", result=parent),))
     evidence = first_party_evidence(req, scoped_facts(req))
     parent_claim = parent.normalized_result.claims[0]
-    statement = OutputStatement(output_name="JTBD_frame", text="Synthetic parent-supported reasoning",
+    statement = OutputStatement(output_name="JTBD_frame", text=parent_claim.value,
         kind="OBSERVATION", confidence="MEDIUM", evidence_ids=[evidence[0].record.evidence_id],
         parent_claim_ids=[parent_claim.claim_id])
     executor = PositioningExecutor(model_call=None)

@@ -1,0 +1,1469 @@
+{
+  "real_posts": 31,
+  "records": [
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "baseline",
+      "at": "2026-10-30T14:07:59.246405+00:00",
+      "payload": {
+        "bytes": 93946,
+        "sha256": "972b116140f81cad8824481396ecb7db52b3e815ba6e56df96321700f521e472"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_9624ec519d8e42dcac16562fbd5e415d",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 4.21,
+      "ledger_source": "synthetic-results.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "no_support_anyof",
+      "at": "2026-10-30T14:08:03.461251+00:00",
+      "payload": {
+        "bytes": 89136,
+        "sha256": "a03f9d56efd99c0a651b2fd89bd478fc3c6be7d85e00a2f959677d9fd85e55e4"
+      },
+      "schema": {
+        "bytes": 4780,
+        "sha256": "62c406ff916d1f0542744c1bbbd448a6a8b0f3134720a648357194f97ff4739a"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_a85c7a92c2514b36844596f373901246",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 20095,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 2764,
+        "output_tokens_details": {
+          "reasoning_tokens": 256
+        },
+        "total_tokens": 22859
+      },
+      "output_chars": 8455,
+      "original_schema": "PASS",
+      "server_contract": "FAIL",
+      "error_type": "StatementSemanticsError",
+      "stage": "statement_semantics_invalid",
+      "rule": "numerical_support_required",
+      "numeric_context_reason": "source_has_no_eligible_quote",
+      "duration_seconds": 40.426,
+      "ledger_source": "synthetic-results.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "no_support_enums",
+      "at": "2026-10-30T14:08:43.891638+00:00",
+      "payload": {
+        "bytes": 92828,
+        "sha256": "5487a55d6b738c9b754443df21a1b5e799b0b36d9334abe998ef075d5eba32c7"
+      },
+      "schema": {
+        "bytes": 8472,
+        "sha256": "438319ff84116de6941cf8ed2645c3fce0d9c3ae5ae9d493474bc88bf1037a6e"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "PASS",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_40a81fa449134771a0dbb4e0cd838a0b",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 20375,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 1591,
+        "output_tokens_details": {
+          "reasoning_tokens": 192
+        },
+        "total_tokens": 21966
+      },
+      "output_chars": 5332,
+      "original_schema": "PASS",
+      "server_contract": "PASS",
+      "duration_seconds": 23.411,
+      "ledger_source": "synthetic-results.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "no_annotations",
+      "at": "2026-10-30T14:09:07.306522+00:00",
+      "payload": {
+        "bytes": 91752,
+        "sha256": "81e3d605dd674c0b57be4344cd6a3f7f2089f0d356d15f98af0f96da3ac8f612"
+      },
+      "schema": {
+        "bytes": 7396,
+        "sha256": "adc1d16cea98594011d6bade2a3f9ff117a0e0ebf7a964fdd5af2ee4d565a5a4"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_18ce557667fa46a6bda416a0c324fb6e",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 3.43,
+      "ledger_source": "synthetic-results.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "core_reduced",
+      "at": "2026-10-30T14:10:13.629869+00:00",
+      "payload": {
+        "bytes": 42182,
+        "sha256": "e1803959d857f250e8c6c40e6ca1e232e114d32548922042f49452994a1d9d35"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_39f6e40cb5ff46cf97df4e9253578d9d",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 3.194,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "core_minimal",
+      "at": "2026-10-30T14:10:16.827899+00:00",
+      "payload": {
+        "bytes": 42003,
+        "sha256": "05c24da3bd40099e44d06dbc633f55355d10ccc436a2a2932428f38e68c12df5"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_3b86b5f844124730973438d017020d97",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.108,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "upstream_claims",
+      "at": "2026-10-30T14:10:18.940825+00:00",
+      "payload": {
+        "bytes": 86765,
+        "sha256": "291b16a9787dcf2caee08cc09ba51c2ab4d818ac8c5c700f6077e26be7b7b096"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_bbbd24b266ca4ed19a475bd4d3756dcd",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.708,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "upstream_compact",
+      "at": "2026-10-30T14:10:20.665260+00:00",
+      "payload": {
+        "bytes": 85438,
+        "sha256": "12131688a6da49f7c15831be0f48d26e5ffb5f6a87d4b9d79ae820a91f5b9857"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_807393f8d12149608e3bcfdda5215d05",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.329,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "model_gpt5",
+      "at": "2026-10-30T14:10:23.003939+00:00",
+      "payload": {
+        "bytes": 93941,
+        "sha256": "e5b79da0821f514e142d4e15851a4f8f166af9f596a7cea9ca69f5c70c7c34ec"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "PASS",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_07f6c9c5f0ba414ab0691c4915b28788",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 21001,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 2938,
+        "output_tokens_details": {
+          "reasoning_tokens": 832
+        },
+        "total_tokens": 23939
+      },
+      "output_chars": 6804,
+      "original_schema": "PASS",
+      "server_contract": "PASS",
+      "duration_seconds": 48.205,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "effort_medium",
+      "at": "2026-10-30T14:11:11.222541+00:00",
+      "payload": {
+        "bytes": 93949,
+        "sha256": "0efac9431294ae192478c2eda9864b3e6f3785acd3666e96769573d60c90d353"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_58a08c8f0f2345b19c04c075ca47ad9a",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.413,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "budget_32000",
+      "at": "2026-10-30T14:11:12.640656+00:00",
+      "payload": {
+        "bytes": 93946,
+        "sha256": "53d10d1f98f4d8eb004cd6524480db879dbbbe844bdaf0b8ef656ea133164baa"
+      },
+      "schema": {
+        "bytes": 9590,
+        "sha256": "8c388d95beb422f24a0ab98f811c49a5994887aef8c0d77b99935344e1075132"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 32000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_f65de7f212f947e8970167480bc20138",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.551,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "fixture": "synthetic_not_incident",
+      "case": "no_array_bounds",
+      "at": "2026-10-30T14:11:14.196273+00:00",
+      "payload": {
+        "bytes": 93386,
+        "sha256": "dd160f6bfcd74252788888cb641800341429149f071d642c923cfdaf2cfda638"
+      },
+      "schema": {
+        "bytes": 9030,
+        "sha256": "c98b60e8ca8f82dfd743249e4f4fda0701c4e4eb7a985f93863f1e654e96e70e"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "quality_gates": "NOT_RUN",
+      "billing_outcome": "unknown",
+      "http_status": 200,
+      "request_id": "req_2accb6614304448dadf59535b4d22e2c",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.283,
+      "ledger_source": "synthetic-results-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "baseline",
+      "at": "2026-10-30T14:13:38.594519+00:00",
+      "payload": {
+        "bytes": 109670,
+        "sha256": "33f131b0882e5b0f0c0c579c1c7e1200d7c266dab8d9eb1804473d2d3f5fd4e9"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_deed7aa2b86147e5b46292d617cb30f0",
+      "response_id": "resp_05ed937a0c91d3f6006ae4a612dc0087d2823d51834e6d1ea9",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.429,
+      "ledger_source": "incident-schema.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "equivalent_projection",
+      "at": "2026-10-30T14:13:40.153487+00:00",
+      "payload": {
+        "bytes": 104860,
+        "sha256": "becdd67f981fc9aa96731a6c145ed4d43e25146b329b4b09d3175439570444b9"
+      },
+      "schema": {
+        "bytes": 4890,
+        "sha256": "0924d6708159f45780c3761f0460e0d817a6e1ddcbd8442679f39c4c6cea4328"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "PASS",
+      "http_status": 200,
+      "request_id": "req_5c42f62c3129466fbf1cc0233693c605",
+      "response_id": "resp_04b6895e86ef02e1006ae4a614539c87d2bc88f0a03cae1c57",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 22246,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 3490,
+        "output_tokens_details": {
+          "reasoning_tokens": 256
+        },
+        "total_tokens": 25736
+      },
+      "output_chars": 9718,
+      "original_schema": "PASS",
+      "schema_errors": [],
+      "server_contract": "PASS",
+      "accepted_claims": 25,
+      "duration_seconds": 49.707,
+      "ledger_source": "incident-schema.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "no_support_enums",
+      "at": "2026-10-30T14:14:29.872735+00:00",
+      "payload": {
+        "bytes": 108442,
+        "sha256": "5c1b5680edf5eac0fc612996248278641b01388809d32c8e4388c70ad91bb68c"
+      },
+      "schema": {
+        "bytes": 8472,
+        "sha256": "438319ff84116de6941cf8ed2645c3fce0d9c3ae5ae9d493474bc88bf1037a6e"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "PASS",
+      "http_status": 200,
+      "request_id": "req_1d9b7b05173244ab84ef0a2fbf493129",
+      "response_id": "resp_0f222ceb4323aaa3006ae4a6460b4087d281cfbf9ce997b0a9",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 22447,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 8960
+        },
+        "output_tokens": 2698,
+        "output_tokens_details": {
+          "reasoning_tokens": 320
+        },
+        "total_tokens": 25145
+      },
+      "output_chars": 7925,
+      "original_schema": "PASS",
+      "schema_errors": [],
+      "server_contract": "PASS",
+      "accepted_claims": 25,
+      "duration_seconds": 47.47,
+      "ledger_source": "incident-schema.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "no_annotations",
+      "at": "2026-10-30T14:15:17.352891+00:00",
+      "payload": {
+        "bytes": 107476,
+        "sha256": "cebbca1283c95ad8b545842536bf2447d5c6b5437feb44c0186b33b6222111ad"
+      },
+      "schema": {
+        "bytes": 7506,
+        "sha256": "608d10ec6fd0b83a43e8c75dd0d25795a58f89a794aa0e982525a08114c4255b"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_741e6a88886a437e9bb952769535ebf1",
+      "response_id": "resp_009d3e8845da1a62006ae4a675835c87d2bef97fc5eb34364a",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 3.342,
+      "ledger_source": "incident-schema.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "core_reduced",
+      "at": "2026-10-30T14:15:54.771950+00:00",
+      "payload": {
+        "bytes": 57906,
+        "sha256": "462b997ac2714b130615c3dde9fb3be5b039bb7c71bd76b6ef5b36e4073b82b0"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 4270,
+        "sha256": "9c23632f3fca600c40bbcf19a85e4597337fa2f531930f2f67e3d0cd42ec90b2"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_fcba3ca1794140acb7fb0f05677c9452",
+      "response_id": "resp_023d79424cd92d4f006ae4a69b13fc87d29df1b416893b4a36",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.818,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "core_minimal",
+      "at": "2026-10-30T14:15:57.600112+00:00",
+      "payload": {
+        "bytes": 57727,
+        "sha256": "1b16d54281f4d541fdf296e36efa50ee182a3f792c4d70682089544baa6feab5"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 4091,
+        "sha256": "cfed6cf162fff39c6ed566c1df9d7cd0cd2bbdb017d89d64a27cb4f31110d987"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_84678480e39d4c79996894e932cd70f6",
+      "response_id": "resp_065f38e3b19fe704006ae4a69dc88487d2ae3aeca025439cbf",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.689,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "upstream_claims",
+      "at": "2026-10-30T14:15:59.310388+00:00",
+      "payload": {
+        "bytes": 98962,
+        "sha256": "01b9b78c75667fad8cdab5122bb4a5dfcb9412e08ad4ebe1cf5f812f36ab9e72"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 31260,
+        "sha256": "1a5b45a054ca7bfd4d6922c32e53dd5b6442181e0f724d77e93ca375719ff2e6"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_3c5c986982a540c694176aa8149ffb63",
+      "response_id": "resp_095a26bef7442c9c006ae4a69f7c0887d281c5d1366c6f1ed9",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.701,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "upstream_compact",
+      "at": "2026-10-30T14:16:02.027610+00:00",
+      "payload": {
+        "bytes": 96456,
+        "sha256": "2ecc68b279efe425f28427615c8028cbf58d245faafc3290db16c3288e8a3c30"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 28872,
+        "sha256": "dd1da7e18887803f3e5b92d2f57e932274ee53a8b16905488b1ef31436e4cdcc"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_f2db9d3c02f543e591a7b316bf0e33c9",
+      "response_id": "resp_025f14ef9dc10d9b006ae4a6a23dd887d2b94e272b58e91eb3",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 4.605,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "model_gpt5",
+      "at": "2026-10-30T14:16:06.649648+00:00",
+      "payload": {
+        "bytes": 109665,
+        "sha256": "f0a521e7347a207bdb590b50ebe8093e20a31d6ccf44f74c9e56aa2772ec4f1f"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "error_type": "ReadTimeout",
+      "duration_seconds": 60.126,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "effort_medium",
+      "at": "2026-10-30T14:17:06.798521+00:00",
+      "payload": {
+        "bytes": 109673,
+        "sha256": "848b09c14d90768237a9050805e28fc84869e17b04780f009a053ed9f1a43ab9"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_10ff1477398747faa4cfb3b0030d805b",
+      "response_id": "resp_0e8bddcb01d1b9e1006ae4a6e3099487d2a6dde30635f2f47c",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.48,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "budget_32000",
+      "at": "2026-10-30T14:17:09.300056+00:00",
+      "payload": {
+        "bytes": 109670,
+        "sha256": "c4701290c2733e3cd0f40273e70c962809de7e1bfc4711112a6fa6c8b374692a"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 32000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_736671a759c84e37b300b0da18f61c76",
+      "response_id": "resp_00b984b32fc1b4ae006ae4a6e584c087d2b0aca2503689e35c",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.708,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "no_array_bounds",
+      "at": "2026-10-30T14:17:11.021223+00:00",
+      "payload": {
+        "bytes": 109110,
+        "sha256": "91be3969af620379d7fa4d354561a91f8caa1a80c93280b6d900a1de3d27f8a8"
+      },
+      "schema": {
+        "bytes": 9140,
+        "sha256": "d60f50fccd6379355f75a6ad985f732cba7034572726e4c8fd27fd3a5644a493"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_0558d66e0fd645398aa3ebd5a344a598",
+      "response_id": "resp_000a517c7c3ff73a006ae4a6e73cd087d2b65849d10983a581",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.115,
+      "ledger_source": "incident-factors.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "no_numeric_structure",
+      "at": "2026-10-30T14:20:51.908176+00:00",
+      "payload": {
+        "bytes": 108432,
+        "sha256": "892016f801c133b0687c29faeaed2f1bf3bf127ab0a8bb5d82777b308cd933b5"
+      },
+      "schema": {
+        "bytes": 8462,
+        "sha256": "aec221c32729b3b4b83f7fed6b4387bf33822744e4c3585661a8588f6f8658d5"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_c7d023f9916a4867b8f469b17256b717",
+      "response_id": "resp_0223da009242b684006ae4a7c427f887d2beb0f0ddb91dde53",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.678,
+      "ledger_source": "incident-confirmation.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "instructions_field",
+      "at": "2026-10-30T14:20:54.598752+00:00",
+      "payload": {
+        "bytes": 109657,
+        "sha256": "0f37a3c2ddc1fd42bb13069b88fce8711813db61b3f4077f9a97333aaa7faefd"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_374b93e41def4399bdcd2b1ac30eefa2",
+      "response_id": "resp_0da5f3caeb5fbd77006ae4a7c6ce5087d29c16b7979c02b377",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 1.905,
+      "ledger_source": "incident-confirmation.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "baseline_confirmation",
+      "at": "2026-10-30T14:20:56.522041+00:00",
+      "payload": {
+        "bytes": 109670,
+        "sha256": "33f131b0882e5b0f0c0c579c1c7e1200d7c266dab8d9eb1804473d2d3f5fd4e9"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_5dd3bb744fea4b5daf31a41e1fe2acb7",
+      "response_id": "resp_0b758683e12d0ba8006ae4a7c8b52487d2af69174ba483620e",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.217,
+      "ledger_source": "incident-confirmation.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "equivalent_projection_confirmation",
+      "at": "2026-10-30T14:20:58.889490+00:00",
+      "payload": {
+        "bytes": 104860,
+        "sha256": "becdd67f981fc9aa96731a6c145ed4d43e25146b329b4b09d3175439570444b9"
+      },
+      "schema": {
+        "bytes": 4890,
+        "sha256": "0924d6708159f45780c3761f0460e0d817a6e1ddcbd8442679f39c4c6cea4328"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "PASS",
+      "http_status": 200,
+      "request_id": "req_5320ce93945a4dc3bb7c4e0db6a5c1ab",
+      "response_id": "resp_0887dcb965eab340006ae4a7cb0bf087d288743f38f1139f77",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 22246,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 22144
+        },
+        "output_tokens": 3401,
+        "output_tokens_details": {
+          "reasoning_tokens": 384
+        },
+        "total_tokens": 25647
+      },
+      "output_chars": 9103,
+      "original_schema": "PASS",
+      "schema_errors": [],
+      "server_contract": "PASS",
+      "accepted_claims": 25,
+      "duration_seconds": 33.578,
+      "ledger_source": "incident-confirmation.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "history_5421c99",
+      "at": "2026-10-30T14:30:51.804231+00:00",
+      "payload": {
+        "bytes": 104971,
+        "sha256": "171732e7a199b05dc90f616075b93a74bf9042afc8f5516db53da79b39484eaf"
+      },
+      "schema": {
+        "bytes": 5001,
+        "sha256": "4d905743cb77a38df1250fb3c1d863280fb558726d4c52a437416581e3d04113"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_bccda7645ee446849739eb83fc9d3ebb",
+      "response_id": "resp_0f47120de41da313006ae4aa1c10bc87d2aac6c3e59f4bb9a5",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 4.121,
+      "ledger_source": "incident-historical.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "history_8e11a43",
+      "at": "2026-10-30T14:30:56.289112+00:00",
+      "payload": {
+        "bytes": 107550,
+        "sha256": "c05cf9394d7245ad9d78bdb48215c18d444ab011ef9bbcf375821e5d414cc6d8"
+      },
+      "schema": {
+        "bytes": 7580,
+        "sha256": "39f8d16c7e723179e460ee1ead17df51ed93a6533b512fcf42b38f7e5a1d1a49"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_5272fe8a41cb40dd9c840f7822584349",
+      "response_id": "resp_078c9b7cb40913d9006ae4aa207b9087d2a280ed4f91856f99",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 4.215,
+      "ledger_source": "incident-historical.jsonl"
+    },
+    {
+      "event": "post_finished",
+      "source": "incident_reconstruction_not_original_wire_capture",
+      "case": "history_7f5b7cc",
+      "at": "2026-10-30T14:31:00.912075+00:00",
+      "payload": {
+        "bytes": 109670,
+        "sha256": "33f131b0882e5b0f0c0c579c1c7e1200d7c266dab8d9eb1804473d2d3f5fd4e9"
+      },
+      "schema": {
+        "bytes": 9700,
+        "sha256": "9c7f3d48d89d76394ae717c77bb18443a83e144a8639dbc711611f1937a37477"
+      },
+      "instructions": {
+        "bytes": 53839,
+        "sha256": "7381e06b9d0bfef97591eb2697508668f9aa8558ffe2304d3fa6ab50ec9593f5"
+      },
+      "input": {
+        "bytes": 41584,
+        "sha256": "49c06b67175fc1f006bf81329ba058cc2d53e8b8953948b878daccc4725ab963"
+      },
+      "model": "gpt-5-mini",
+      "reasoning": {
+        "effort": "low"
+      },
+      "max_output_tokens": 16000,
+      "billing_outcome": "unknown",
+      "quality_gates": "NOT_RUN",
+      "http_status": 200,
+      "request_id": "req_c7b9315342c444c6b7dee005821bb342",
+      "response_id": "resp_0174428c723b41b0006ae4aa251ae487d2aefc779bf0c2f63c",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 0,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 0
+      },
+      "output_chars": 0,
+      "duration_seconds": 2.303,
+      "ledger_source": "incident-historical.jsonl"
+    }
+  ]
+}

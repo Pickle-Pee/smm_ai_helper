@@ -15,7 +15,8 @@ from .service import MarketingCopilotService
 
 def build_marketing_copilot_service(*, intent_model, module_model=None, url_analyzer=None,
                                     executor_registry=None, graph_service=None, tools=None, evaluator=None,
-                                    registry_version="1.1.0", market_analyzer=None):
+                                    registry_version="1.1.0", market_analyzer=None,
+                                    experiments_enabled=True):
     metadata = ModuleRegistry.load(registry_version)
     executors = executor_registry if executor_registry is not None else build_module_executor_registry(
         model_call=module_model, analyzer=url_analyzer, registry_version=registry_version,
@@ -25,7 +26,7 @@ def build_marketing_copilot_service(*, intent_model, module_model=None, url_anal
         raise ValueError("Fast and durable paths must share the injected executor registry")
     return MarketingCopilotService(
         interpreter=MarketingIntentInterpreter(intent_model), resolver=ContextResolver(),
-        policy=ExecutionPolicy(), adapter=OrchestratorAdapter(), planner=MarketingOrchestratorPlanner(),
+        policy=ExecutionPolicy(), adapter=OrchestratorAdapter(), planner=MarketingOrchestratorPlanner(experiments_enabled=experiments_enabled),
         compiler=PlanCompiler(metadata, executors), metadata=metadata,
         dispatcher=ModuleExecutorDispatcher(executors), evaluator=evaluator or QualityGateEvaluator(),
         graph_service=graph_service, tools=tools or DeterministicToolRegistry(),

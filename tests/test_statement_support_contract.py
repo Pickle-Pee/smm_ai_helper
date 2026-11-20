@@ -72,8 +72,13 @@ def test_every_emitted_statement_schema_and_parser_agree(emitted_contract, local
         # Strict-compatible anyOf objects preserve all inherited constraints.
         supports = [field for field, available in (("evidence_ids", available_local),
                                                   ("parent_claim_ids", available_parent)) if available]
-        assert len(definition["anyOf"]) == len(supports)
-        for branch, support in zip(definition["anyOf"], supports):
+        if "anyOf" not in definition:
+            # CMO's required-parent floor implies its removed support OR.
+            # The acceptance assertions above still exercise every combination.
+            assert parent_required and name in {"MainGrowthConstraintStatement", "OtherStrategyStatement"}
+        else:
+            assert len(definition["anyOf"]) == len(supports)
+        for branch, support in zip(definition.get("anyOf", []), supports):
             assert branch["additionalProperties"] is False
             assert set(branch["required"]) == set(properties)
             assert branch["properties"][support]["minItems"] == 1
@@ -120,13 +125,12 @@ def test_parent_only_intelligence_remains_valid_but_missing_lineage_fails(module
     assert all(c.parent_claim_ids and not c.evidence_ids for c in result.normalized_result.claims)
     def omit_parent(raw, data):
         raw["outputs"][0].update(parent_claim_ids=[], evidence_ids=[data["local_evidence"][0]["evidence_id"]])
-    # EXPERIMENTS also has local context in this variant; its strategic parent
-    # rule must reject evidence-only even though the generic floor accepts it.
+    # EXPERIMENTS also has local context in this variant; its explicit parent
+    # floor must reject evidence-only before semantic strategic-parent checks.
     if module is ModuleId.EXPERIMENTS:
         from dataclasses import replace
         from tests.test_module_executors import fact
         req = replace(req, context_packet=replace(req.context_packet, known_facts=(fact("business_goal"),)))
     with pytest.raises(ExecutorOutputError) as caught:
         run(req, omit_parent)
-    assert caught.value.stage is (OutputFailureStage.SCHEMA_INVALID
-        if module is ModuleId.VIRTUAL_CMO else OutputFailureStage.RESULT_CONTRACT_INVALID)
+    assert caught.value.stage is OutputFailureStage.SCHEMA_INVALID

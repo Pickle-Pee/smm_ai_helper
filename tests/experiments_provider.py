@@ -61,3 +61,17 @@ class ExperimentsProvider:
         if self.mutate:
             self.mutate(payload)
         return httpx.Response(200, json={"status": "completed", "output_text": json.dumps(payload, ensure_ascii=False)})
+
+
+def with_nonstrategic_parent(invocation):
+    """Keep accepted hypotheses and add a known recommendation citation."""
+    from dataclasses import replace
+    from app.marketing_orchestrator.quality_gates.contracts import ClaimType
+    from app.orchestration_runtime.serialization import result_to_json
+    upstream, *rest = invocation.upstream_results
+    normalized = upstream.result.normalized_result
+    extra = replace(normalized.claims[0], claim_id="clm_z_additional_recommendation",
+                    claim_type=ClaimType.RECOMMENDATION)
+    result = replace(upstream.result, payload=result_to_json(upstream.result)["payload"],
+                     normalized_result=replace(normalized, claims=(*normalized.claims, extra)))
+    return replace(invocation, upstream_results=(replace(upstream, result=result), *rest))

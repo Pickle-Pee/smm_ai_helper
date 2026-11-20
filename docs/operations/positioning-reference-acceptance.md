@@ -1,0 +1,11 @@
+# POSITIONING reference contract follow-up
+
+This change depends on [PR #139](https://github.com/Pickle-Pee/smm_ai_helper/pull/139).
+
+During real Telegram acceptance, synthetic run `0a05fae09a0e21366262c252c902516edc1494d01e02dc05cb001b497d8b49b1` received a completed POSITIONING response (`req_2a57e2f97d104c8b8dbece451a5050a1`, 39.163 seconds), then correctly rejected it with `support_identity_invalid`. In BaseExecutor this stage identifies repeated evidence_ids or parent_claim_ids in a statement. The raw response was not retained, so the exact field/index is not known. Governance stopped after the completed provider call; no repair or automatic model retry occurred.
+
+The module instruction required product-truth evidence and material citations but did not explicitly state per-array identity uniqueness. Add that requirement, including the specific case of repeating a product-truth citation already present in evidence_ids. The provider schema, parser, strict local uniqueness checks, support allowlists, Quality Gates and persistence remain unchanged. This is a model-instruction improvement, not a deterministic guarantee that every future sample will comply.
+
+Regression tests verify that both evidence and parent duplicates are still rejected after one model call and that the real composed instruction carries the uniqueness requirement. Offline instruction measurements change from 53151 to 53367 UTF-8 bytes. Live acceptance and final CI results are recorded separately; deterministic tests alone do not establish stochastic reliability.
+
+Earlier acceptance also found two operational issues. Original POSITIONING grammar returned the same empty incomplete envelope before CMO; its existing equivalent single-support projection passed a separate live replay with original local validation/gates. The owner explicitly approved enabling POSITIONING_SCHEMA_PROJECTION_ENABLED and RESPONSES_WORKFLOW_GOVERNANCE_ENABLED for new runs. A later call hit HTTP timeout 60 seconds; governance retained an unknown receipt and did not retry. A separate timeout120 replay passed; the owner explicitly approved HTTP_TIMEOUT=120 and acceptance restarts, preserving graph timeout300 and lease330. These are protected production compose overrides, not changes to repository defaults or stored old runs.
