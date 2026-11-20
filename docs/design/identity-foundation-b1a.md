@@ -1,6 +1,6 @@
 # B1a — фундамент единой идентичности (Telegram + будущий Web)
 
-Статус: **Draft, merge заблокирован до интеграции стека PR #174 в `master` (D17 / OQ-5)**.
+Статус: **интегрирован в master** через PR #220, merge commit `f3462d86694b206fccece026f46fcf4edd9cbf11`. Production rollout 0015 проходит отдельный release gate.
 Задача: [#202](https://github.com/Pickle-Pee/smm_ai_helper/issues/202), родитель [#160](https://github.com/Pickle-Pee/smm_ai_helper/issues/160), эпик [#158](https://github.com/Pickle-Pee/smm_ai_helper/issues/158).
 Контракт: [Brenvio Web API v2 C0](https://github.com/Pickle-Pee/smm_ai_helper_web/blob/main/docs/api/README.md) §§5.3, 6; [Decision Register](https://github.com/Pickle-Pee/smm_ai_helper_web/blob/main/docs/api/decision-register.md) D2, D9, D17, OQ-5, OQ-7, OQ-12.
 
@@ -9,21 +9,9 @@ B1a — изменение только слоя данных. Web-логина,
 
 ## 1. Точка интеграции и Alembic
 
-| Факт (проверено 2026-11-14) | Значение |
-|---|---|
-| `origin/master` | `76b6c1b`, Alembic head `20261026_0013` |
-| `origin/sale-ready` | `b231567`, head `20260917_0009`; полностью содержится в `master` (0 своих коммитов, отстаёт на 133). Указание в `AGENTS.md` устарело; фактическая integration-ветка — `master` (D9) |
-| PR #174 | открыт, Draft, head `100bff1`, стек из 35 PR (#139 → #174) поверх `master`; единственная новая миграция стека — `20261103_0014` (revision `20261103_0014`, down `20261026_0013`) |
-| Production | по журналу приёмки работает на `20261103_0014` (релиз e99); приёмка #174 не завершена |
-| Другие открытые PR с миграциями | нет новых ревизий (только `env.py` / уже существующая `0013`) |
+PR #220 основан непосредственно на `master` после интеграции AI Core 1.0. Base и merge-base — `dfb405ca52421e631e530a53e7b98244bbfc0304`, head — `0438df1ff35005f1f8c5d72f807df27182130e9f`. Историческая зависимость D17/OQ-5 выполнена. Единственная новая голова — `20261114_0015`, непосредственно после `20261103_0014`.
 
-Production уже стоит на `20261103_0014`. Поэтому любая ревизия B1a с `down_revision = 20261026_0013` создала бы вторую голову относительно production.
-Единственная корректная цепочка: `0013 → 0014 (#174) → 0015 (B1a)`.
-
-- Новая ревизия: `20261114_0015` (`migrations/versions/20261114_0015_external_identities.py`), `down_revision = "20261103_0014"`.
-- Ветка `codex/saas-b1-identity-foundation` создана от `100bff1` (head PR #174) без изменения ветки #174. Draft PR стекуется на неё.
-- **Блокировка:** до merge стека #174 в `master` (или до объявления владельцем другой integration-головы, OQ-5) B1a не мержится и не деплоится.
-  Если #174 будет переписан (rebase/squash), B1a нужно перебазировать. Ревизия `20261103_0014` уже применена в production, поэтому её id меняться не должен.
+В CI на этом head прошли 7179 Python-тестов и 733 container-smoke. PostgreSQL-тесты проверили сохранение владельцев, отказ и полный rollback на неканоническом legacy ID, конкурентный upsert и отказ downgrade при web-only пользователе. Для web-only владельца тест завершает граф с двумя артефактами и проверяет пустую очередь Telegram-уведомлений. [Запуск CI](https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/44796933048)
 
 ## 2. Старая модель
 
@@ -38,7 +26,7 @@ Telegram update ─► bot ─► HTTP (Bearer BOT_BACKEND_TOKEN + X-Telegram-Us
 - `users.telegram_id` — `BIGINT NOT NULL`, `users_telegram_id_key` UNIQUE + `ix_users_telegram_id` UNIQUE.
 - Пользователь создаётся неявно при первом запросе актора: `INSERT … ON CONFLICT (telegram_id) DO NOTHING`, либо ORM в `UserService.get_or_create`.
 
-### Матрица совместимости (по коду `100bff1`)
+### Матрица совместимости (исходная инвентаризация на `100bff1`)
 
 | Место | Что предполагает | После B1a |
 |---|---|---|
@@ -97,7 +85,7 @@ Telegram update ─► bot ─► HTTP (Bearer BOT_BACKEND_TOKEN + X-Telegram-Us
   - для `telegram`: `telegram_id > 0` и `subject = telegram_id::text` (без ведущих нулей и знака);
   - для остальных провайдеров: `telegram_id IS NULL`, а subject непустой и без пробелов по краям.
 
-Почему identity создаётся trigger'ом, а не кодом сервисов: Telegram-пользователи создаются в 7 местах ядра (Copilot, workflow, chat, project context). Правка всех этих мест — рефакторинг AI Core и конфликты с активным стеком #174. `AFTER INSERT` trigger атомарен с созданием пользователя и покрывает все пути, включая будущие. Код ядра при этом не меняется.
+Почему identity создаётся trigger'ом, а не кодом сервисов: Telegram-пользователи создаются в 7 местах ядра (Copilot, workflow, chat, project context). `AFTER INSERT` trigger атомарен с созданием пользователя и покрывает все пути, включая будущие. Код ядра при этом не меняется.
 
 Почему без ORM relationship: у таблицы два FK на `users`, а навигация из ядра не нужна. `User` mapper не меняется, кроме nullability колонки.
 
@@ -115,7 +103,7 @@ Telegram update ─► bot ─► HTTP (Bearer BOT_BACKEND_TOKEN + X-Telegram-Us
 `upgrade()` выполняется одной транзакцией (Alembic `begin_transaction`):
 
 1. Preflight: если есть `users.telegram_id <= 0`, миграция прерывается с `RuntimeError` и ничего не меняет.
-2. `ALTER users.telegram_id DROP NOT NULL`, затем `ADD uq_users_id_telegram_id`. `ALTER` берёт `ACCESS EXCLUSIVE` на `users` до commit, поэтому параллельная вставка пользователя между backfill и trigger невозможна. Таблица маленькая, блокировка короткая. Rollout всё равно делается по стандартной процедуре: пауза, drain, additive migration, resume.
+2. `ALTER users.telegram_id DROP NOT NULL`, затем `ADD uq_users_id_telegram_id`. `ALTER` берёт `ACCESS EXCLUSIVE` на `users` до commit, поэтому параллельная вставка пользователя между backfill и trigger невозможна. Длительность зависит от объёма данных и конкурирующих транзакций. До rollout сверить production revision, число неканонических ID и длительность на репрезентативной копии. Rollout всё равно делается по стандартной процедуре: пауза, drain, additive migration, resume.
 3. `CREATE TABLE external_identities` с ограничениями и индексом; создание двух trigger-функций и trigger'ов.
 4. Backfill: `INSERT … SELECT id, 'telegram', telegram_id::text, telegram_id, created_at AT TIME ZONE 'UTC', now() FROM users WHERE telegram_id IS NOT NULL ON CONFLICT (provider, subject) DO NOTHING`.
    `verified_at` равен `users.created_at` (UTC): это первый момент, когда бот увидел аутентифицированного Telegram-актора.
@@ -167,8 +155,7 @@ WHERE u.telegram_id IS NOT NULL AND NOT EXISTS (
 
 ## 9. Нерешённые вопросы (решения не принимаются в B1a)
 
-- **D17 / OQ-5** — порядок миграций и integration-голова. B1a построен на фактической production-голове `20261103_0014`, но мержится только после стека #174 или объявленной владельцем головы.
 - **OQ-12** — источник `display_name` (новая колонка либо `first_name`/`username`). B1a колонку не добавляет и `users` кроме nullability не меняет.
-- **OQ-7** — сроки жизни сессий (idle/absolute) для B2. В B1a сессий нет.
+- Для internal beta сроки B2 определены: idle 7 дней, absolute 30 дней.
 - Политика автоматической привязки и merge аккаунтов (C0 §5.3). В B1a технически запрещена; решение за владельцем продукта.
 - Полное разрешение `email` и `oidc:*` в CHECK — соответствует C0 §5.3. Если владелец предпочтёт разрешать провайдеров только вместе с их B2e/B6-миграциями, CHECK сужается до `telegram` без изменения данных.

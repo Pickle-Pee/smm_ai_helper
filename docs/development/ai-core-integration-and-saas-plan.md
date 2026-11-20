@@ -59,3 +59,11 @@
 | B3 | B2 | 0017 |
 | B4 | B3; `BrandProfile` остаётся durable-контекстом | 0018 |
 | B5/B6 | B4; переиспользует `/copilot/*` DTO и GraphRunReader | — / по необходимости |
+
+## 21.11.2026 — интеграция B1a в master
+
+[PR #220](https://github.com/Pickle-Pee/smm_ai_helper/pull/220) влит merge-коммитом `f3462d86694b206fccece026f46fcf4edd9cbf11`. Первый родитель — `dfb405ca52421e631e530a53e7b98244bbfc0304`, второй — проверенный head `0438df1ff35005f1f8c5d72f807df27182130e9f`. До merge GitHub показывал clean/mergeable, обе проверки PR успешно завершены. Дерево проверенного head, предварительного merge и фактического merge одинаково: `b27d221ddad5a4c2f9268a3d21b9e1594b70c3c5`.
+
+Push CI на merge-коммите успешно завершён. На disposable PostgreSQL прошли миграции, сверка схемы и полный набор из 7179 Python-тестов. В container-smoke прошли 733 теста. [Запуск master CI](https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/44830310407)
+
+Решение владельца распространяется на интеграцию и начало B2.1. Production migration 0015 проходит отдельный release gate. [Спецификация B2.0](https://github.com/Pickle-Pee/smm_ai_helper_web/pull/17) · [Реализация B2.1](https://github.com/Pickle-Pee/smm_ai_helper/pull/221)
