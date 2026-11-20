@@ -19,9 +19,13 @@ from tests.postgresql_support import mvp_database
 PREVIOUS, B1A = "20261103_0014", "20261114_0015"
 
 
-def test_b1a_is_the_single_head_directly_after_production_0014():
+HEAD = "20261121_0016"
+
+
+def test_auth_chain_has_one_head_after_production_0014():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert script.get_heads() == [B1A]
+    assert script.get_heads() == [HEAD]
+    assert script.get_revision(HEAD).down_revision == B1A
     assert script.get_revision(B1A).down_revision == PREVIOUS
 
 
@@ -88,7 +92,7 @@ def test_upgrade_backfills_legacy_users_without_touching_ownership(migration):
 
         command.upgrade(config, "head")
         command.check(config)
-        assert version(engine) == B1A
+        assert version(engine) == HEAD
         assert ownership(engine, user_ids, run_ids) == before
         expected = [(user_id, "telegram", str(actor), actor, True) for user_id, actor in zip(user_ids, actors)]
         assert identities(engine, user_ids) == expected
@@ -123,7 +127,7 @@ def test_downgrade_refuses_to_lose_web_only_users_and_rolls_back(migration):
     try:
         with pytest.raises(RuntimeError, match="downgrade refused"):
             command.downgrade(config, PREVIOUS)
-        assert version(engine) == B1A
+        assert version(engine) == HEAD
         with engine.connect() as db:
             assert inspect(db).has_table("external_identities")
             assert db.scalar(text("SELECT count(*) FROM users WHERE id = :id"), {"id": web}) == 1
