@@ -102,11 +102,15 @@ async def exchange(db: AsyncSession, secret: str, attempt_cookie: str, previous_
     token, _ = await _lock_live_token(db, select(LoginToken).join(BrowserAttempt).where(
         LoginToken.token_hash == _hash(secret), BrowserAttempt.cookie_hash == _hash(attempt_cookie),
         BrowserAttempt.confirmed_at.is_not(None)))
+    previous = None
     if previous_cookie is not None:
-        await revoke(db, previous_cookie)
+        previous = await db.scalar(select(WebSession).where(WebSession.token_hash == _hash(previous_cookie))
+                                   .with_for_update().execution_options(populate_existing=True))
     now = await _now(db)
     if token.expires_at <= now:
         raise InvalidLogin()
+    if previous is not None and previous.revoked_at is None:
+        previous.revoked_at = now
     token.consumed_at = now
     cookie = secrets.token_urlsafe(32)
     db.add(WebSession(user_id=token.user_id, token_hash=_hash(cookie), created_at=now,

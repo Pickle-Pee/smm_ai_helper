@@ -128,10 +128,37 @@ def test_expiration_idle_cap_and_cleanup(mvp_database, actors):
             await db.execute(update(WebSession).where(WebSession.id == session.id)
                              .values(idle_expires_at=func.clock_timestamp()))
         assert await call(mvp_database, auth.authenticate, valid.secret) is None
+        # An absolute deadline remains terminal even when the request carries the correct cookie.
+        async with mvp_database.begin() as db:
+            now = await db.scalar(select(func.clock_timestamp()))
+            await db.execute(update(WebSession).where(WebSession.id == session.id).values(
+                created_at=now-auth.ABSOLUTE_TTL, idle_expires_at=now, absolute_expires_at=now))
+        assert await call(mvp_database, auth.authenticate, valid.secret) is None
         await call(mvp_database, auth.cleanup)
         async with mvp_database() as db:
             assert await db.get(WebSession, session.id) is None
             assert await db.get(BrowserAttempt, token_id) is None
             assert await db.get(LoginToken, token_id) is None
+
+    asyncio.run(run())
+
+
+def test_expiry_while_waiting_for_previous_session_preserves_old_cookie(mvp_database, actors, monkeypatch):
+    async def run():
+        old_link, old_attempt = await prepared(mvp_database, actors[0])
+        previous = await call(mvp_database, auth.exchange, old_link.secret, old_attempt.cookie)
+        grant, attempt = await prepared(mvp_database, actors[1])
+        # PostgreSQL time sampled before and after acquiring the previous session lock.
+        times = iter([grant.expires_at - timedelta(seconds=1), grant.expires_at])
+
+        async def sample_time(db):
+            return next(times)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(auth, "_now", sample_time)
+            async with mvp_database.begin() as db:
+                with pytest.raises(auth.InvalidLogin):
+                    await auth.exchange(db, grant.secret, attempt.cookie, previous.secret)
+        assert await call(mvp_database, auth.authenticate, previous.secret)
 
     asyncio.run(run())

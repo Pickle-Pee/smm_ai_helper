@@ -48,6 +48,8 @@ def upgrade():
 
 
 def downgrade():
+    # Prevent issuance between the empty-table check and DROP TABLE.
+    op.execute("LOCK TABLE auth_tokens, browser_attempts, web_sessions IN ACCESS EXCLUSIVE MODE")
     if op.get_bind().scalar(sa.text(
         "SELECT EXISTS (SELECT FROM web_sessions) OR EXISTS (SELECT FROM auth_tokens)"
     )):
