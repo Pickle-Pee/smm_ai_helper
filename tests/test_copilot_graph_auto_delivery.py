@@ -351,3 +351,39 @@ def test_telegram_request_result_arrives_without_pressing_status(mvp_database, m
         finally:
             await remove_actor(mvp_database, actor)
     asyncio.run(check())
+
+
+def test_web_only_owner_gets_no_telegram_notice(mvp_database):
+    """B1a: a web-only owner (users.telegram_id IS NULL) has no Telegram chat to notify.
+
+    The run still finishes normally; no WorkflowDelivery row is created, so the poller
+    can never send it to some other chat. A web delivery channel arrives with B5/B6.
+    """
+    from app.orchestration_runtime.service import GraphExecutionService
+    from tests.graph_fakes import FakeModel, compiled, registry
+
+    async def exercise():
+        executors = registry(FakeModel(use_parents=True))
+        service = GraphExecutionService(mvp_database, executors=executors, clock=Clock())
+        rid = uuid.uuid4().hex
+        async with mvp_database() as session, session.begin():
+            user = User()
+            session.add(user)
+            await session.flush()
+            owner = user.id
+        assert user.telegram_id is None
+        await service.start_compiled_run(owner_id=owner, run_id=rid, plan=compiled(executors))
+        try:
+            for _ in range(6):
+                run, jobs, _ = await state(mvp_database, rid)
+                if run.status in TERMINAL:
+                    break
+                for job in jobs:
+                    if job.status.value == "pending":
+                        assert await ModuleGraphWorker(service).once(job.job_id)
+            run, _, artifacts = await state(mvp_database, rid)
+            assert run.status == "completed" and len(artifacts) == 2
+            assert await notices(mvp_database, rid) == []
+        finally:
+            await cleanup(mvp_database, rid, owner)
+    asyncio.run(exercise())
