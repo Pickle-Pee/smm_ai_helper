@@ -741,7 +741,7 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(8), server_default="active")
     color: Mapped[str | None] = mapped_column(String(8))
     version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
-    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
     request_key: Mapped[uuid.UUID | None]
     request_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -767,7 +767,7 @@ class ProjectBrand(Base):
     channels: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     extra_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     source_profile_id: Mapped[int | None]
-    imported_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    imported_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
     imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
