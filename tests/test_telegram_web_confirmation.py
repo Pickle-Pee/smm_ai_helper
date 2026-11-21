@@ -1,18 +1,17 @@
 import asyncio
 import os
-from datetime import timedelta
 from unittest.mock import AsyncMock
 from urllib.parse import urlsplit
 
 import pytest
 from aiogram import Bot
-from sqlalchemy import func, select, update as sql_update
+from sqlalchemy import delete, select
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
 from app.db import get_session
 from app.main import app
-from app.models import LoginToken, User
+from app.models import BrandProfile, User
 from bot import backend
 from bot.handlers.web_login import LOGIN
 from bot.main import create_dispatcher
@@ -20,7 +19,7 @@ from bot.project_navigation import main_keyboard
 from tests.postgresql_support import mvp_database
 from tests.test_telegram_navigation import close_dispatcher, update
 from tests.test_web_auth_postgresql import actors
-from tests.test_web_session_http import ORIGIN, client, configured
+from tests.test_web_session_http import ORIGIN, client, configured, validate
 
 
 def test_dispatch_private_sender_only(configured, monkeypatch):
@@ -52,7 +51,32 @@ def test_dispatch_private_sender_only(configured, monkeypatch):
     asyncio.run(run())
 
 
-def test_internal_confirmation_flow(mvp_database, actors, configured, monkeypatch, caplog):
+@pytest.fixture(params=[False, True], ids=["empty-brand", "telegram-brand"])
+def initial_brand(request, mvp_database, actors):
+    if not request.param:
+        yield None
+        return
+
+    async def seed():
+        async with mvp_database.begin() as db:
+            uid = await db.scalar(select(User.id).where(User.telegram_id == actors[0]))
+            profile = BrandProfile(user_id=uid, brand_name="Original Telegram brand")
+            db.add(profile)
+            await db.flush()
+            return profile.id
+
+    async def cleanup(profile_id):
+        async with mvp_database.begin() as db:
+            await db.execute(delete(BrandProfile).where(BrandProfile.id == profile_id))
+
+    profile_id = asyncio.run(seed())
+    try:
+        yield "Original Telegram brand"
+    finally:
+        asyncio.run(cleanup(profile_id))
+
+
+def test_internal_confirmation_flow(mvp_database, actors, configured, monkeypatch, caplog, initial_brand):
     redis_url = os.environ.get("REDIS_TEST_URL")
     if not redis_url:
         pytest.skip("disposable Redis required")
@@ -85,11 +109,19 @@ def test_internal_confirmation_flow(mvp_database, actors, configured, monkeypatc
             assert sorted(r.status_code for r in replies) == [204, 401]
             exchange = "/v2/auth/telegram/exchange"
             assert (await other.post(exchange, json=token)).status_code == 401
-            assert (await browser.post(exchange, json=token)).status_code == 503  # B3/B4 gate
-            async with mvp_database.begin() as db:
-                await db.execute(sql_update(LoginToken).where(LoginToken.user_id.in_(
-                    select(User.id).where(User.telegram_id == actors[0])
-                )).values(created_at=func.now()-timedelta(minutes=11), expires_at=func.now()-timedelta(minutes=1)))
+            session = await browser.post(exchange, json=token)
+            assert session.status_code == 200
+            assert session.json()["me"]["memberships"][0]["role"] == "owner"
+            validate("AuthSession", session.json())
+            me = (await browser.get("/v2/me")).json()
+            validate("Me", me)
+            assert me["user"] == session.json()["me"]["user"]
+            org_id = me["memberships"][0]["organization"]["id"]
+            listing = (await browser.get(f"/v2/orgs/{org_id}/projects")).json()
+            validate("ProjectList", listing)
+            [default] = listing["items"]
+            assert default["brand"]["brand_name"] == initial_brand
+            assert bool(default["brand"]["imported_from"]) == bool(initial_brand)
             assert (await browser.post(exchange, json=token)).status_code == 401
             for _ in range(9):
                 assert (await bot.post(confirm, headers=stranger, json=code)).status_code == 401

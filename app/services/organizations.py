@@ -19,7 +19,7 @@ class InsufficientRole(Exception):
     pass
 
 
-def _active(user_id: int):
+def active_query(user_id: int):
     return select(Organization.id, Organization.name, Organization.kind, Organization.created_at,
                   Membership.role, Membership.joined_at, Membership.version).join(Membership).where(
         Membership.user_id == user_id, Membership.revoked_at.is_(None), Organization.deleted_at.is_(None),
@@ -27,7 +27,7 @@ def _active(user_id: int):
 
 
 async def active_memberships(db: AsyncSession, user_id: int) -> list[dto.OrganizationMembership]:
-    rows = await db.execute(_active(user_id).order_by(Organization.id))
+    rows = await db.execute(active_query(user_id).order_by(Organization.id))
     return [dto.OrganizationMembership(
         organization=dto.Organization(id=r.id, kind=r.kind, name=r.name, created_at=r.created_at),
         role=r.role, joined_at=r.joined_at) for r in rows]
@@ -35,7 +35,7 @@ async def active_memberships(db: AsyncSession, user_id: int) -> list[dto.Organiz
 
 async def require_access(db: AsyncSession, user_id: int, org_id: uuid.UUID, minimum: str) -> int:
     """Return current membership version for rechecks at the delegated-read boundary."""
-    row = (await db.execute(_active(user_id).where(Organization.id == org_id))).one_or_none()
+    row = (await db.execute(active_query(user_id).where(Organization.id == org_id))).one_or_none()
     if row is None:
         raise TenantNotFound()
     if ROLE_LEVEL[row.role] < ROLE_LEVEL[minimum]:
@@ -52,7 +52,7 @@ async def ensure_personal(db: AsyncSession, user_id: int) -> uuid.UUID:
         db.add(Membership(org_id=new_id, user_id=user_id, role="owner"))
         await db.flush()
         return new_id
-    row = (await db.execute(_active(user_id).where(Organization.personal_user_id == user_id))).one_or_none()
+    row = (await db.execute(active_query(user_id).where(Organization.personal_user_id == user_id))).one_or_none()
     if row is None:
         raise TenantNotFound()
     return row.id

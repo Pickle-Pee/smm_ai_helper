@@ -2,7 +2,7 @@
 
 Revision 0017 expands 0016 with organizations and versioned memberships. The caller owns each transaction. A unique personal_user_id references users.id. Parallel first logins contend on that key. The winner creates the owner membership before commit. Returning users resolve their active owner membership. Revocation, downgrade of the owner's role and soft deletion fail closed. Team rows reserve the approved data model; invitations and management belong to B10.
 
-The B2 membership reader returns actual active rows for /v2/me. Exchange remains closed until B4 completes onboarding. B3 provides ensure_personal(db, user_id) for that transaction. require_access checks active membership and organization visibility on each call. Personal organizations are visible only to the matching owner. For future tenant routes map TenantNotFound to 404 and InsufficientRole to 403. Role or revocation changes increment version in PostgreSQL. B5 must repeat the membership/version check before releasing delegated results.
+The B2 membership reader returns actual active rows for /v2/me. B4 calls ensure_personal(db, user_id) inside the exchange transaction. It locks current owner access, provisions the default project, and initializes its independent brand. A committed brand row records completed initialization even without a Telegram profile. Subsequent exchanges preserve web edits. require_access checks active membership and organization visibility on each call. Personal organizations are visible only to the matching owner. For future tenant routes map TenantNotFound to 404 and InsufficientRole to 403. Role or revocation changes increment version in PostgreSQL. B5 must repeat the membership/version check before releasing delegated results.
 
 ## B4 implementation order
 
