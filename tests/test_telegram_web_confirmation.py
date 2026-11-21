@@ -1,18 +1,15 @@
 import asyncio
 import os
-from datetime import timedelta
 from unittest.mock import AsyncMock
 from urllib.parse import urlsplit
 
 import pytest
 from aiogram import Bot
-from sqlalchemy import func, select, update as sql_update
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
 from app.db import get_session
 from app.main import app
-from app.models import LoginToken, User
 from bot import backend
 from bot.handlers.web_login import LOGIN
 from bot.main import create_dispatcher
@@ -85,11 +82,10 @@ def test_internal_confirmation_flow(mvp_database, actors, configured, monkeypatc
             assert sorted(r.status_code for r in replies) == [204, 401]
             exchange = "/v2/auth/telegram/exchange"
             assert (await other.post(exchange, json=token)).status_code == 401
-            assert (await browser.post(exchange, json=token)).status_code == 503  # B3/B4 gate
-            async with mvp_database.begin() as db:
-                await db.execute(sql_update(LoginToken).where(LoginToken.user_id.in_(
-                    select(User.id).where(User.telegram_id == actors[0])
-                )).values(created_at=func.now()-timedelta(minutes=11), expires_at=func.now()-timedelta(minutes=1)))
+            session = await browser.post(exchange, json=token)
+            assert session.status_code == 200
+            assert session.json()["me"]["memberships"][0]["role"] == "owner"
+            assert (await browser.get("/v2/me")).json()["user"] == session.json()["me"]["user"]
             assert (await browser.post(exchange, json=token)).status_code == 401
             for _ in range(9):
                 assert (await bot.post(confirm, headers=stranger, json=code)).status_code == 401
