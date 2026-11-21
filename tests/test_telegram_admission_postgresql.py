@@ -93,3 +93,39 @@ def test_all_direct_generation_routes_refuse_an_incomplete_profile(mvp_database,
                 await db.execute(delete(TaskSessionRecord).where(TaskSessionRecord.session_id == session_id))
 
     asyncio.run(run())
+
+def test_valid_generation_reaches_fake_only_for_ready_or_out_of_cohort_users(mvp_database, actors, monkeypatch):
+    owner, outside = actors
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "onboarding-test-bot")
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", True)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset({owner}))
+    generate = AsyncMock(return_value={"mode": "fake", "preset_id": "offline", "image_ids": ["offline"]})
+    monkeypatch.setattr(image_orchestrator, "generate", generate)
+
+    async def database():
+        async with mvp_database() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_session, database)
+
+    async def run():
+        async with client() as bot:
+            async def request(actor):
+                return await bot.post("/images/generate", headers=actor_headers(actor), json={"message": "Sample"})
+
+            assert (await request(owner)).status_code == 409
+            generate.assert_not_awaited()
+            async with mvp_database.begin() as db:
+                uid = await db.scalar(select(User.id).where(User.telegram_id == owner))
+                db.add(BrandProfile(user_id=uid, product_description="Coffee", audience="Neighbors",
+                                    goals=["Visitors"]))
+            try:
+                # No preferred-name row is needed for server admission.
+                assert (await request(owner)).status_code == 200
+                assert (await request(outside)).status_code == 200
+                assert generate.await_count == 2
+            finally:
+                async with mvp_database.begin() as db:
+                    await db.execute(delete(BrandProfile).where(BrandProfile.user_id == uid))
+
+    asyncio.run(run())
