@@ -344,11 +344,6 @@ ONBOARDING_QUESTIONS = {
 }
 
 
-def onboarding_enabled(actor: int) -> bool:
-    cohort = settings.TELEGRAM_ONBOARDING_COHORT
-    return settings.TELEGRAM_ONBOARDING_ENABLED and (not cohort or actor in cohort)
-
-
 async def onboarding_step(actor: int) -> str:
     data = await backend.request("GET", "/workflows/onboarding", actor)
     step = data.get("step")
@@ -362,7 +357,7 @@ async def ask_onboarding(message, step: str):
 
 
 async def resume_onboarding(message, actor, *, welcome=False) -> bool:
-    if not onboarding_enabled(actor):
+    if not settings.telegram_onboarding_enabled_for(actor):
         return False
     try:
         step = await onboarding_step(actor)
@@ -378,7 +373,7 @@ async def resume_onboarding(message, actor, *, welcome=False) -> bool:
 
 @router.message(Command("name"))
 async def edit_preferred_name(message: types.Message):
-    if await private(message) and onboarding_enabled(message.from_user.id):
+    if await private(message) and settings.telegram_onboarding_enabled_for(message.from_user.id):
         await ask_onboarding(message, "edit_name")
 
 
@@ -542,7 +537,7 @@ async def form_input(message: types.Message, state: FSMContext):
 @router.message(F.text, ~F.text.startswith("/"), F.chat.type == "private")
 async def onboarding_input(message: types.Message):
     actor = message.from_user.id
-    if actor != message.chat.id or not onboarding_enabled(actor):
+    if actor != message.chat.id or not settings.telegram_onboarding_enabled_for(actor):
         raise SkipHandler()
     reply = message.reply_to_message
     step = next((key for key, text in ONBOARDING_QUESTIONS.items() if reply and reply.text == text
@@ -562,7 +557,7 @@ async def retry_onboarding_answer(event: types.CallbackQuery):
     step = event.data.removeprefix("onboarding_retry:")
     reply = getattr(event.message, "reply_to_message", None)
     actor = event.from_user.id
-    if (step in ONBOARDING_QUESTIONS and onboarding_enabled(actor) and reply
+    if (step in ONBOARDING_QUESTIONS and settings.telegram_onboarding_enabled_for(actor) and reply
             and reply.text and reply.from_user and reply.from_user.id == actor):
         await save_onboarding_answer(event.message, actor, step, reply)
 

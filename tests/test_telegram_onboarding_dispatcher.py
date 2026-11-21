@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import AsyncMock
 
 from aiogram import Bot, types
+import pytest
 
 from app.config import settings
 from bot import backend, project_navigation as nav
@@ -9,8 +10,43 @@ from bot.main import create_dispatcher
 from tests.test_telegram_navigation import close_dispatcher, update
 
 
+@pytest.mark.parametrize(
+    ("enabled", "cohort", "onboards"),
+    [
+        (True, frozenset(), False),
+        (True, frozenset({456}), False),
+        (False, frozenset({123}), False),
+        (True, frozenset({123}), True),
+    ],
+)
+def test_start_respects_explicit_cohort(monkeypatch, enabled, cohort, onboards):
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", enabled)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", cohort)
+    request = AsyncMock(return_value={"step": "name"})
+    menu = AsyncMock()
+    monkeypatch.setattr(backend, "request", request)
+    monkeypatch.setattr(nav, "show_menu", menu)
+    monkeypatch.setattr(Bot, "__call__", AsyncMock(return_value=True))
+
+    async def run():
+        dp, bot = create_dispatcher(), Bot("123456:offline-token")
+        try:
+            await dp.feed_update(bot, update(1, "/start"))
+            if onboards:
+                request.assert_awaited_once_with("GET", "/workflows/onboarding", 123)
+                menu.assert_not_awaited()
+            else:
+                request.assert_not_awaited()
+                menu.assert_awaited_once()
+        finally:
+            await close_dispatcher(dp, bot)
+
+    asyncio.run(run())
+
+
 def test_restore_step_on_new_dispatcher_and_reuse_existing_prompt_after_failure(monkeypatch):
     monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", True)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset({123}))
     sent = AsyncMock(return_value=True)
     monkeypatch.setattr(Bot, "__call__", sent)
     progress = "name"

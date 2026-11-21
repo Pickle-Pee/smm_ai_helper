@@ -48,6 +48,8 @@ def test_gate_waits_for_committed_brand_and_is_scoped_to_verified_owner(mvp_data
             await blocked(stranger)
             monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset({owner}))
             await admitted(stranger)
+            monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset())
+            await admitted(stranger)
         finally:
             async with mvp_database.begin() as writer:
                 await writer.execute(delete(BrandProfile).where(
@@ -62,6 +64,7 @@ def test_all_direct_generation_routes_refuse_an_incomplete_profile(mvp_database,
     network = AsyncMock(side_effect=AssertionError("External HTTP is prohibited"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", network)
     actor = actors[0]
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset({actor}))
     session_id = uuid.uuid4().hex
 
     async def database():
