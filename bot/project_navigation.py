@@ -16,9 +16,12 @@ from aiogram.fsm.state import State, StatesGroup
 from pydantic import ValidationError
 
 from bot import backend
+from bot.handlers import web_login
 from bot.rendering import send_text
 
 router = Router(name="project_navigation")
+router.message.register(web_login.send_link, F.text == web_login.LOGIN)
+router.message.register(web_login.confirm, Command("confirm"))
 context_router = Router(name="durable_project_context")
 NEW = "➕ Новый запрос"
 HISTORY = "📂 Проекты и история"
@@ -44,12 +47,15 @@ class NavigationStates(StatesGroup):
     profile_goal = State()
 
 
-def main_keyboard():
-    return types.ReplyKeyboardMarkup(keyboard=[
+def main_keyboard(*, private_login=False):
+    rows = [
         [types.KeyboardButton(text=NEW), types.KeyboardButton(text=HISTORY)],
         [types.KeyboardButton(text=CONTEXT)],
         [types.KeyboardButton(text=PROFILE), types.KeyboardButton(text=HELP)],
-    ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Выберите проект или напишите запрос")
+    ]
+    if private_login and web_login.available():
+        rows.append([types.KeyboardButton(text=web_login.LOGIN)])
+    return types.ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True, input_field_placeholder="Выберите проект или напишите запрос")
 
 
 def inline(buttons):
@@ -160,7 +166,7 @@ def clear_old_actions(actor):
 
 async def show_menu(message):
     await message.answer("SMM AI Helper\nВыберите сохранённый проект или начните новый запрос.",
-                         reply_markup=main_keyboard(), parse_mode=None)
+                         reply_markup=main_keyboard(private_login=message.chat.type == 'private'), parse_mode=None)
 
 
 async def new_request(message, state):

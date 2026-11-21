@@ -55,6 +55,10 @@ async def request(method, path, actor_id, *, payload=None):
         raise BackendError(messages.get(response.status_code,
             "Сервер временно недоступен. Проверьте статус проекта перед повтором."
             if response.status_code >= 500 else "Проверьте формат команды и повторите запрос."))
+    if path == "/internal/identity/web-login-confirm":
+        if response.status_code != 204:
+            raise BackendError("Сервер не подтвердил операцию.")
+        return None
     try:
         data = response.json()
         if not isinstance(data, (dict, list)):
