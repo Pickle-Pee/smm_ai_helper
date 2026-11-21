@@ -62,40 +62,79 @@ def test_control_command_during_slow_request_and_other_user(monkeypatch, command
     asyncio.run(check())
 
 
-def test_delivery_stops_before_telegram_session_closes(monkeypatch):
+def test_polling_shutdown_waits_for_update_and_delivery_before_closing(monkeypatch):
+    from aiogram.client.session.aiohttp import AiohttpSession
+    from aiogram.methods import GetMe, GetUpdates
+    from tests.test_telegram_navigation import update
+
+    import bot.delivery as delivery
     import bot.main as runtime
-    events = []
-    class OfflineBot:
-        def __init__(self, token):
-            pass
-        async def __aenter__(self):
-            events.append("session_open")
-            return self
-        async def __aexit__(self, *args):
-            events.append("session_closed")
-    async def delivery(bot):
-        try:
-            events.append("delivery_started")
-            await asyncio.Event().wait()
-        finally:
-            events.append("delivery_stopped")
-    class OfflineDispatcher:
-        _handle_update_tasks = set()
-        def __getitem__(self, key):
-            return self
-        async def close(self):
-            events.append("updates_drained")
-        async def start_polling(self, bot, **kwargs):
-            assert kwargs["close_bot_session"] is False
-            await asyncio.sleep(0)
-    monkeypatch.setattr(runtime, "Bot", OfflineBot)
-    monkeypatch.setattr(runtime, "create_dispatcher", OfflineDispatcher)
-    monkeypatch.setattr(runtime, "validate_configuration", lambda: None)
+
     monkeypatch.setattr(runtime, "setup_logging", lambda: None)
-    monkeypatch.setattr(runtime, "delivery_loop", delivery)
-    asyncio.run(runtime.main())
-    assert events.index("updates_drained") < events.index("session_closed")
-    assert events.index("delivery_stopped") < events.index("session_closed")
+    monkeypatch.setattr(runtime, "validate_configuration", lambda: None)
+    monkeypatch.setattr(runtime.settings, "TELEGRAM_BOT_TOKEN", "123456:offline-token")
+
+    async def run():
+        dp = runtime.DrainingDispatcher()
+        monkeypatch.setattr(runtime, "create_dispatcher", lambda: dp)
+        update_started, delivery_started = asyncio.Event(), asyncio.Event()
+        release_update, release_delivery = asyncio.Event(), asyncio.Event()
+        events = []
+        polled = False
+
+        async def request(self, bot, method, timeout=None):
+            nonlocal polled
+            if isinstance(method, GetMe):
+                return types.User(id=bot.id, first_name="Offline", is_bot=True)
+            if isinstance(method, GetUpdates):
+                if not polled:
+                    polled = True
+                    return [update(1, "slow")]
+                await asyncio.Event().wait()
+            raise AssertionError(type(method))
+
+        async def handler(message):
+            update_started.set()
+            await release_update.wait()
+            events.append("update_finished")
+
+        async def deliver(bot, client):
+            assert not delivery_started.is_set()
+            delivery_started.set()
+            await release_delivery.wait()
+            events.append("delivery_acked")
+            return True
+
+        async def close(self):
+            events.append("session_closed")
+
+        dp.message.register(handler)
+        dp.shutdown.register(lambda: events.append("fsm_shutdown"))
+        monkeypatch.setattr(AiohttpSession, "make_request", request)
+        monkeypatch.setattr(AiohttpSession, "close", close)
+        monkeypatch.setattr(delivery, "deliver_once", deliver)
+        running = asyncio.create_task(runtime.main())
+        try:
+            await asyncio.wait_for(update_started.wait(), 2)
+            await asyncio.wait_for(delivery_started.wait(), 2)
+            stopping = asyncio.create_task(dp.stop_polling())
+            await asyncio.wait_for(dp.delivery_stop.wait(), 2)
+            assert not running.done() and not stopping.done() and not events
+            release_update.set()
+            await asyncio.wait_for(stopping, 2)
+            assert events == ["update_finished", "fsm_shutdown"]
+            assert not running.done()
+            release_delivery.set()
+            await asyncio.wait_for(running, 2)
+            assert events == ["update_finished", "fsm_shutdown", "delivery_acked", "session_closed"]
+        finally:
+            release_update.set()
+            release_delivery.set()
+            if not running.done():
+                running.cancel()
+                await asyncio.gather(running, return_exceptions=True)
+
+    asyncio.run(run())
 
 
 def test_guard_drains_active_update_cleanup_before_resource_close():
@@ -119,43 +158,6 @@ def test_guard_drains_active_update_cleanup_before_resource_close():
         assert not guard.tasks and not guard.counts
     asyncio.run(check())
 
-
-def test_shutdown_drains_dispatcher_task_before_middleware_entry(monkeypatch):
-    import bot.main as runtime
-    events = []
-    class OfflineBot:
-        def __init__(self, token):
-            pass
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *args):
-            events.append("session_closed")
-    class OfflineDispatcher:
-        def __init__(self):
-            self._handle_update_tasks = set()
-        def __getitem__(self, key):
-            return self
-        async def close(self):
-            assert all(task.done() for task in self._handle_update_tasks)
-            events.append("updates_drained")
-        async def start_polling(self, *args, **kwargs):
-            async def awaiting_middleware():
-                try:
-                    await asyncio.Event().wait()
-                finally:
-                    events.append("pre_middleware_stopped")
-            task = asyncio.create_task(awaiting_middleware())
-            self._handle_update_tasks.add(task)
-            await asyncio.sleep(0)
-    async def delivery(bot):
-        await asyncio.Event().wait()
-    monkeypatch.setattr(runtime, "Bot", OfflineBot)
-    monkeypatch.setattr(runtime, "create_dispatcher", OfflineDispatcher)
-    monkeypatch.setattr(runtime, "validate_configuration", lambda: None)
-    monkeypatch.setattr(runtime, "setup_logging", lambda: None)
-    monkeypatch.setattr(runtime, "delivery_loop", delivery)
-    asyncio.run(runtime.main())
-    assert events == ["pre_middleware_stopped", "updates_drained", "session_closed"]
 
 @pytest.mark.parametrize("command", ["/new", "/cancel"])
 def test_guard_drains_slow_busy_command_response_before_session_close(monkeypatch, command):

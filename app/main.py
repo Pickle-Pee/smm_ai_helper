@@ -10,6 +10,7 @@ from app.routers.web_sessions import router as web_sessions_router
 from app.web_security import WebBoundary, valid_config
 from app.logging import setup_logging
 from app.readiness import readiness
+from app.release_barrier import ReleaseBarrier
 from app.services.task_finalization_service import TaskFinalizationUnavailable
 from app.routers.workflows import router as workflow_router, delivery_router
 from app.routers.copilot import router as copilot_router, start_copilot_api, close_copilot_api
@@ -26,6 +27,7 @@ setup_logging()
 
 app = FastAPI(title="SMM Swarm API")
 app.add_middleware(WebBoundary)
+app.add_middleware(ReleaseBarrier)
 
 
 @app.exception_handler(TaskFinalizationUnavailable)
@@ -37,6 +39,10 @@ async def task_finalization_unavailable(_request, exc):
 async def on_startup():
     if not settings.BOT_BACKEND_TOKEN.strip():
         raise ValueError("Backend requires BOT_BACKEND_TOKEN")
+    if settings.RELEASE_BARRIER_STATE_FILE:
+        token = settings.RELEASE_BARRIER_TOKEN.get_secret_value()
+        if len(token.encode()) < 32 or token == settings.BOT_BACKEND_TOKEN:
+            raise ValueError("Release barrier requires a separate token of at least 32 bytes")
     if settings.WEB_API_ENABLED and not valid_config():
         raise ValueError("Web API requires a valid HTTPS origin and a separate CSRF secret")
     Path(settings.IMAGE_STORAGE_PATH).mkdir(parents=True, exist_ok=True)

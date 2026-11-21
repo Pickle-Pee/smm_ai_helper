@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 
 from app.config import settings
 from bot import copilot_contracts as dto
-from bot.backend import actor_headers, fetch_image
+from bot.backend import actor_headers, fetch_image, service_headers
 from bot.copilot_client import RUN_ID
 from bot.copilot_flow import run_messages
 
@@ -58,8 +58,8 @@ async def _send_run(bot, client, base, actor, payload, ack):
 
 async def deliver_once(bot, client):
     base = settings.API_BASE_URL.rstrip("/")
-    service_headers = {"Authorization": f"Bearer {settings.BOT_BACKEND_TOKEN}"}
-    response = await client.post(base + "/internal/delivery/claim", headers=service_headers)
+    headers = service_headers()
+    response = await client.post(base + "/internal/delivery/claim", headers=headers)
     response.raise_for_status()
     claim = response.json()
     if claim is None:
@@ -92,17 +92,22 @@ async def deliver_once(bot, client):
         log.warning("Delivery failed delivery_id=%s error_type=%s", claim["delivery_id"], type(exc).__name__)
         ack["retryable"] = True
     # A failed/ambiguous acknowledgement leaves a reclaimable lease. No generation.
-    result = await client.post(base + f"/internal/delivery/{claim['delivery_id']}/ack", json=ack, headers=service_headers)
+    result = await client.post(base + f"/internal/delivery/{claim['delivery_id']}/ack", json=ack, headers=headers)
     result.raise_for_status()
     return True
 
 
-async def delivery_loop(bot):
+async def delivery_loop(bot, stop: asyncio.Event):
     async with httpx.AsyncClient(timeout=15) as client:
-        while True:
+        while not stop.is_set():
+            delay = 1
             try:
-                if not await deliver_once(bot, client):
-                    await asyncio.sleep(1)
+                if await deliver_once(bot, client):
+                    continue
             except Exception as exc:
                 log.warning("Delivery backend unavailable error_type=%s", type(exc).__name__)
-                await asyncio.sleep(2)
+                delay = 2
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=delay)
+            except TimeoutError:
+                pass

@@ -37,10 +37,15 @@ def validate_configuration():
 
 
 def actor_headers(telegram_id: int) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {settings.BOT_BACKEND_TOKEN}",
-        "X-Telegram-User-ID": str(telegram_id),
-    }
+    return {**service_headers(), "X-Telegram-User-ID": str(telegram_id)}
+
+
+def service_headers() -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {settings.BOT_BACKEND_TOKEN}"}
+    token = settings.RELEASE_BARRIER_TOKEN.get_secret_value()
+    if token:
+        headers["X-Release-Barrier-Token"] = token
+    return headers
 
 
 async def request(method, path, actor_id, *, payload=None):

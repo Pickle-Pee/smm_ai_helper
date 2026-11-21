@@ -1,5 +1,6 @@
 # bot/main.py
 import asyncio
+import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
@@ -12,9 +13,25 @@ from bot.operation_guard import OperationGuard
 from bot.project_navigation import context_router
 
 
+log = logging.getLogger(__name__)
+
+
+class DrainingDispatcher(Dispatcher):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.delivery_stop = asyncio.Event()
+
+    async def emit_shutdown(self, *args, **kwargs):
+        # Aiogram stops the poller before emitting shutdown, but still owns
+        # the dispatched update tasks. Keep FSM and Telegram alive until done.
+        self.delivery_stop.set()
+        await asyncio.gather(*tuple(self._handle_update_tasks), return_exceptions=True)
+        await super().emit_shutdown(*args, **kwargs)
+
+
 def create_dispatcher():
     # Serialize a user's message/callback FSM updates, including HTTP awaits.
-    dp = Dispatcher(events_isolation=SimpleEventIsolation(), disable_fsm=True)
+    dp = DrainingDispatcher(events_isolation=SimpleEventIsolation(), disable_fsm=True)
     guard = OperationGuard()
     dp["operation_guard"] = guard
     dp.update.outer_middleware(guard)
@@ -52,19 +69,21 @@ async def main():
     # Close the Telegram session only after the delivery owner has stopped.
     async with bot:
         async with asyncio.TaskGroup() as group:
-            delivery_task = group.create_task(delivery_loop(bot))
+            group.create_task(delivery_loop(bot, dp.delivery_stop))
             try:
                 await dp.start_polling(bot, close_bot_session=False)
-            finally:
-                delivery_task.cancel()
-                # Aiogram owns tasks before they enter our middleware (including
-                # tasks waiting for its concurrency semaphore). start_polling
-                # does not drain this set when polling stops.
+            except BaseException:
+                # Unexpected polling failures retain the existing hard-cleanup
+                # behavior and must never produce a successful drain marker.
                 updates = tuple(dp._handle_update_tasks)
                 for task in updates:
                     task.cancel()
                 await asyncio.gather(*updates, return_exceptions=True)
                 await dp["operation_guard"].close()
+                raise
+            finally:
+                dp.delivery_stop.set()
+    log.info("event=telegram_release_drained")
 
 
 if __name__ == "__main__":
