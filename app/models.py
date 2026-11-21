@@ -692,6 +692,7 @@ class WebSession(Base):
 class Organization(Base):
     __tablename__ = "organizations"
     __table_args__ = (
+        UniqueConstraint("id", "personal_user_id", name="uq_org_personal_pair"),
         CheckConstraint("length(btrim(name)) > 0"),
         CheckConstraint("(kind = 'personal' AND personal_user_id IS NOT NULL) OR "
                         "(kind = 'team' AND personal_user_id IS NULL)", name="ck_organization_kind"),
@@ -719,3 +720,54 @@ class Membership(Base):
     version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Project(Base):
+    __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("id", "org_id"),
+        UniqueConstraint("created_by", "request_key"),
+        ForeignKeyConstraint(["org_id", "default_for_user"], ["organizations.id", "organizations.personal_user_id"]),
+        CheckConstraint("version > 0"),
+        CheckConstraint("status IN ('draft','active','archived')"),
+        CheckConstraint("color IN ('teal','violet','coral','amber','blue','green')"),
+        Index("ix_projects_org_updated", "org_id", "updated_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
+    default_for_user: Mapped[int | None] = mapped_column(unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(8), server_default="active")
+    color: Mapped[str | None] = mapped_column(String(8))
+    version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
+    request_key: Mapped[uuid.UUID | None]
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProjectBrand(Base):
+    __tablename__ = "project_brands"
+    __table_args__ = (
+        ForeignKeyConstraint(["project_id", "org_id"], ["projects.id", "projects.org_id"], ondelete="CASCADE"),
+        CheckConstraint("version > 0"),
+        CheckConstraint("(imported_at IS NULL) = (imported_by IS NULL)"),
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    org_id: Mapped[uuid.UUID]
+    version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
+    brand_name: Mapped[str | None] = mapped_column(String(255))
+    product_description: Mapped[str | None] = mapped_column(String(4000))
+    audience: Mapped[str | None] = mapped_column(String(4000))
+    tone: Mapped[str | None] = mapped_column(String(4000))
+    goals: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    channels: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    extra_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    source_profile_id: Mapped[int | None]
+    imported_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", deferrable=True, initially="DEFERRED"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
