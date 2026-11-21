@@ -643,3 +643,47 @@ class ProjectDiscussionTurn(Base):
     reply: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class LoginToken(Base):
+    """Single-purpose Telegram web login. Only digests cross the DB boundary."""
+    __tablename__ = "auth_tokens"
+    __table_args__ = (
+        CheckConstraint("created_at < expires_at AND expires_at <= created_at + interval '10 minutes'",
+                        name="ck_auth_token_ttl"),
+        Index("ix_auth_tokens_user_created", "user_id", "created_at"),
+        Index("ix_auth_tokens_expiry", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BrowserAttempt(Base):
+    __tablename__ = "browser_attempts"
+
+    token_id: Mapped[int] = mapped_column(ForeignKey("auth_tokens.id", ondelete="CASCADE"),
+                                          primary_key=True, autoincrement=False)
+    cookie_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WebSession(Base):
+    __tablename__ = "web_sessions"
+    __table_args__ = (
+        CheckConstraint("created_at < idle_expires_at AND idle_expires_at <= absolute_expires_at",
+                        name="ck_web_session_ttl"),
+        Index("ix_web_sessions_idle_expiry", "idle_expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
