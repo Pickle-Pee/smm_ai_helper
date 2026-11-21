@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.routers.internal_web_login import router as internal_web_login_router
+from app.routers.web_projects import router as web_projects_router
 from app.routers.web_sessions import router as web_sessions_router
 from app.web_security import WebBoundary, valid_config
 from app.logging import setup_logging
@@ -49,6 +50,7 @@ async def on_shutdown():
 
 app.include_router(internal_web_login_router)
 app.include_router(web_sessions_router)
+app.include_router(web_projects_router)
 app.include_router(agents_router)
 app.include_router(tasks_router)
 app.include_router(images_router)
