@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.telegram_admission import require_ready_profile
 from app.security import authorize_legacy_request
 from app.schemas import AgentRunRequest, AgentRunResponse
 from app.services.agent_registry import AgentRegistry
@@ -29,7 +30,7 @@ def _normalize_legacy_answers(answers: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-@router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True)
+@router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True, dependencies=[Depends(require_ready_profile)])
 async def run_agent(
     agent_type: str,
     payload: AgentRunRequest,

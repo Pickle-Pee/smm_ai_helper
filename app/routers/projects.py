@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request
 from pydantic import Field
 from app.marketing_copilot.api_contracts import ErrorResponse, StrictDTO
 
+from app.telegram_admission import require_ready_profile
 from app.security import require_actor
 from app.routers.copilot import CopilotRoute
 from app.services.project_context_service import ProjectContextService
@@ -83,7 +84,7 @@ async def switch(payload: SwitchContext, actor: int = Depends(require_actor), ap
     return await api.switch(actor, payload.chat_id, payload.expected_version, payload.public_id, payload.source_public_id)
 
 
-@router.post("/context/messages")
+@router.post("/context/messages", dependencies=[Depends(require_ready_profile)])
 async def message(payload: ProjectMessage, actor: int = Depends(require_actor), api=Depends(service)):
     return await api.message(actor, payload.chat_id, payload.expected_version, payload.request_key, payload.text)
 

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.telegram_admission import require_ready_profile
 from app.security import require_actor
 from app.marketing_copilot.api_contracts import ExecuteRequest, ExecuteResponse, RunResponse, RunListResponse, StartedResponse, ErrorResponse
 from app.marketing_copilot.api_errors import CopilotAPIError
@@ -64,7 +65,7 @@ async def close_copilot_api(app):
     await app.state.copilot_api.close()
 
 
-@router.post("/execute", response_model=ExecuteResponse, responses={202: {"model": StartedResponse}})
+@router.post("/execute", response_model=ExecuteResponse, responses={202: {"model": StartedResponse}}, dependencies=[Depends(require_ready_profile)])
 async def execute(payload: ExecuteRequest, response: Response, actor: int = Depends(require_actor), api=Depends(service)):
     result = await api.execute(actor, payload)
     if isinstance(result, StartedResponse):
@@ -91,7 +92,7 @@ async def get_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_len
     return await api.reader.get(actor, run_id)
 
 
-@router.post("/runs/{run_id}/mentor", response_model=MentorExplanation)
+@router.post("/runs/{run_id}/mentor", response_model=MentorExplanation, dependencies=[Depends(require_ready_profile)])
 async def explain_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)],
                       actor: int = Depends(require_actor), api=Depends(service)):
     return await api.mentor.explain(actor, run_id)
@@ -103,7 +104,7 @@ async def saved_explanation(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$
     return await api.mentor.get(actor, run_id)
 
 
-@router.post("/runs/{run_id}/mentor/questions", response_model=MentorAnswer)
+@router.post("/runs/{run_id}/mentor/questions", response_model=MentorAnswer, dependencies=[Depends(require_ready_profile)])
 async def question_run(run_id: Annotated[str, Path(pattern=r"^[0-9a-f]{64}$", max_length=64)], payload: MentorQuestion,
                        actor: int = Depends(require_actor), api=Depends(service)):
     return await api.mentor.question(actor, run_id, payload)

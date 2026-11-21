@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     API_BASE_URL: str = "http://localhost:8000"
     BOT_BACKEND_TOKEN: str = ""
+    TELEGRAM_ONBOARDING_ENABLED: bool = False
+    TELEGRAM_ONBOARDING_COHORT: frozenset[int] = frozenset()
     WEB_API_ENABLED: bool = False
     WEB_TELEGRAM_LOGIN_ENABLED: bool = False
     WEB_APP_ORIGIN: str = ""

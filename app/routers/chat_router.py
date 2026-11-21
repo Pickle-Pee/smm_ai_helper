@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.telegram_admission import require_ready_profile
 from app.security import authorize_legacy_request
 from app.schemas import ChatMessageRequest, ChatMessageResponse
 from app.services.chat_service import ChatService
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/chat", tags=["chat"], route_class=CopilotRoute, depe
 logger = logging.getLogger(__name__)
 
 
-@router.post("/message", response_model=ChatMessageResponse)
+@router.post("/message", response_model=ChatMessageResponse, dependencies=[Depends(require_ready_profile)])
 async def chat_message(
     payload: ChatMessageRequest,
     session: AsyncSession = Depends(get_session),

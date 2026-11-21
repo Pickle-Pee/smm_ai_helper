@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.schemas import ImageGenerateRequest, ImageGenerateResponse
+from app.telegram_admission import require_ready_profile
 from app.security import require_actor
 from app.services.image_orchestrator import ImageOrchestrator
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/images", tags=["images"])
 image_orchestrator = ImageOrchestrator()
 
 
-@router.post("/generate", response_model=ImageGenerateResponse)
+@router.post("/generate", response_model=ImageGenerateResponse, dependencies=[Depends(require_ready_profile)])
 async def generate_image(payload: ImageGenerateRequest, actor: int = Depends(require_actor)):
     result = await image_orchestrator.generate(
         platform=payload.platform,
