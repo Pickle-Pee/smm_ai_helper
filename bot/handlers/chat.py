@@ -16,7 +16,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
-from bot.backend import actor_headers, fetch_image, BackendError
+from bot.backend import ONBOARDING_REQUIRED, needs_onboarding, actor_headers, fetch_image, BackendError
 from bot.rendering import send_text
 from bot.copilot_flow import CopilotStates, receive
 
@@ -329,6 +329,9 @@ async def _send_to_backend(message: types.Message, text: str, *, actor_id: int, 
                 headers=actor_headers(actor_id),
             )
 
+        if needs_onboarding(resp):
+            await status_msg.edit_text(ONBOARDING_REQUIRED)
+            return
         if resp.status_code >= 400:
             try:
                 await status_msg.edit_text("Не получилось обработать сообщение. Попробуй ещё раз.")

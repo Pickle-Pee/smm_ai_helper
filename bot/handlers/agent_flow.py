@@ -7,7 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 import httpx
 
 from app.config import settings
-from bot.backend import actor_headers, fetch_image, BackendError
+from bot.backend import ONBOARDING_REQUIRED, needs_onboarding, actor_headers, fetch_image, BackendError
 from bot.rendering import send_text
 from bot.copilot_flow import seen
 from aiogram.exceptions import TelegramAPIError
@@ -267,6 +267,9 @@ async def image_overlay(message: types.Message, state: FSMContext):
         async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(f"{settings.API_BASE_URL}/images/generate", json=payload,
                                      headers=actor_headers(message.from_user.id))
+            if needs_onboarding(resp):
+                await message.answer(ONBOARDING_REQUIRED)
+                return
             resp.raise_for_status()
             resp_data = resp.json()
         if not isinstance(resp_data, dict) or not isinstance(resp_data.get("images"), list) or not resp_data["images"]:
@@ -316,6 +319,9 @@ async def get_task_description(message: types.Message, state: FSMContext):
                 json=payload,
             headers=actor_headers(message.from_user.id),
             )
+        if needs_onboarding(resp):
+            await message.answer(ONBOARDING_REQUIRED)
+            return
         if resp.status_code >= 400:
             raise RuntimeError("Backend error")
         resp_data = resp.json()
@@ -383,6 +389,9 @@ async def ask_details(message: types.Message, state: FSMContext):
             resp = await client.post(f"{settings.API_BASE_URL}/tasks/answer",
                 json={"session_id": session_id, "key": key, "value": message.text},
                 headers=actor_headers(message.from_user.id))
+            if needs_onboarding(resp):
+                await message.answer(ONBOARDING_REQUIRED)
+                return
             resp.raise_for_status()
             resp_data = resp.json()
         if not valid_task_response(resp_data):
@@ -834,6 +843,9 @@ async def run_agent_and_reply(message: types.Message, state: FSMContext):
             json=payload,
             headers=actor_headers(message.from_user.id),
         )
+        if needs_onboarding(resp):
+            await message.answer(ONBOARDING_REQUIRED)
+            return
         if resp.status_code >= 400:
             await clear_flow(state)
             await message.answer(

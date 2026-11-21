@@ -11,6 +11,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from pydantic import ValidationError
 
 from bot import copilot_contracts as dto, copilot_rendering as render
+from bot.backend import ONBOARDING_REQUIRED
 from bot.copilot_client import CopilotClient, CopilotError, RUN_ID
 from bot.rendering import send_text, split_text
 
@@ -161,6 +162,7 @@ async def prompt_confirmation(message, state, pending, owned):
 
 
 ERRORS = {
+    "onboarding_required": ONBOARDING_REQUIRED,
     "presentation": "Не удалось обновить сообщение. Запрос ещё не отправлен. Повторите действие.",
     "unavailable": "Не удалось получить подтверждение сервера. Запрос мог быть принят. Кнопка «Повторить» восстановит сохранённый ответ с тем же ключом, если выполнение завершено. Статус стратегий доступен в /copilot_runs. Если исход неизвестен, повторная генерация автоматически не запускается.",
     "auth": "Не удалось подключиться к сервису: требуется проверка настройки доступа. Сообщите администратору.",
