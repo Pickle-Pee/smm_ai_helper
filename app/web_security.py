@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette._utils import get_route_path
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
@@ -32,9 +33,10 @@ class WebFailure(Exception):
 
 
 def error(status: int, code: str) -> JSONResponse:
+    request_id = uuid.uuid4().hex
     return JSONResponse({"schema_version": "web_api.v2", "kind": "ERROR", "code": code,
-                         "request_id": uuid.uuid4().hex}, status_code=status,
-                        headers={"Cache-Control": CACHE_CONTROL})
+                         "request_id": request_id}, status_code=status,
+                        headers={"Cache-Control": CACHE_CONTROL, "X-Request-ID": request_id})
 
 
 def origin_key(value: str):
@@ -110,14 +112,14 @@ async def require_web_session(principal: WebPrincipal | None = Depends(optional_
 
 class WebBoundary(BaseHTTPMiddleware):
     async def __call__(self, scope, receive, send):
-        path = scope.get("path", "")
-        if scope["type"] == "http" and (path == "/v2" or path.startswith("/v2/")):
+        path = get_route_path(scope) if scope["type"] == "http" else ""
+        if path == "/v2" or path.startswith("/v2/"):
             await super().__call__(scope, receive, send)
         else:
             await self.app(scope, receive, send)
 
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+        path = get_route_path(request.scope)
         if not settings.WEB_API_ENABLED:
             return error(404, "not_found")
         try:

@@ -118,9 +118,42 @@ def test_closed_config_bot_credentials_and_db_error(configured, monkeypatch, cap
                 r = await browser.request("POST" if path.endswith("logout") else "GET", path, headers={"Origin": ORIGIN})
                 assert r.status_code == 503
                 validate("ErrorResponse", r.json())
+                assert r.headers["x-request-id"] == r.json()["request_id"]
                 assert marker not in r.text and "set-cookie" not in r.headers
                 assert r.headers["cache-control"] == "private, no-store"
             monkeypatch.setattr(settings, "WEB_APP_ORIGIN", "http://invalid")
             assert (await browser.post("/v2/auth/logout", headers={"Origin": ORIGIN})).status_code == 503
         assert marker not in caplog.text
     asyncio.run(run())
+
+
+def test_root_path_preserves_feature_and_origin_guards(configured, monkeypatch):
+    async def run():
+        transport = httpx.ASGITransport(app=app, root_path="/api")
+        async with httpx.AsyncClient(transport=transport, base_url=ORIGIN + "/api/") as browser:
+            monkeypatch.setattr(settings, "WEB_API_ENABLED", False)
+            r = await browser.post("v2/auth/logout")
+            assert r.status_code == 404 and r.headers["cache-control"] == "private, no-store"
+            monkeypatch.setattr(settings, "WEB_API_ENABLED", True)
+            assert (await browser.post("v2/auth/logout")).status_code == 403
+            monkeypatch.setattr(settings, "WEB_TELEGRAM_LOGIN_ENABLED", False)
+            r = await browser.post("v2/auth/telegram/challenge", headers={"Origin": ORIGIN})
+            assert r.status_code == 403 and r.json()["code"] == "feature_disabled"
+    asyncio.run(run())
+
+
+def test_http_success_schemas_and_required_fields():
+    public = app.openapi()
+    for path, method, model in [
+        ("/v2/auth/telegram/challenge", "post", "TelegramBrowserChallenge"),
+        ("/v2/auth/telegram/exchange", "post", "AuthSession"),
+        ("/v2/auth/csrf", "get", "CsrfToken"),
+        ("/v2/me", "get", "Me"),
+    ]:
+        response = public["paths"][path][method]["responses"]["200"]
+        ref = response["content"]["application/json"]["schema"]["$ref"]
+        assert ref.endswith("/" + model)
+        actual = public["components"]["schemas"][model]
+        approved = SCHEMAS["components"]["schemas"][model]
+        assert set(actual["properties"]) == set(approved["properties"])
+        assert set(actual["required"]) == set(approved["required"])
