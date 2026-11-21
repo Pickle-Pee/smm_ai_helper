@@ -1,20 +1,18 @@
-"""HTTP boundary on real 0016. Only the downstream B3/B4 reader is substituted."""
+"""HTTP boundary and personal onboarding on real PostgreSQL."""
 import asyncio
 import uuid
 
 import pytest
 from sqlalchemy import delete, event, func, select
 
-from app import web_session_dto as dto
 from app.db import get_session
 from app.main import app
 from app.models import User, WebSession
-from app.routers.web_sessions import membership_reader
 from app.services import web_auth
 from app.config import settings
 from app.web_security import ATTEMPT, SESSION
 from tests.postgresql_support import mvp_database
-from tests.test_web_session_http import EXAMPLE, ORIGIN, client, configured, validate
+from tests.test_web_session_http import ORIGIN, client, configured, validate
 
 
 def test_browser_lifecycle(mvp_database, configured, monkeypatch, caplog):
@@ -40,10 +38,6 @@ def test_browser_lifecycle(mvp_database, configured, monkeypatch, caplog):
             await db.flush()
             owner = user.id
 
-        async def from_contract(db, user_id, login):
-            assert user_id == owner
-            return [dto.OrganizationMembership.model_validate(EXAMPLE["me"]["memberships"][0])]
-
         async def prepare(browser):
             async with mvp_database.begin() as db:
                 issued = await web_auth.issue(db, actor)
@@ -68,13 +62,6 @@ def test_browser_lifecycle(mvp_database, configured, monkeypatch, caplog):
                 body = await prepare(browser)
                 neighbor.cookies.set(ATTEMPT, "wrong")
                 assert (await exchange(neighbor, body)).status_code == 401
-                # Production reader is deliberately closed until B3/B4.
-                r = await exchange(browser, body)
-                assert r.status_code == 503 and "set-cookie" not in r.headers
-                async with mvp_database() as db:
-                    assert await db.scalar(select(func.count()).select_from(WebSession).where(
-                        WebSession.user_id == owner)) == 0
-                monkeypatch.setitem(app.dependency_overrides, membership_reader, lambda: from_contract)
                 fail_commit = True
                 r = await exchange(browser, body)
                 assert r.status_code == 503 and "set-cookie" not in r.headers
