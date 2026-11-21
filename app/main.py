@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.routers.web_sessions import router as web_sessions_router
+from app.web_security import WebBoundary, valid_config
 from app.logging import setup_logging
 from app.readiness import readiness
 from app.services.task_finalization_service import TaskFinalizationUnavailable
@@ -21,6 +23,7 @@ from app.routers import (
 setup_logging()
 
 app = FastAPI(title="SMM Swarm API")
+app.add_middleware(WebBoundary)
 
 
 @app.exception_handler(TaskFinalizationUnavailable)
@@ -32,6 +35,8 @@ async def task_finalization_unavailable(_request, exc):
 async def on_startup():
     if not settings.BOT_BACKEND_TOKEN.strip():
         raise ValueError("Backend requires BOT_BACKEND_TOKEN")
+    if settings.WEB_API_ENABLED and not valid_config():
+        raise ValueError("Web API requires a valid HTTPS origin and a separate CSRF secret")
     Path(settings.IMAGE_STORAGE_PATH).mkdir(parents=True, exist_ok=True)
     start_copilot_api(app)
 
@@ -41,6 +46,7 @@ async def on_shutdown():
     await close_copilot_api(app)
 
 
+app.include_router(web_sessions_router)
 app.include_router(agents_router)
 app.include_router(tasks_router)
 app.include_router(images_router)
