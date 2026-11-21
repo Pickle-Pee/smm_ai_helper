@@ -59,3 +59,9 @@
 | B3 | B2 | 0017 |
 | B4 | B3; `BrandProfile` остаётся durable-контекстом | 0018 |
 | B5/B6 | B4; переиспользует `/copilot/*` DTO и GraphRunReader | — / по необходимости |
+
+## 21.11.2026 — B2.0 и B2.2
+
+Web #17 вошёл в main merge-коммитом `0dfd7a167b61439d680c615f087004ffd36b0060`. Родители — `e68621c1ddb39b5897165523dba7f99e6853e2b1` и нормативный `db1135fccbc4ca6e316b6e2123bfb23c99a62af8`. Итоговое дерево `871f4a361c03cf7d175e1b28f90a7d716bd49563` совпало с проверенным. [Web push CI](https://github.com/Pickle-Pee/smm_ai_helper_web/actions/runs/44855482994) прошёл. На время merge владелец разрешил отключить только deploy.yml. После CI workflow восстановлен, deployment на этом SHA не запускался.
+
+Backend #223 вошёл в master merge-коммитом `ff1e515881c77477e96a7a3b0899428930ae1484`. Первый родитель — `cfffe5c4a97b4eeb12763e92305f067e90e2c019`, второй — `6594c99f9cd5797c9845d28aec4178433d508668`. Дерево `f23298d732938c41892bb8051257046d0f1d8ca0` совпало с утверждённым. [Backend push CI](https://github.com/Pickle-Pee/smm_ai_helper/actions/runs/44855407141). Ветви B2.3 и B3 начинаются независимо от этого merge. Production migration и открытие beta требуют отдельных решений.

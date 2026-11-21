@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import web_session_dto as dto
+from app.services import organizations
 from app.models import ExternalIdentity, User, WebSession
 
 Memberships = Callable[[AsyncSession, int, bool], Awaitable[list[dto.OrganizationMembership]]]
@@ -16,8 +17,11 @@ class OnboardingUnavailable(Exception):
 
 
 async def memberships(db: AsyncSession, user_id: int, first_login: bool) -> list[dto.OrganizationMembership]:
-    """B3/B4 supply active memberships and idempotent onboarding inside exchange."""
-    raise OnboardingUnavailable()
+    if first_login:
+        # B4 must provision the project and import the legacy brand in this same
+        # transaction before exchange can commit. Do not expose partial onboarding.
+        raise OnboardingUnavailable()
+    return await organizations.active_memberships(db, user_id)
 
 
 async def project(db: AsyncSession, row: WebSession, reader: Memberships, *, login: bool) -> dto.Me:
