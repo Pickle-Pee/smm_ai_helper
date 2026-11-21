@@ -476,6 +476,635 @@
             "$ref": "#/components/schemas/Timestamp"
           }
         }
+      },
+      "OrganizationList": {
+        "x-status": "proposed",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "items"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/OrganizationMembership"
+            }
+          }
+        }
+      },
+      "ProjectList": {
+        "x-status": "proposed",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          }
+        }
+      },
+      "Project": {
+        "x-status": "proposed",
+        "description": "A SaaS project. It belongs to exactly one organization (`org_id`) for its whole life; ownership is the\norganization's, not the creator's. NOT the legacy Telegram \"projects\" (history navigation).\n",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "id",
+          "org_id",
+          "name",
+          "status",
+          "color",
+          "version",
+          "role",
+          "permissions",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "brand"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "color": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProjectColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optimistic concurrency token of the project row."
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/ProjectPermissions"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "brand": {
+            "$ref": "#/components/schemas/ProjectBrand"
+          }
+        }
+      },
+      "ProjectStatus": {
+        "x-status": "proposed",
+        "type": "string",
+        "enum": [
+          "active",
+          "draft",
+          "archived"
+        ]
+      },
+      "ProjectColor": {
+        "x-status": "proposed",
+        "description": "UI accent only. Stored on `projects`, never part of the model context.",
+        "type": "string",
+        "enum": [
+          "teal",
+          "violet",
+          "coral",
+          "amber",
+          "blue",
+          "green"
+        ]
+      },
+      "ProjectPermissions": {
+        "x-status": "proposed",
+        "description": "Server-computed for the caller. The UI renders from these and still handles `403`.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "can_edit",
+          "can_submit",
+          "can_import_telegram_brand"
+        ],
+        "properties": {
+          "can_edit": {
+            "type": "boolean"
+          },
+          "can_submit": {
+            "type": "boolean"
+          },
+          "can_import_telegram_brand": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserRef": {
+        "x-status": "proposed",
+        "x-persistence": "computed-per-viewer",
+        "description": "Minimal reference to a user inside a tenant, COMPUTED for the current caller on every response.\nNever persisted, never hashed, never part of an immutable record: persisted records store only the\nstable `users.id` (for example `SnapshotProvenance.author_user_id`). `display_name` is the user's\nCURRENT name and `is_self` is `id == principal.user_id`, so two viewers of the same record can receive\ndifferent `is_self` values (see fixture `golden/snapshot-two-viewers.json`). Never contains a Telegram\nidentifier or e-mail.\n",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "display_name",
+          "is_self"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Internal `users.id` (the single principal for web and Telegram)."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255,
+            "description": "Current display name at response time; may change."
+          },
+          "is_self": {
+            "type": "boolean",
+            "description": "True when this user is the caller of THIS request. Viewer-relative."
+          }
+        }
+      },
+      "ProjectBrand": {
+        "x-status": "proposed",
+        "description": "The single `project_brands` row of a project (exactly one per project, cascade-deleted with it).\nA separate table: the legacy `brand_profiles` table, its `UNIQUE(user_id)` and\n`User.brand_profile` keep their current ORM semantics and are used by Telegram only.\n",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "project_id",
+          "version",
+          "brand_name",
+          "product_description",
+          "audience",
+          "tone",
+          "goals",
+          "channels",
+          "extra",
+          "imported_from",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optimistic concurrency token of the brand row."
+          },
+          "brand_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "product_description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "tone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "goals": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "channels": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "extra": {
+            "$ref": "#/components/schemas/BrandExtra"
+          },
+          "imported_from": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BrandImportProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updated_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "BrandExtra": {
+        "x-status": "proposed",
+        "description": "Allowlisted keys stored in `project_brands.extra_json`. No other key is accepted or returned.\n\n* `industry`, `usp`, `competitors` - descriptive UI fields. The existing `brand_entries` mapping does\n  not pass them to the model today.\n* `customer_job_or_need`, `relevant_alternative`, `product_truth`, `existing_proof`, `geography`,\n  `economics` - scalar business fields the existing `brand_entries` mapping DOES pass to the core as\n  brand-layer context when present. `product_truth` is an owner attestation: set it only from an\n  explicit user statement, never from scraped or generated text.\n",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "industry": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "usp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "competitors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "customer_job_or_need": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "relevant_alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "product_truth": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "existing_proof": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "geography": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "economics": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          }
+        }
+      },
+      "BrandImportProvenance": {
+        "x-status": "proposed",
+        "description": "Provenance of the last copy from the legacy Telegram profile. The legacy row id is not exposed.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "imported_at",
+          "imported_by"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "telegram_brand_profile"
+          },
+          "imported_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "imported_by": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        }
+      },
+      "ProjectBrandPatch": {
+        "x-status": "proposed",
+        "description": "Omitted = unchanged, `null` = cleared. `extra` is merged key by key.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_version"
+        ],
+        "minProperties": 2,
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "brand_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "product_description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "tone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "goals": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "channels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "extra": {
+            "$ref": "#/components/schemas/BrandExtra"
+          }
+        }
+      },
+      "ProjectCreate": {
+        "x-status": "proposed",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "draft"
+            ],
+            "default": "active"
+          },
+          "color": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProjectColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brand": {
+            "$ref": "#/components/schemas/ProjectBrandFields"
+          }
+        }
+      },
+      "ProjectBrandFields": {
+        "x-status": "proposed",
+        "description": "Editable brand fields. Names and types of the first six mirror the existing `BrandProfile` columns so\nthe existing pure functions (`to_context`, `brand_entries`) work unchanged through an adapter.\nBounds follow what `brand_entries` accepts today (text up to 4000 characters, at most 10 goals).\n",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "brand_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "product_description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "tone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4000
+          },
+          "goals": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "channels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "extra": {
+            "$ref": "#/components/schemas/BrandExtra"
+          }
+        }
+      },
+      "ProjectPatch": {
+        "x-status": "proposed",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_version"
+        ],
+        "minProperties": 2,
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "color": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProjectColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "BrandImportRequest": {
+        "x-status": "proposed",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_version",
+          "confirm_overwrite"
+        ],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "confirm_overwrite": {
+            "description": "Literal `true`. The caller acknowledges that the current brand fields are replaced by the copy.",
+            "type": "boolean",
+            "const": true
+          }
+        }
       }
     }
   }
