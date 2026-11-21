@@ -18,7 +18,7 @@ def upgrade():
             status varchar(8) NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active','archived')),
             color varchar(8) CHECK (color IN ('teal','violet','coral','amber','blue','green')),
             version bigint NOT NULL DEFAULT 1 CHECK (version > 0),
-            created_by integer NOT NULL REFERENCES users(id),
+            created_by integer NOT NULL REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED,
             request_key uuid, request_hash varchar(64),
             created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
             UNIQUE(id, org_id), UNIQUE(created_by, request_key),
@@ -32,8 +32,8 @@ def upgrade():
             version bigint NOT NULL DEFAULT 1 CHECK (version > 0),
             brand_name varchar(255), product_description varchar(4000), audience varchar(4000), tone varchar(4000),
             goals jsonb NOT NULL DEFAULT '[]', channels jsonb NOT NULL DEFAULT '[]', extra_json jsonb NOT NULL DEFAULT '{}',
-            source_profile_id integer, imported_by integer REFERENCES users(id), imported_at timestamptz,
-            updated_by integer REFERENCES users(id), updated_at timestamptz NOT NULL DEFAULT now(),
+            source_profile_id integer, imported_by integer REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED, imported_at timestamptz,
+            updated_by integer REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED, updated_at timestamptz NOT NULL DEFAULT now(),
             FOREIGN KEY(project_id, org_id) REFERENCES projects(id, org_id) ON DELETE CASCADE,
             CHECK ((imported_at IS NULL) = (imported_by IS NULL))
         )
