@@ -687,3 +687,35 @@ class WebSession(Base):
     idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint("length(btrim(name)) > 0"),
+        CheckConstraint("(kind = 'personal' AND personal_user_id IS NOT NULL) OR "
+                        "(kind = 'team' AND personal_user_id IS NULL)", name="ck_organization_kind"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(8))
+    personal_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+    __table_args__ = (
+        CheckConstraint("role IN ('owner','editor','viewer')"),
+        CheckConstraint("version >= 1"),
+        Index("ix_memberships_user_id", "user_id"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(8))
+    version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

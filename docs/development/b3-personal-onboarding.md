@@ -1,0 +1,15 @@
+# B3 organizations and the B4 handoff
+
+Revision 0017 expands 0016 with organizations and versioned memberships. The caller owns each transaction. A unique personal_user_id references users.id. Parallel first logins contend on that key. The winner creates the owner membership before commit. Returning users resolve their active owner membership. Revocation, downgrade of the owner's role and soft deletion fail closed. Team rows reserve the approved data model; invitations and management belong to B10.
+
+The B2 membership reader returns actual active rows for /v2/me. Exchange remains closed until B4 completes onboarding. B3 provides ensure_personal(db, user_id) for that transaction. require_access checks active membership and organization visibility on each call. Personal organizations are visible only to the matching owner. For future tenant routes map TenantNotFound to 404 and InsufficientRole to 403. Role or revocation changes increment version in PostgreSQL. B5 must repeat the membership/version check before releasing delegated results.
+
+## B4 implementation order
+
+1. Add projects with an immutable organization FK and an explicit unique personal-default project key per personal organization. Add project_brands with one row per project and a composite FK binding project_id and org_id to the same project. Ordinary additional projects must remain possible. Keep legacy brand_profiles owned by users.id.
+2. In the existing exchange transaction call ensure_personal, ensure the default project, then initialize its brand. Read a legacy Telegram profile only for the verified session owner. Import once with source id and timestamp. Record completed initialization even when there is no profile. Replaying login must preserve later web edits. A later manual import follows the separate contract.
+3. Return real active memberships only after project and brand initialization succeeds. Any failure rolls back session rotation, token consumption and all onboarding writes. GET /me reads existing state. Exercise concurrent first login, retry, lost response, absent brand, and injected failure after each write.
+4. Scope every project and brand lookup to the active org membership. Test two principals, revoked membership, a visible resource with insufficient role (403), a foreign resource (404), and mismatched org/project ids. Only the personal owner may import their own legacy brand.
+5. B2.4 supplies the trusted HTTPS edge, server secrets and public rate limits. B5/B6 connect Web Copilot threads/results to projects with the requesting users.id as execution author. Retain public-beta isolation gate #219 and the independent production migration gate.
+
+Contract: [Web API v2](https://github.com/Pickle-Pee/smm_ai_helper_web/blob/db1135fccbc4ca6e316b6e2123bfb23c99a62af8/docs/api/web-api-v2.openapi.yaml) and [Decision Register](https://github.com/Pickle-Pee/smm_ai_helper_web/blob/db1135fccbc4ca6e316b6e2123bfb23c99a62af8/docs/api/decision-register.md).

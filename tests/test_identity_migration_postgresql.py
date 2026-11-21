@@ -19,13 +19,14 @@ from tests.postgresql_support import mvp_database
 PREVIOUS, B1A = "20261103_0014", "20261114_0015"
 
 
-HEAD = "20261121_0016"
+HEAD = "20261121_0017"
 
 
 def test_auth_chain_has_one_head_after_production_0014():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == B1A
+    assert script.get_revision(HEAD).down_revision == "20261121_0016"
+    assert script.get_revision("20261121_0016").down_revision == B1A
     assert script.get_revision(B1A).down_revision == PREVIOUS
 
 
