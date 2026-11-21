@@ -22,3 +22,11 @@ Aggregate events from the telegram_onboarding logger. Its event payload contains
 | Answer quality | Use the same blind rubric for both cohorts. Track actionability, specificity to supplied business context and unsupported claims. Record aggregate ratings and acceptance rates without exporting user content into metrics. |
 
 Use paired offline fixtures first. During a separately approved trial, report sample sizes, baseline and cohort windows and per-operation mix alongside deltas. No live token or quality claim follows from the rollout tests alone.
+
+## Release gate
+
+Record the candidate SHA, image digest, observed production schema revision, staged migration evidence, and the release owner before requesting permission. Obtain explicit approval for the deployment and migration window, then apply the schema with the feature disabled. Retain a backup and verify the bot, backend, worker, delivery and Web API before adding any account to the cohort.
+
+Use a dedicated Telegram test account in the closed cohort and a second account outside the cohort. On the fresh in-cohort account, send /start, set a preferred name, stop after the product answer, then restart the bot and resume. Simulate a save failure in staging and retry the original answer. Check that the final committed answer opens the menu. Before completion, exercise a direct request and a legacy callback and verify no new job or provider traffic. After completion use the fake provider for an accepted request, read its result and verify delivery. Reopen /start, edit the preferred name, repeat with a partial existing profile, and confirm history remains visible.
+
+Compare the outside account's entry points and profile to baseline. Check existing Web API and B4 onboarding using test users. Monitor aggregate step completion, allowed, blocked and unavailable admission, and delivery failures. Stop the rollout and disable the flag in both processes if ownership, profile persistence, admission, delivery or Web API regresses. Expand the cohort only after the owner signs off on the closed trial. Any trial involving real paid generation requires separate explicit authorization.
