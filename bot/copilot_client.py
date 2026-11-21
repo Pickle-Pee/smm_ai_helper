@@ -7,7 +7,7 @@ import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from app.config import settings
-from bot.backend import actor_headers
+from bot.backend import actor_headers, needs_onboarding
 from bot import copilot_contracts as dto
 
 log = logging.getLogger(__name__)
@@ -42,6 +42,8 @@ class CopilotClient:
                     headers=actor_headers(actor), json=payload)
         except (httpx.HTTPError, TimeoutError):
             raise CopilotError("unavailable") from None
+        if needs_onboarding(response):
+            raise CopilotError("onboarding_required", status=409)
         if response.status_code >= 400:
             status = response.status_code
             log.warning("Copilot HTTP status=%s actor_id=%s", status, actor)

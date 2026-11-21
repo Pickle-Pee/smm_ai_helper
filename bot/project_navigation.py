@@ -385,7 +385,8 @@ async def edit_preferred_name(message: types.Message):
 @router.message(CommandStart())
 @router.message(Command("menu"))
 async def start(message: types.Message):
-    if await private(message) and not await resume_onboarding(message, message.from_user.id, welcome=True):
+    if await private(message) and not await resume_onboarding(
+            message, message.from_user.id, welcome=message.text.split()[0].split("@")[0] == "/start"):
         await show_menu(message)
 
 
@@ -550,7 +551,24 @@ async def onboarding_input(message: types.Message):
         if await resume_onboarding(message, actor):
             return
         raise SkipHandler()
-    value = message.text.strip()
+    await save_onboarding_answer(message, actor, step, message)
+
+
+@router.callback_query(F.data.startswith("onboarding_retry:"))
+async def retry_onboarding_answer(event: types.CallbackQuery):
+    if not await private(event):
+        return
+    await event.answer()
+    step = event.data.removeprefix("onboarding_retry:")
+    reply = getattr(event.message, "reply_to_message", None)
+    actor = event.from_user.id
+    if (step in ONBOARDING_QUESTIONS and onboarding_enabled(actor) and reply
+            and reply.text and reply.from_user and reply.from_user.id == actor):
+        await save_onboarding_answer(event.message, actor, step, reply)
+
+
+async def save_onboarding_answer(message, actor: int, step: str, answer):
+    value = answer.text.strip()
     if not value or len(value) > (100 if step in {"name", "edit_name"} else 2000):
         await message.answer("Введите непустой ответ допустимой длины.")
         await ask_onboarding(message, step)
@@ -565,15 +583,16 @@ async def onboarding_input(message: types.Message):
                                            payload={field: [value] if step == "goal" else value})
         following = result.get("step")
         if following == "ready":
-            await message.answer("Имя сохранено." if step == "edit_name" else "Профиль сохранён.")
+            await message.answer("Имя сохранено." if step in {"name", "edit_name"} else "Профиль сохранён.")
             await show_menu(message)
         elif following in {"name", "product", "audience", "goal"}:
             await ask_onboarding(message, following)
         else:
             raise backend.BackendError("Unknown onboarding state")
     except backend.BackendError:
-        await message.answer("Сохранение не подтверждено. Ответьте ещё раз на тот же вопрос.")
-        await ask_onboarding(message, step)
+        await message.answer("Сохранение не подтверждено. Повторите сохранение этого ответа.",
+                             reply_parameters=types.ReplyParameters(message_id=answer.message_id),
+                             reply_markup=inline([("Повторить сохранение", "onboarding_retry:" + step)]))
 
 
 @context_router.message(F.text, ~F.text.startswith("/"))

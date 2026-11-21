@@ -11,6 +11,19 @@ class BackendError(RuntimeError):
     pass
 
 
+ONBOARDING_REQUIRED = "Чтобы начать запрос, завершите анкету через /start."
+
+
+def needs_onboarding(response: httpx.Response) -> bool:
+    if response.status_code != 409:
+        return False
+    try:
+        body = response.json()
+        return isinstance(body, dict) and body.get("detail") == "onboarding_required"
+    except ValueError:
+        return False
+
+
 def validate_configuration():
     from aiogram.utils.token import validate_token, TokenValidationError
     try:
@@ -44,6 +57,8 @@ async def request(method, path, actor_id, *, payload=None):
         raise BackendError("Ответ сервера не получен. Запрос мог быть принят; проверьте /runs перед повтором."
             if method.upper() in {"POST", "PATCH", "PUT"}
             else "Сервер временно недоступен. Повторите просмотр позже.") from exc
+    if needs_onboarding(response):
+        raise BackendError(ONBOARDING_REQUIRED)
     if response.status_code >= 400:
         messages = {
             401: "Не удалось подтвердить доступ к серверу. Обратитесь к администратору.",

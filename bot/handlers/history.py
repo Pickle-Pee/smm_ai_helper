@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import settings
-from bot.backend import actor_headers
+from bot.backend import ONBOARDING_REQUIRED, needs_onboarding, actor_headers
 from bot.rendering import send_text
 
 router = Router()
@@ -155,6 +155,9 @@ async def on_task_repeat(callback):
         async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(f"{settings.API_BASE_URL}/agents/{agent_type}/run", json=payload,
                                      headers=actor_headers(callback.from_user.id))
+            if needs_onboarding(resp):
+                await send_text(callback.message, ONBOARDING_REQUIRED)
+                return
             resp.raise_for_status()
             result = resp.json()
         if not isinstance(result, dict) or not isinstance(result.get("task_id"), int) or not isinstance(result.get("result"), dict) or result.get("status") != "done":
