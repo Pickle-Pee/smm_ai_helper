@@ -1,4 +1,6 @@
 """Telegram generation admission at the bot-authenticated HTTP boundary."""
+import logging
+
 from fastapi import Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,9 @@ from app.security import require_actor
 from app.services.brand_profile_service import BrandProfileService
 from app.services.identity_service import IdentityService
 from app.services.telegram_onboarding import missing_brand_steps
+
+
+log = logging.getLogger("telegram_onboarding")
 
 
 def onboarding_enabled(actor: int) -> bool:
@@ -28,6 +33,9 @@ async def require_ready_profile(
         missing = missing_brand_steps(profile)
         await db.rollback()
     except (SQLAlchemyError, OSError):
+        log.info("event=generation_admission result=unavailable")
         raise HTTPException(503, "temporarily_unavailable") from None
     if missing:
+        log.info("event=generation_admission result=blocked")
         raise HTTPException(409, "onboarding_required")
+    log.info("event=generation_admission result=allowed")
