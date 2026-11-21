@@ -25,7 +25,8 @@ HEAD = "20261121_0019"
 def test_auth_chain_has_one_head_after_production_0014():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     assert script.get_heads() == [HEAD]
-    assert script.get_revision(HEAD).down_revision == "20261121_0017"
+    assert script.get_revision(HEAD).down_revision == "20261121_0018"
+    assert script.get_revision("20261121_0018").down_revision == "20261121_0017"
     assert script.get_revision("20261121_0017").down_revision == "20261121_0016"
     assert script.get_revision("20261121_0016").down_revision == B1A
     assert script.get_revision(B1A).down_revision == PREVIOUS

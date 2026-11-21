@@ -1,5 +1,8 @@
 import asyncio
 import uuid
+from unittest.mock import AsyncMock
+
+import httpx
 
 import pytest
 from fastapi import HTTPException
@@ -9,6 +12,7 @@ from app.config import settings
 from app.db import get_session
 from app.main import app
 from app.models import BrandProfile, Job, TaskSessionRecord, User
+from app.routers.images import image_orchestrator
 from bot.backend import actor_headers
 from tests.test_telegram_admission import GENERATION
 from tests.test_web_session_http import client
@@ -55,6 +59,8 @@ def test_gate_waits_for_committed_brand_and_is_scoped_to_verified_owner(mvp_data
 def test_all_direct_generation_routes_refuse_an_incomplete_profile(mvp_database, actors, monkeypatch):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "onboarding-test-bot")
     monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", True)
+    network = AsyncMock(side_effect=AssertionError("External HTTP is prohibited"))
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", network)
     actor = actors[0]
     session_id = uuid.uuid4().hex
 
@@ -81,6 +87,7 @@ def test_all_direct_generation_routes_refuse_an_incomplete_profile(mvp_database,
                     assert response.json() == {"detail": "onboarding_required"}
             async with mvp_database() as db:
                 assert await db.scalar(select(func.count()).select_from(Job)) == before
+            network.assert_not_awaited()
         finally:
             async with mvp_database.begin() as db:
                 await db.execute(delete(TaskSessionRecord).where(TaskSessionRecord.session_id == session_id))

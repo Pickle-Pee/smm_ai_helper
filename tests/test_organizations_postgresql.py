@@ -37,8 +37,7 @@ def test_personal_onboarding_is_atomic_idempotent_and_owner_scoped(mvp_database)
                 assert await tenants.require_access(db, owner, org, "owner") == 1
                 [member] = await web_me.memberships(db, owner, False)
                 assert member.organization.id == org and member.role == "owner"
-                with pytest.raises(web_me.OnboardingUnavailable):
-                    await web_me.memberships(db, owner, True)
+                assert await web_me.memberships(db, owner, True) == [member]
                 with pytest.raises(tenants.TenantNotFound):
                     await tenants.require_access(db, stranger, org, "viewer")
                 await db.execute(update(Membership).where(Membership.org_id == org).values(revoked_at=func.now()))
