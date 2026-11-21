@@ -11,8 +11,10 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.config import settings
 from app.db import AsyncSessionLocal
-from app.models import BrandProfile, Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, User, WorkflowDelivery
+from app.models import BrandProfile, Job, JobExecution, JobStatus, MarketingArtifact, MarketingRun, User, UserPreferredName, WorkflowDelivery
 from app.services.brand_profile_service import BrandProfileService
+from app.services.identity_service import IdentityService
+from app.services.telegram_onboarding import next_step
 from app.services.job_persistence_service import JobPersistenceService
 from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.workflows.schemas import BusinessInput, StartRequest
@@ -130,11 +132,32 @@ class MarketingWorkflowService:
         await self._wake(job_id)
         return await self.status(actor, run_id)
 
-    async def set_profile(self, actor, values):
+    async def save_preferred_name(self, actor: int, display_name: str, *, replace: bool) -> str:
+        async with self.sessions() as session, session.begin():
+            user = await self._user(session, actor)
+            if await IdentityService.resolve_telegram_user_id(session, actor) != user.id:
+                raise WorkflowError("Identity unavailable", 503)
+            name = await session.get(UserPreferredName, user.id)
+            if name is None:
+                session.add(UserPreferredName(user_id=user.id, display_name=display_name))
+                await session.flush()
+            elif replace:
+                name.display_name = display_name
+            return await next_step(session, user.id)
+
+    async def set_profile(self, actor, values, onboarding_step=None):
         async with self.sessions() as session:
             user = await self._user(session, actor)
+            if onboarding_step is not None:
+                if await IdentityService.resolve_telegram_user_id(session, actor) != user.id:
+                    raise WorkflowError("Identity unavailable", 503)
+                current = await next_step(session, user.id)
+                if current != onboarding_step:
+                    return {"step": current}
             # BrandProfileService explicitly owns this isolated transaction.
             profile = await BrandProfileService.upsert_for_user(session, user.id, values)
+            if onboarding_step is not None:
+                return {"step": await next_step(session, user.id)}
             return BrandProfileService.to_context(profile)
 
     async def continue_run(self, actor, run_id, action):

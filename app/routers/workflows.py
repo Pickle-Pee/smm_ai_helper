@@ -1,10 +1,13 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from app.db import get_session
 from app.schemas import BrandProfileUpdate
-from app.telegram_admission import require_ready_profile
+from app.services.telegram_onboarding import current_step
+from sqlalchemy.exc import SQLAlchemyError
+from app.telegram_admission import onboarding_enabled, require_ready_profile
 from app.security import require_actor, require_bot
 from app.workflows.delivery import DeliveryService
 from app.workflows.queue import RedisWakeups
@@ -35,12 +38,55 @@ async def recent(actor: int = Depends(require_actor)):
     return await call(workflow.recent(actor))
 
 
+class PreferredName(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    replace: bool = False
+
+
+@router.get("/onboarding")
+async def onboarding(actor: int = Depends(require_actor), db=Depends(get_session)):
+    if not onboarding_enabled(actor):
+        return {"step": "disabled"}
+    try:
+        return {"step": await current_step(db, actor)}
+    except (SQLAlchemyError, OSError):
+        raise HTTPException(503, "temporarily_unavailable") from None
+
+
+@router.put("/onboarding/name")
+async def preferred_name(body: PreferredName, actor: int = Depends(require_actor)):
+    if not onboarding_enabled(actor):
+        raise HTTPException(404, "Not found")
+    if any(ord(char) < 32 for char in body.name):
+        raise HTTPException(422, "invalid_request")
+    try:
+        return {"step": await call(workflow.save_preferred_name(actor, body.name, replace=body.replace))}
+    except (SQLAlchemyError, OSError):
+        raise HTTPException(503, "temporarily_unavailable") from None
+
+
 @router.put("/profile")
-async def profile(payload: BrandProfileUpdate, actor: int = Depends(require_actor)):
+async def profile(payload: BrandProfileUpdate, actor: int = Depends(require_actor),
+                  onboarding_step: Literal["product", "audience", "goal"] | None = None):
     values = payload.model_dump(exclude_unset=True)
     if not values:
         raise HTTPException(422, "Укажите данные бизнеса.")
-    return await call(workflow.set_profile(actor, values))
+    if onboarding_step is None:
+        return await call(workflow.set_profile(actor, values))
+    if not onboarding_enabled(actor):
+        raise HTTPException(404, "Not found")
+    field = {"product": "product_description", "audience": "audience", "goal": "goals"}[onboarding_step]
+    value = values.get(field)
+    if field == "goals":
+        value = value[0] if isinstance(value, list) and len(value) == 1 else None
+    if (set(values) != {field} or not isinstance(value, str) or not value.strip()
+            or len(value) > 2000 or "\x00" in value):
+        raise HTTPException(422, "invalid_request")
+    try:
+        return await call(workflow.set_profile(actor, values, onboarding_step))
+    except (SQLAlchemyError, OSError):
+        raise HTTPException(503, "temporarily_unavailable") from None
 
 
 @router.get("/{run_id}")

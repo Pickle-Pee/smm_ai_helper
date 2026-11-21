@@ -63,7 +63,7 @@ async def request(method, path, actor_id, *, payload=None):
         data = response.json()
         if not isinstance(data, (dict, list)):
             raise ValueError()
-        if path == "/workflows" or (path.startswith("/workflows/") and path != "/workflows/profile"):
+        if path == "/workflows" or (path.startswith("/workflows/") and path.partition("?")[0] not in {"/workflows/profile", "/workflows/onboarding", "/workflows/onboarding/name"}):
             from bot.workflow_contracts import validate_runs, validate_workflow
             return validate_runs(data) if path == "/workflows" and method.upper() == "GET" else validate_workflow(data)
         return data
