@@ -1,4 +1,4 @@
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     API_BASE_URL: str = "http://localhost:8000"
     BOT_BACKEND_TOKEN: str = ""
+    WEB_API_ENABLED: bool = False
+    WEB_TELEGRAM_LOGIN_ENABLED: bool = False
+    WEB_APP_ORIGIN: str = ""
+    WEB_CSRF_SECRET: SecretStr = SecretStr("")
     REDIS_URL: str = "redis://redis:6379/0"
     WORKER_CONCURRENCY: int = Field(default=2, ge=1, le=8)
     # Legacy WORKER_CONCURRENCY remains the fixed lane count only.

@@ -1,0 +1,482 @@
+{
+  "components": {
+    "schemas": {
+      "TelegramExchangeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      },
+      "TelegramBrowserChallenge": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "confirmation_code",
+          "expires_at"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "confirmation_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "SchemaVersion": {
+        "type": "string",
+        "const": "web_api.v2"
+      },
+      "Timestamp": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "CsrfToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "csrf_token"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "csrf_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      },
+      "AuthSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "csrf_token",
+          "me"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "csrf_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "user",
+          "identities",
+          "memberships",
+          "session",
+          "features"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "identities": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/Identity"
+            }
+          },
+          "memberships": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/OrganizationMembership"
+            }
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionInfo"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Features"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "display_name",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "linked_at"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "telegram",
+              "email",
+              "oidc"
+            ]
+          },
+          "linked_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "OrganizationMembership": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization",
+          "role",
+          "joined_at"
+        ],
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "joined_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "team"
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "editor",
+          "viewer"
+        ]
+      },
+      "SessionInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issued_at",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "issued_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "idle_expires_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "absolute_expires_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "Features": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "copilot_requests",
+          "mentor",
+          "telegram_history",
+          "web_chat",
+          "team_organizations",
+          "email_login",
+          "brand_reimport",
+          "documents"
+        ],
+        "properties": {
+          "copilot_requests": {
+            "type": "boolean"
+          },
+          "mentor": {
+            "type": "boolean"
+          },
+          "telegram_history": {
+            "type": "boolean"
+          },
+          "web_chat": {
+            "type": "boolean"
+          },
+          "team_organizations": {
+            "type": "boolean"
+          },
+          "email_login": {
+            "type": "boolean"
+          },
+          "brand_reimport": {
+            "type": "boolean"
+          },
+          "documents": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "kind",
+          "code",
+          "request_id"
+        ],
+        "properties": {
+          "schema_version": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "kind": {
+            "type": "string",
+            "const": "ERROR"
+          },
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,64}$"
+          },
+          "retry_after_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "owned_site": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OwnedSiteResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quota": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QuotaInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "unauthenticated",
+          "login_token_invalid",
+          "csrf_failed",
+          "forbidden",
+          "feature_disabled",
+          "not_found",
+          "mentor_explanation_missing",
+          "request_conflict",
+          "revision_conflict",
+          "thread_busy",
+          "stale_thread",
+          "stale_project",
+          "idempotency_conflict",
+          "confirmation_changed",
+          "confirmation_unavailable",
+          "telegram_identity_required",
+          "import_source_missing",
+          "mentor_not_applicable",
+          "result_not_ready",
+          "result_format_unsupported",
+          "result_gone",
+          "payload_too_large",
+          "invalid_request",
+          "invalid_confirmation",
+          "rate_limited",
+          "quota_exceeded",
+          "temporarily_unavailable",
+          "result_corrupted",
+          "result_unreadable"
+        ]
+      },
+      "OwnedSiteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ACQUIRED",
+              "UNSAFE_SOURCE",
+              "SOURCE_UNAVAILABLE",
+              "EMPTY_CONTENT",
+              "CAPABILITY_UNAVAILABLE",
+              "INVALID_EXTRACTION"
+            ]
+          },
+          "snapshot_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+          },
+          "candidates": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/ConfirmationCandidate"
+            }
+          }
+        }
+      },
+      "ConfirmationCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "statement_id",
+          "field",
+          "statement",
+          "source_url"
+        ],
+        "properties": {
+          "statement_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "stated_product_service",
+              "stated_features_capabilities",
+              "stated_value_propositions"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "source_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "trust": {
+            "type": "string",
+            "const": "site_claim"
+          }
+        }
+      },
+      "QuotaInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "window",
+          "resets_at"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "user",
+              "organization"
+            ]
+          },
+          "window": {
+            "type": "string",
+            "enum": [
+              "day"
+            ]
+          },
+          "resets_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      }
+    }
+  }
+}
