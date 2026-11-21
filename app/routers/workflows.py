@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from app.schemas import BrandProfileUpdate
+from app.telegram_admission import require_ready_profile
 from app.security import require_actor, require_bot
 from app.workflows.delivery import DeliveryService
 from app.workflows.queue import RedisWakeups
@@ -24,7 +25,7 @@ async def call(operation):
         raise HTTPException(exc.status, str(exc)) from exc
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, dependencies=[Depends(require_ready_profile)])
 async def start(payload: StartRequest, actor: int = Depends(require_actor)):
     return await call(workflow.start(actor, payload))
 
@@ -47,12 +48,12 @@ async def status(run_id: OpaqueId, actor: int = Depends(require_actor)):
     return await call(workflow.status(actor, run_id))
 
 
-@router.patch("/{run_id}/context", status_code=202)
+@router.patch("/{run_id}/context", status_code=202, dependencies=[Depends(require_ready_profile)])
 async def context(run_id: OpaqueId, payload: BusinessInput, actor: int = Depends(require_actor)):
     return await call(workflow.context(actor, run_id, payload))
 
 
-@router.post("/{run_id}/continue", status_code=202)
+@router.post("/{run_id}/continue", status_code=202, dependencies=[Depends(require_ready_profile)])
 async def continue_run(run_id: OpaqueId, payload: ContinueRequest, actor: int = Depends(require_actor)):
     return await call(workflow.continue_run(actor, run_id, payload.action))
 

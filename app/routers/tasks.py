@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.telegram_admission import require_ready_profile
 from app.security import authorize_legacy_request
 from app.schemas import (
     TaskRead,
@@ -47,7 +48,7 @@ async def get_tasks_by_user(
     )
 
 
-@router.post("/start", response_model=TaskNeedInfoResponse | TaskDoneResponse)
+@router.post("/start", response_model=TaskNeedInfoResponse | TaskDoneResponse, dependencies=[Depends(require_ready_profile)])
 async def start_task(
     payload: TaskStartRequest,
     session: AsyncSession = Depends(get_session),
@@ -69,7 +70,7 @@ async def start_task(
     return response
 
 
-@router.post("/answer", response_model=TaskNeedInfoResponse | TaskDoneResponse)
+@router.post("/answer", response_model=TaskNeedInfoResponse | TaskDoneResponse, dependencies=[Depends(require_ready_profile)])
 async def answer_task(
     payload: TaskAnswerRequest,
     session: AsyncSession = Depends(get_session),
