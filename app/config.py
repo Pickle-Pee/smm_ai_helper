@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     HTTP_RETRIES: int = 2
     HTTP_BACKOFF: float = 0.5
 
+    def telegram_onboarding_enabled_for(self, actor: int) -> bool:
+        return self.TELEGRAM_ONBOARDING_ENABLED and actor in self.TELEGRAM_ONBOARDING_COHORT
+
     @model_validator(mode="after")
     def graph_execution_window(self):
         if not 0 < self.HTTP_TIMEOUT < self.GRAPH_TIMEOUT_SECONDS < self.GRAPH_LEASE_SECONDS:

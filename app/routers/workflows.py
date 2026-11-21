@@ -4,11 +4,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from app.config import settings
 from app.db import get_session
 from app.schemas import BrandProfileUpdate
 from app.services.telegram_onboarding import current_step
 from sqlalchemy.exc import SQLAlchemyError
-from app.telegram_admission import onboarding_enabled, require_ready_profile
+from app.telegram_admission import require_ready_profile
 from app.security import require_actor, require_bot
 from app.workflows.delivery import DeliveryService
 from app.workflows.queue import RedisWakeups
@@ -47,7 +48,7 @@ class PreferredName(BaseModel):
 
 @router.get("/onboarding")
 async def onboarding(actor: int = Depends(require_actor), db=Depends(get_session)):
-    if not onboarding_enabled(actor):
+    if not settings.telegram_onboarding_enabled_for(actor):
         return {"step": "disabled"}
     try:
         step = await current_step(db, actor)
@@ -59,7 +60,7 @@ async def onboarding(actor: int = Depends(require_actor), db=Depends(get_session
 
 @router.put("/onboarding/name")
 async def preferred_name(body: PreferredName, actor: int = Depends(require_actor)):
-    if not onboarding_enabled(actor):
+    if not settings.telegram_onboarding_enabled_for(actor):
         raise HTTPException(404, "Not found")
     if any(ord(char) < 32 for char in body.name):
         raise HTTPException(422, "invalid_request")
@@ -77,7 +78,7 @@ async def profile(payload: BrandProfileUpdate, actor: int = Depends(require_acto
         raise HTTPException(422, "Укажите данные бизнеса.")
     if onboarding_step is None:
         return await call(workflow.set_profile(actor, values))
-    if not onboarding_enabled(actor):
+    if not settings.telegram_onboarding_enabled_for(actor):
         raise HTTPException(404, "Not found")
     field = {"product": "product_description", "audience": "audience", "goal": "goals"}[onboarding_step]
     value = values.get(field)

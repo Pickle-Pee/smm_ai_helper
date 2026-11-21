@@ -24,6 +24,7 @@ def test_resume_partial_profile_and_ignore_duplicate_answers(mvp_database, actor
 
     monkeypatch.setitem(app.dependency_overrides, get_session, database)
     owner, stranger = actors
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset(actors))
 
     async def run():
         async with mvp_database.begin() as db:

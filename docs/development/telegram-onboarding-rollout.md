@@ -5,7 +5,7 @@ Deploy only after review, green PostgreSQL and container CI, and the separate pr
 ## Cohort and rollback
 
 - Default: TELEGRAM_ONBOARDING_ENABLED=false in both bot and backend.
-- Closed cohort: use TELEGRAM_ONBOARDING_ENABLED=true with TELEGRAM_ONBOARDING_COHORT set to the same nonempty JSON array of numeric Telegram user IDs in both processes. Keep this array in trusted runtime configuration. An empty array with the flag enabled applies to all authenticated Telegram users.
+- Closed cohort: use TELEGRAM_ONBOARDING_ENABLED=true with TELEGRAM_ONBOARDING_COHORT set to the same nonempty JSON array of numeric Telegram user IDs in both processes. Keep this array in trusted runtime configuration. An empty or omitted cohort leaves onboarding disabled for everyone.
 - First verify a fresh actor and existing actors with complete and partial profiles. Verify retry, restart, saved results, profile editing, and delivery. Confirm off-cohort behavior with an additional actor.
 - Roll back by setting the flag to false in both processes. Keep revision 0019 and the persisted data in place. Flags control admission and UX only.
 

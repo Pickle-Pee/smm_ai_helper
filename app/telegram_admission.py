@@ -16,16 +16,11 @@ from app.services.telegram_onboarding import missing_brand_steps
 log = logging.getLogger("telegram_onboarding")
 
 
-def onboarding_enabled(actor: int) -> bool:
-    cohort = settings.TELEGRAM_ONBOARDING_COHORT
-    return settings.TELEGRAM_ONBOARDING_ENABLED and (not cohort or actor in cohort)
-
-
 async def require_ready_profile(
     actor: int = Depends(require_actor),
     db: AsyncSession = Depends(get_session),
 ) -> None:
-    if not onboarding_enabled(actor):
+    if not settings.telegram_onboarding_enabled_for(actor):
         return
     try:
         owner = await IdentityService.resolve_telegram_user_id(db, actor)
