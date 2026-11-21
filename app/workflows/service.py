@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,9 @@ from app.services.telegram_onboarding import next_step
 from app.services.job_persistence_service import JobPersistenceService
 from app.services.worker_drain_service import claim_admitted, record_attempt, end_attempt, release_attempt
 from app.workflows.schemas import BusinessInput, StartRequest
+
+
+onboarding_log = logging.getLogger("telegram_onboarding")
 
 
 def utcnow():
@@ -143,7 +147,10 @@ class MarketingWorkflowService:
                 await session.flush()
             elif replace:
                 name.display_name = display_name
-            return await next_step(session, user.id)
+            following = await next_step(session, user.id)
+        if name is None:
+            onboarding_log.info("event=answer_saved step=name next_step=%s", following)
+        return following
 
     async def set_profile(self, actor, values, onboarding_step=None):
         async with self.sessions() as session:
@@ -157,7 +164,9 @@ class MarketingWorkflowService:
             # BrandProfileService explicitly owns this isolated transaction.
             profile = await BrandProfileService.upsert_for_user(session, user.id, values)
             if onboarding_step is not None:
-                return {"step": await next_step(session, user.id)}
+                following = await next_step(session, user.id)
+                onboarding_log.info("event=answer_saved step=%s next_step=%s", onboarding_step, following)
+                return {"step": following}
             return BrandProfileService.to_context(profile)
 
     async def continue_run(self, actor, run_id, action):

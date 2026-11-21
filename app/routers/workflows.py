@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -49,7 +50,9 @@ async def onboarding(actor: int = Depends(require_actor), db=Depends(get_session
     if not onboarding_enabled(actor):
         return {"step": "disabled"}
     try:
-        return {"step": await current_step(db, actor)}
+        step = await current_step(db, actor)
+        logging.getLogger("telegram_onboarding").info("event=resume step=%s", step)
+        return {"step": step}
     except (SQLAlchemyError, OSError):
         raise HTTPException(503, "temporarily_unavailable") from None
 
