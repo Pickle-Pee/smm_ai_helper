@@ -15,6 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from pydantic import ValidationError
 
+from app.config import settings
 from bot import backend
 from bot.handlers import web_login
 from bot.rendering import send_text
@@ -334,10 +335,58 @@ async def show_profile(message, actor):
     await send_text(message, introduction + "\n\n" + ("\n\n".join(lines) or "Сведения ещё не заполнены."), reply_markup=inline(buttons))
 
 
+ONBOARDING_QUESTIONS = {
+    "name": "Как к вам обращаться?",
+    "product": "Что за продукт или услугу вы предлагаете?",
+    "audience": "Кто ваша целевая аудитория?",
+    "goal": "Какова цель продвижения?",
+    "edit_name": "Как теперь к вам обращаться?",
+}
+
+
+def onboarding_enabled(actor: int) -> bool:
+    cohort = settings.TELEGRAM_ONBOARDING_COHORT
+    return settings.TELEGRAM_ONBOARDING_ENABLED and (not cohort or actor in cohort)
+
+
+async def onboarding_step(actor: int) -> str:
+    data = await backend.request("GET", "/workflows/onboarding", actor)
+    step = data.get("step")
+    if step not in {"name", "product", "audience", "goal", "ready", "disabled"}:
+        raise backend.BackendError("Unknown onboarding state")
+    return step
+
+
+async def ask_onboarding(message, step: str):
+    await message.answer(ONBOARDING_QUESTIONS[step], reply_markup=types.ForceReply())
+
+
+async def resume_onboarding(message, actor, *, welcome=False) -> bool:
+    if not onboarding_enabled(actor):
+        return False
+    try:
+        step = await onboarding_step(actor)
+        if step in {"ready", "disabled"}:
+            return False
+        if welcome and step == "name":
+            await message.answer("Привет! Я помогу с продвижением. Сначала познакомимся и сохраним сведения о вашем бизнесе.")
+        await ask_onboarding(message, step)
+    except backend.BackendError:
+        await message.answer("Анкета временно недоступна. Попробуйте /start ещё раз.")
+    return True
+
+
+@router.message(Command("name"))
+async def edit_preferred_name(message: types.Message):
+    if await private(message) and onboarding_enabled(message.from_user.id):
+        await ask_onboarding(message, "edit_name")
+
+
 @router.message(CommandStart())
 @router.message(Command("menu"))
 async def start(message: types.Message):
-    if await private(message): await show_menu(message)
+    if await private(message) and not await resume_onboarding(message, message.from_user.id, welcome=True):
+        await show_menu(message)
 
 
 @router.message(Command("new", "history", "projects", "active", "help"))
@@ -346,7 +395,9 @@ async def navigate(message: types.Message, state: FSMContext):
     if not await private(message): return
     text = message.text.split("@")[0].split()[0] if message.text.startswith("/") else message.text
     try:
-        if text in {NEW, "/new"}: await new_request(message, state)
+        if text in {NEW, "/new"}:
+            if not await resume_onboarding(message, message.from_user.id):
+                await new_request(message, state)
         elif text in {HISTORY, "🕘 История запросов", "📂 Мои проекты", "/history", "/projects"}:
             await show_history(message, message.from_user.id)
         elif text in {CONTEXT, "/active"}:
@@ -377,6 +428,8 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
         if not isinstance(data, str) or len(data.encode()) > 64: raise ValueError("Invalid callback")
         parts = data.split(":")
         if data == "pn:home":
+            if await resume_onboarding(event.message, event.from_user.id):
+                return
             if await state.get_state() in {s.state for s in NavigationStates.__all_states__}: await state.clear()
             await show_menu(event.message)
         elif data == "pn:types":
@@ -390,7 +443,7 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
             await send_text(event.message, "Введите начало названия (до 100 символов). Будут показаны первые 8 совпадений. Вернуться: «Главное меню».", reply_markup=inline([("Главное меню", "pn:home")]))
         elif data == "pn:profile":
             await state.set_state(NavigationStates.profile_product)
-            await send_text(event.message, "Что за продукт или услугу вы предлагаете?", reply_markup=inline([("Главное меню", "pn:home")]))
+            await send_text(event.message, ONBOARDING_QUESTIONS["product"], reply_markup=inline([("Главное меню", "pn:home")]))
         elif len(parts) == 5 and parts[1] == "p" and re.fullmatch(r"0|[1-9][0-9]{0,4}", parts[2]) and int(parts[2]) <= 10000 and parts[3] in SOURCES and parts[4] in STATUSES:
             await show_history(event.message, event.from_user.id, offset=int(parts[2]), source=parts[3], status=parts[4])
         elif len(parts) in {3, 4} and parts[1] in {"c", "v", "d", "f", "a", "n"}:
@@ -468,13 +521,13 @@ async def form_input(message: types.Message, state: FSMContext):
         elif current == NavigationStates.profile_product.state:
             await state.update_data(navigation_profile={"product_description": value})
             await state.set_state(NavigationStates.profile_audience)
-            await send_text(message, "Кто ваша целевая аудитория?")
+            await send_text(message, ONBOARDING_QUESTIONS["audience"])
         elif current == NavigationStates.profile_audience.state:
             data = (await state.get_data())["navigation_profile"]
             data["audience"] = value
             await state.update_data(navigation_profile=data)
             await state.set_state(NavigationStates.profile_goal)
-            await send_text(message, "Какова цель продвижения?")
+            await send_text(message, ONBOARDING_QUESTIONS["goal"])
         else:
             data = (await state.get_data())["navigation_profile"]
             data["goals"] = [value]
@@ -483,6 +536,44 @@ async def form_input(message: types.Message, state: FSMContext):
             await send_text(message, "Профиль бизнеса сохранён. Выберите «Новый запрос», чтобы использовать его в новой работе.", reply_markup=main_keyboard())
     except (backend.BackendError, ValueError, KeyError, TypeError):
         await send_text(message, "Не удалось подтвердить действие. Попробуйте позже или вернитесь в главное меню.", reply_markup=main_keyboard())
+
+
+@router.message(F.text, ~F.text.startswith("/"), F.chat.type == "private")
+async def onboarding_input(message: types.Message):
+    actor = message.from_user.id
+    if actor != message.chat.id or not onboarding_enabled(actor):
+        raise SkipHandler()
+    reply = message.reply_to_message
+    step = next((key for key, text in ONBOARDING_QUESTIONS.items() if reply and reply.text == text
+                 and reply.from_user and reply.from_user.id == message.bot.id), None)
+    if step is None:
+        if await resume_onboarding(message, actor):
+            return
+        raise SkipHandler()
+    value = message.text.strip()
+    if not value or len(value) > (100 if step in {"name", "edit_name"} else 2000):
+        await message.answer("Введите непустой ответ допустимой длины.")
+        await ask_onboarding(message, step)
+        return
+    try:
+        if step in {"name", "edit_name"}:
+            result = await backend.request("PUT", "/workflows/onboarding/name", actor,
+                                           payload={"name": value, "replace": step == "edit_name"})
+        else:
+            field = {"product": "product_description", "audience": "audience", "goal": "goals"}[step]
+            result = await backend.request("PUT", f"/workflows/profile?onboarding_step={step}", actor,
+                                           payload={field: [value] if step == "goal" else value})
+        following = result.get("step")
+        if following == "ready":
+            await message.answer("Имя сохранено." if step == "edit_name" else "Профиль сохранён.")
+            await show_menu(message)
+        elif following in {"name", "product", "audience", "goal"}:
+            await ask_onboarding(message, following)
+        else:
+            raise backend.BackendError("Unknown onboarding state")
+    except backend.BackendError:
+        await message.answer("Сохранение не подтверждено. Ответьте ещё раз на тот же вопрос.")
+        await ask_onboarding(message, step)
 
 
 @context_router.message(F.text, ~F.text.startswith("/"))

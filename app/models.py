@@ -161,6 +161,13 @@ class Task(Base):
     user: Mapped[User | None] = relationship(back_populates="tasks")
 
 
+class UserPreferredName(Base):
+    __tablename__ = "user_preferred_names"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+
+
 class BrandProfile(Base):
     __tablename__ = "brand_profiles"
     __table_args__ = (UniqueConstraint("user_id", name="brand_profiles_user_id_key"),)
