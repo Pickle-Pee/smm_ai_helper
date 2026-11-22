@@ -404,7 +404,8 @@ async def chat(
                 fmt["strict"] = True
 
         payload["text"] = {"format": fmt}
-        payload["reasoning"] = {"effort": "low"}
+        if not model.startswith("gpt-4"):
+            payload["reasoning"] = {"effort": "low"}
 
     # A governed workflow accounts for every POST, including nested capabilities.
     hooks = provider_hooks()
