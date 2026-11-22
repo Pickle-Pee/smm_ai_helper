@@ -122,6 +122,23 @@ def test_card_is_read_only_and_stale_activation_cannot_switch_back(monkeypatch):
     asyncio.run(check())
 
 
+@pytest.mark.parametrize("status", ["COMPLETED", "COMPLETED_WITH_LIMITATIONS"])
+def test_open_saved_graph_result_from_json_without_starting_work(monkeypatch, status):
+    public_id = "g:" + RID
+    saved = {**item(public_id), "result": {
+        "schema_version": "copilot_api.v1", "run_id": RID, "status": status,
+        "limitations": ["Ограничение сохранённой стратегии"],
+    }}
+    request = AsyncMock(return_value=saved)
+    monkeypatch.setattr(backend, "request", request)
+    event = click(nav.callback("v", public_id))
+
+    asyncio.run(nav.navigation_callback(event, context()))
+
+    assert "Ограничение сохранённой стратегии" in text_sent(event.message)
+    request.assert_awaited_once_with("GET", f"/projects/items/{public_id}", 123)
+
+
 def test_restart_dispatcher_reads_durable_selection_and_routes_followups(monkeypatch):
     from bot.main import create_dispatcher
     fake, sent, llm = OfflineProjects(), AsyncMock(return_value=True), AsyncMock()
