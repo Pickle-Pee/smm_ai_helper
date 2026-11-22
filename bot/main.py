@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from app.config import settings
 from app.logging import setup_logging
-from bot.backend import validate_configuration
+from bot.backend import validate_configuration, validate_onboarding_configuration
 from bot.handlers import menu, agent_flow, history, chat, workflow, copilot, mentor
 from bot.delivery import delivery_loop
 from bot.operation_guard import OperationGuard
@@ -64,6 +64,7 @@ async def register_commands(bot):
 async def main():
     setup_logging()
     validate_configuration()
+    await validate_onboarding_configuration()
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     dp = create_dispatcher()
     # Close the Telegram session only after the delivery owner has stopped.

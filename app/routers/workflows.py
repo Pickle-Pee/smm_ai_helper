@@ -1,13 +1,13 @@
 import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.config import settings
 from app.db import get_session
 from app.schemas import BrandProfileUpdate
-from app.services.telegram_onboarding import current_step
+from app.services.telegram_onboarding import current_progress
 from sqlalchemy.exc import SQLAlchemyError
 from app.telegram_admission import require_ready_profile
 from app.security import require_actor, require_bot
@@ -21,6 +21,7 @@ delivery_router = APIRouter(prefix="/internal/delivery", tags=["bot-delivery"], 
 workflow = MarketingWorkflowService(queue=RedisWakeups())
 delivery = DeliveryService()
 OpaqueId = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$", max_length=32)]
+TelegramMessageId = Annotated[int, Field(gt=0, lt=2**63, strict=True)]
 
 
 async def call(operation):
@@ -44,16 +45,29 @@ class PreferredName(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     replace: bool = False
+    answer_message_id: TelegramMessageId | None = None
+
+
+@router.get("/onboarding/config", dependencies=[Depends(require_bot)])
+async def onboarding_config():
+    return {"signature": settings.telegram_onboarding_signature()}
 
 
 @router.get("/onboarding")
-async def onboarding(actor: int = Depends(require_actor), db=Depends(get_session)):
+async def onboarding(
+    include_name: bool = False,
+    message_id: Annotated[int, Query(gt=0, lt=2**63)] | None = None,
+    actor: int = Depends(require_actor),
+    db=Depends(get_session),
+):
     if not settings.telegram_onboarding_enabled_for(actor):
         return {"step": "disabled"}
     try:
-        step = await current_step(db, actor)
+        step, name = await current_progress(db, actor)
         logging.getLogger("telegram_onboarding").info("event=resume step=%s", step)
-        return {"step": step}
+        if message_id is not None and name and message_id <= (name.last_onboarding_message_id or 0):
+            return {"step": "replayed"}
+        return {"step": step, "preferred_name": name.display_name if name else None} if include_name else {"step": step}
     except (SQLAlchemyError, OSError):
         raise HTTPException(503, "temporarily_unavailable") from None
 
@@ -65,14 +79,17 @@ async def preferred_name(body: PreferredName, actor: int = Depends(require_actor
     if any(ord(char) < 32 for char in body.name):
         raise HTTPException(422, "invalid_request")
     try:
-        return {"step": await call(workflow.save_preferred_name(actor, body.name, replace=body.replace))}
+        return {"step": await call(workflow.save_preferred_name(
+            actor, body.name, replace=body.replace, answer_message_id=body.answer_message_id
+        ))}
     except (SQLAlchemyError, OSError):
         raise HTTPException(503, "temporarily_unavailable") from None
 
 
 @router.put("/profile")
 async def profile(payload: BrandProfileUpdate, actor: int = Depends(require_actor),
-                  onboarding_step: Literal["product", "audience", "goal"] | None = None):
+                  onboarding_step: Literal["product", "audience", "goal"] | None = None,
+                  answer_message_id: Annotated[int, Query(gt=0, lt=2**63)] | None = None):
     values = payload.model_dump(exclude_unset=True)
     if not values:
         raise HTTPException(422, "Укажите данные бизнеса.")
@@ -88,7 +105,7 @@ async def profile(payload: BrandProfileUpdate, actor: int = Depends(require_acto
             or len(value) > 2000 or "\x00" in value):
         raise HTTPException(422, "invalid_request")
     try:
-        return await call(workflow.set_profile(actor, values, onboarding_step))
+        return await call(workflow.set_profile(actor, values, onboarding_step, answer_message_id=answer_message_id))
     except (SQLAlchemyError, OSError):
         raise HTTPException(503, "temporarily_unavailable") from None
 

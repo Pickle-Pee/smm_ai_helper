@@ -136,31 +136,44 @@ class MarketingWorkflowService:
         await self._wake(job_id)
         return await self.status(actor, run_id)
 
-    async def save_preferred_name(self, actor: int, display_name: str, *, replace: bool) -> str:
+    async def save_preferred_name(
+        self, actor: int, display_name: str, *, replace: bool, answer_message_id: int | None = None,
+    ) -> str:
         async with self.sessions() as session, session.begin():
             user = await self._user(session, actor)
             if await IdentityService.resolve_telegram_user_id(session, actor) != user.id:
                 raise WorkflowError("Identity unavailable", 503)
             name = await session.get(UserPreferredName, user.id)
             if name is None:
-                session.add(UserPreferredName(user_id=user.id, display_name=display_name))
+                session.add(UserPreferredName(user_id=user.id, display_name=display_name,
+                                              last_onboarding_message_id=answer_message_id))
                 await session.flush()
+            elif answer_message_id is not None and answer_message_id <= (name.last_onboarding_message_id or 0):
+                return "replayed"
             elif replace:
                 name.display_name = display_name
+                if answer_message_id is not None:
+                    name.last_onboarding_message_id = answer_message_id
             following = await next_step(session, user.id)
         if name is None:
             onboarding_log.info("event=answer_saved step=name next_step=%s", following)
         return following
 
-    async def set_profile(self, actor, values, onboarding_step=None):
+    async def set_profile(self, actor, values, onboarding_step=None, *, answer_message_id=None):
         async with self.sessions() as session:
             user = await self._user(session, actor)
             if onboarding_step is not None:
                 if await IdentityService.resolve_telegram_user_id(session, actor) != user.id:
                     raise WorkflowError("Identity unavailable", 503)
+                name = await session.get(UserPreferredName, user.id)
+                if (name is not None and answer_message_id is not None
+                        and answer_message_id <= (name.last_onboarding_message_id or 0)):
+                    return {"step": "replayed"}
                 current = await next_step(session, user.id)
                 if current != onboarding_step:
                     return {"step": current}
+                if name is not None and answer_message_id is not None:
+                    name.last_onboarding_message_id = answer_message_id
             # BrandProfileService explicitly owns this isolated transaction.
             profile = await BrandProfileService.upsert_for_user(session, user.id, values)
             if onboarding_step is not None:

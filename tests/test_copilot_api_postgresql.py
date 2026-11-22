@@ -155,23 +155,45 @@ def test_brand_context_and_explicit_empty_precedence(mvp_database, monkeypatch):
     monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "api-test")
     async def check():
         actor = int(uuid.uuid4().hex[:12], 16)
+        other = actor + 1
         model = FakeModel()
         api = configured(mvp_database, IntentKind.POST_GENERATION, module_model=model)
         async with mvp_database() as session, session.begin():
-            user = User(telegram_id=actor)
-            session.add(user)
+            user, stranger = User(telegram_id=actor), User(telegram_id=other)
+            session.add_all([user, stranger])
             await session.flush()
-            session.add(BrandProfile(user_id=user.id, product_description="Saved product", audience="Saved audience",
-                                     extra_json={"message": "Saved message"}))
+            session.add_all([
+                BrandProfile(user_id=user.id, product_description="Saved product", audience="Saved audience",
+                             goals=["Saved goal"], extra_json={"message": "Saved message"}),
+                BrandProfile(user_id=stranger.id, product_description="Other product", audience="Other audience",
+                             goals=["Other goal"], extra_json={"message": "Other message"}),
+            ])
         try:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application(api)), base_url="http://test") as client:
                 response = await client.post("/copilot/execute", headers=headers(actor), json=payload(context={}))
                 assert response.status_code == 200 and response.json()["kind"] == "MODULE_RESULT", response.text
-                assert "Saved product" in model.calls[0]["text"]
+                original_input = model.calls[0]["text"]
+                assert all(value in original_input for value in ("Saved product", "Saved audience", "Saved goal"))
+                assert "Other product" not in original_input
                 response = await client.post("/copilot/execute", headers=headers(actor), json=payload(context={"product": ""}))
                 assert response.json()["kind"] == "NEEDS_INPUT" and len(model.calls) == 1
+                async with mvp_database.begin() as session:
+                    profile = await session.scalar(select(BrandProfile).where(BrandProfile.user_id == user.id))
+                    profile.product_description = "Edited product"
+                    profile.audience = "Edited audience"
+                    profile.goals = ["Edited goal"]
+                response = await client.post("/copilot/execute", headers=headers(actor), json=payload(context={}))
+                assert response.status_code == 200, response.text
+                assert all(value in model.calls[1]["text"] for value in ("Edited product", "Edited audience", "Edited goal"))
+                assert "Saved product" not in model.calls[1]["text"]
+                response = await client.post("/copilot/execute", headers=headers(other), json=payload(context={}))
+                assert response.status_code == 200, response.text
+                assert all(value in model.calls[2]["text"] for value in ("Other product", "Other audience", "Other goal"))
+                assert "Edited product" not in model.calls[2]["text"]
+                assert "Saved product" in original_input
         finally:
             await remove_actor(mvp_database, actor)
+            await remove_actor(mvp_database, other)
     asyncio.run(check())
 
 

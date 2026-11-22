@@ -19,13 +19,19 @@ def missing_brand_steps(profile: BrandProfile | None) -> tuple[str, ...]:
     return tuple(step for step, ready in checks.items() if not ready)
 
 
-async def next_step(db, user_id: int | None) -> str:
-    if user_id is None or await db.get(UserPreferredName, user_id) is None:
-        return "name"
+async def _progress(db, user_id: int | None) -> tuple[str, UserPreferredName | None]:
+    name = await db.get(UserPreferredName, user_id) if user_id is not None else None
+    if name is None:
+        return "name", None
     profile = await BrandProfileService.get_by_user_id(db, user_id)
-    return next(iter(missing_brand_steps(profile)), "ready")
+    return next(iter(missing_brand_steps(profile)), "ready"), name
 
 
-async def current_step(db, actor: int) -> str:
+async def next_step(db, user_id: int | None) -> str:
+    step, _ = await _progress(db, user_id)
+    return step
+
+
+async def current_progress(db, actor: int) -> tuple[str, UserPreferredName | None]:
     user_id = await IdentityService.resolve_telegram_user_id(db, actor)
-    return await next_step(db, user_id)
+    return await _progress(db, user_id)

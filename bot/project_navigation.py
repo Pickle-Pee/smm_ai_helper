@@ -166,9 +166,9 @@ def clear_old_actions(actor):
     ACTION_EXPIRES.pop(str(actor), None)
 
 
-async def show_menu(message):
-    await message.answer("SMM AI Helper\nВыберите сохранённый проект или начните новый запрос.",
-                         reply_markup=main_keyboard(private_login=message.chat.type == 'private'), parse_mode=None)
+async def show_menu(message, text="SMM AI Helper\nВыберите сохранённый проект или начните новый запрос."):
+    await message.answer(text, reply_markup=main_keyboard(private_login=message.chat.type == "private"),
+                         parse_mode=None)
 
 
 async def new_request(message, state):
@@ -326,6 +326,10 @@ async def show_profile(message, actor):
         return
     if not isinstance(data, dict): raise ValueError("Invalid profile")
     lines = []
+    if settings.telegram_onboarding_enabled_for(actor):
+        _, name = await onboarding_progress(actor, include_name=True)
+        if name:
+            lines.append(f"Имя: {name}")
     for key, label in (("brand_name", "Название"), ("product_description", "Продукт"), ("audience", "Аудитория"),
                        ("goals", "Цели"), ("channels", "Каналы"), ("tone", "Тон общения")):
         value = data.get(key)
@@ -337,52 +341,93 @@ async def show_profile(message, actor):
 
 
 ONBOARDING_QUESTIONS = {
-    "name": "Как к вам обращаться?",
-    "product": "Что за продукт или услугу вы предлагаете?",
-    "audience": "Кто ваша целевая аудитория?",
-    "goal": "Какова цель продвижения?",
+    "name": "Как к тебе обращаться?",
+    "product": "Расскажи коротко, что за продукт или услугу ты предлагаешь?",
+    "audience": "Кто твоя целевая аудитория?",
+    "goal": "Какую главную задачу ты хочешь решить с помощью продвижения?",
     "edit_name": "Как теперь к вам обращаться?",
+}
+WELCOME = (
+    "Привет! Я SMM AI Helper. Помогу разобраться с продвижением, подготовить контент "
+    "и маркетинговые решения для твоего бизнеса.\n\nДля начала давай познакомимся. "
+    + ONBOARDING_QUESTIONS["name"]
+)
+ONBOARDING_COMPLETE = (
+    "Отлично, теперь я немного знаю о твоём бизнесе и могу давать более конкретные рекомендации.\n\n"
+    "Всё готово! С чего начнём?"
+)
+# Replies to questions sent before deployment still carry their original text.
+ONBOARDING_REPLIES = {text: step for step, text in ONBOARDING_QUESTIONS.items()} | {
+    WELCOME: "name",
+    "Как к вам обращаться?": "name",
+    "Что за продукт или услугу вы предлагаете?": "product",
+    "Кто ваша целевая аудитория?": "audience",
+    "Какова цель продвижения?": "goal",
 }
 
 
-async def onboarding_step(actor: int) -> str:
-    data = await backend.request("GET", "/workflows/onboarding", actor)
+async def onboarding_progress(actor: int, *, include_name=False, message_id=None) -> tuple[str, str | None]:
+    path = "/workflows/onboarding"
+    if include_name:
+        path += "?include_name=true"
+    elif message_id is not None:
+        path += f"?message_id={message_id}"
+    data = await backend.request("GET", path, actor)
     step = data.get("step")
-    if step not in {"name", "product", "audience", "goal", "ready", "disabled"}:
+    name = data.get("preferred_name")
+    if (step not in {"name", "product", "audience", "goal", "ready", "replayed"}
+            or (name is not None and not isinstance(name, str))):
         raise backend.BackendError("Unknown onboarding state")
-    return step
+    return step, name
 
 
-async def ask_onboarding(message, step: str):
-    await message.answer(ONBOARDING_QUESTIONS[step], reply_markup=types.ForceReply())
+async def ask_onboarding(message, state: FSMContext, step: str, *, welcome=False):
+    prompt = await message.answer(WELCOME if welcome else ONBOARDING_QUESTIONS[step],
+                                  reply_markup=types.ForceReply(), parse_mode=None)
+    # Plain text must have been sent after the prompt. PostgreSQL owns progress.
+    await state.update_data(onboarding_prompt=(step, prompt.message_id))
 
 
-async def resume_onboarding(message, actor, *, welcome=False) -> bool:
+async def resume_onboarding(
+    message, actor, state: FSMContext, *, welcome=False, greet=False, check_replay=False,
+) -> bool:
     if not settings.telegram_onboarding_enabled_for(actor):
         return False
     try:
-        step = await onboarding_step(actor)
-        if step in {"ready", "disabled"}:
+        step, name = await onboarding_progress(
+            actor, include_name=greet, message_id=message.message_id if check_replay else None,
+        )
+        if step == "replayed":
+            return True
+        if step == "ready":
+            await state.update_data(onboarding_prompt=None)
+            if greet and name:
+                await show_menu(message, f"Привет, {name}! С чего начнём?")
+                return True
             return False
-        if welcome and step == "name":
-            await message.answer("Привет! Я помогу с продвижением. Сначала познакомимся и сохраним сведения о вашем бизнесе.")
-        await ask_onboarding(message, step)
+        if await state.get_state() in {item.state for item in NavigationStates.__all_states__}:
+            await state.set_state(None)
+        await ask_onboarding(message, state, step, welcome=welcome and step == "name")
     except backend.BackendError:
         await message.answer("Анкета временно недоступна. Попробуйте /start ещё раз.")
     return True
 
 
 @router.message(Command("name"))
-async def edit_preferred_name(message: types.Message):
+async def edit_preferred_name(message: types.Message, state: FSMContext):
     if await private(message) and settings.telegram_onboarding_enabled_for(message.from_user.id):
-        await ask_onboarding(message, "edit_name")
+        if not await resume_onboarding(message, message.from_user.id, state):
+            if await state.get_state() in {item.state for item in NavigationStates.__all_states__}:
+                await state.set_state(None)
+            await ask_onboarding(message, state, "edit_name")
 
 
 @router.message(CommandStart())
 @router.message(Command("menu"))
-async def start(message: types.Message):
+async def start(message: types.Message, state: FSMContext):
     if await private(message) and not await resume_onboarding(
-            message, message.from_user.id, welcome=message.text.split()[0].split("@")[0] == "/start"):
+            message, message.from_user.id, state,
+            welcome=message.text.split()[0].split("@")[0] == "/start", greet=True):
         await show_menu(message)
 
 
@@ -393,7 +438,7 @@ async def navigate(message: types.Message, state: FSMContext):
     text = message.text.split("@")[0].split()[0] if message.text.startswith("/") else message.text
     try:
         if text in {NEW, "/new"}:
-            if not await resume_onboarding(message, message.from_user.id):
+            if not await resume_onboarding(message, message.from_user.id, state):
                 await new_request(message, state)
         elif text in {HISTORY, "🕘 История запросов", "📂 Мои проекты", "/history", "/projects"}:
             await show_history(message, message.from_user.id)
@@ -411,7 +456,8 @@ async def navigate(message: types.Message, state: FSMContext):
         else:
             # Leaving an unsubmitted form does not deactivate a saved project.
             if await state.get_state() in {s.state for s in NavigationStates.__all_states__}: await state.clear()
-            await show_menu(message)
+            if not await resume_onboarding(message, message.from_user.id, state):
+                await show_menu(message)
     except (backend.BackendError, ValueError, KeyError, TypeError):
         await send_text(message, "Не удалось подтвердить состояние проекта. Обновите историю или текущий контекст. Генерация автоматически не запускается.", reply_markup=main_keyboard())
 
@@ -425,7 +471,7 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
         if not isinstance(data, str) or len(data.encode()) > 64: raise ValueError("Invalid callback")
         parts = data.split(":")
         if data == "pn:home":
-            if await resume_onboarding(event.message, event.from_user.id):
+            if await resume_onboarding(event.message, event.from_user.id, state):
                 return
             if await state.get_state() in {s.state for s in NavigationStates.__all_states__}: await state.clear()
             await show_menu(event.message)
@@ -439,6 +485,8 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
             await state.set_state(NavigationStates.search)
             await send_text(event.message, "Введите начало названия (до 100 символов). Будут показаны первые 8 совпадений. Вернуться: «Главное меню».", reply_markup=inline([("Главное меню", "pn:home")]))
         elif data == "pn:profile":
+            if await resume_onboarding(event.message, event.from_user.id, state):
+                return
             await state.set_state(NavigationStates.profile_product)
             await send_text(event.message, ONBOARDING_QUESTIONS["product"], reply_markup=inline([("Главное меню", "pn:home")]))
         elif len(parts) == 5 and parts[1] == "p" and re.fullmatch(r"0|[1-9][0-9]{0,4}", parts[2]) and int(parts[2]) <= 10000 and parts[3] in SOURCES and parts[4] in STATUSES:
@@ -447,6 +495,8 @@ async def navigation_callback(event: types.CallbackQuery, state: FSMContext):
             public_id = unpack(parts[2])
             action = parts[1]
             if action in {"a", "n"}:
+                if await resume_onboarding(event.message, event.from_user.id, state):
+                    return
                 if len(parts) != 4 or not re.fullmatch(r"[0-9a-z]{1,13}", parts[3]): raise ValueError("Invalid version")
                 version = int(parts[3], 36)
                 if version >= 2**63: raise ValueError("Invalid version")
@@ -536,59 +586,87 @@ async def form_input(message: types.Message, state: FSMContext):
 
 
 @router.message(F.text, ~F.text.startswith("/"), F.chat.type == "private")
-async def onboarding_input(message: types.Message):
+async def onboarding_input(message: types.Message, state: FSMContext):
     actor = message.from_user.id
     if actor != message.chat.id or not settings.telegram_onboarding_enabled_for(actor):
         raise SkipHandler()
+    data = await state.get_data()
+    if message.message_id <= data.get("onboarding_consumed", 0):
+        return
+
     reply = message.reply_to_message
-    step = next((key for key, text in ONBOARDING_QUESTIONS.items() if reply and reply.text == text
-                 and reply.from_user and reply.from_user.id == message.bot.id), None)
-    if step is None:
-        if await resume_onboarding(message, actor):
+    prompt = data.get("onboarding_prompt")
+    if reply and reply.from_user and reply.from_user.id == message.bot.id:
+        step = ONBOARDING_REPLIES.get(reply.text)
+        if step:
+            if prompt and (prompt[0] != step or reply.message_id < prompt[1]):
+                return
+            await save_onboarding_answer(message, actor, state, step, message)
             return
-        raise SkipHandler()
-    await save_onboarding_answer(message, actor, step, message)
+
+    if prompt and not reply:
+        step, prompt_id = prompt
+        if message.message_id > prompt_id:
+            await save_onboarding_answer(message, actor, state, step, message)
+        return
+
+    if await resume_onboarding(message, actor, state, check_replay=True):
+        return
+    raise SkipHandler()
 
 
 @router.callback_query(F.data.startswith("onboarding_retry:"))
-async def retry_onboarding_answer(event: types.CallbackQuery):
+async def retry_onboarding_answer(event: types.CallbackQuery, state: FSMContext):
     if not await private(event):
         return
     await event.answer()
     step = event.data.removeprefix("onboarding_retry:")
     reply = getattr(event.message, "reply_to_message", None)
     actor = event.from_user.id
+    data = await state.get_data()
     if (step in ONBOARDING_QUESTIONS and settings.telegram_onboarding_enabled_for(actor) and reply
-            and reply.text and reply.from_user and reply.from_user.id == actor):
-        await save_onboarding_answer(event.message, actor, step, reply)
+            and reply.text and reply.from_user and reply.from_user.id == actor
+            and reply.message_id > data.get("onboarding_consumed", 0)):
+        await save_onboarding_answer(event.message, actor, state, step, reply)
 
 
-async def save_onboarding_answer(message, actor: int, step: str, answer):
+async def save_onboarding_answer(message, actor: int, state: FSMContext, step: str, answer):
     value = answer.text.strip()
-    if not value or len(value) > (100 if step in {"name", "edit_name"} else 2000):
+    is_name = step in {"name", "edit_name"}
+    if (not value or len(value) > (100 if is_name else 2000)
+            or (is_name and any(ord(char) < 32 for char in value)) or "\x00" in value):
         await message.answer("Введите непустой ответ допустимой длины.")
-        await ask_onboarding(message, step)
+        await ask_onboarding(message, state, step)
         return
     try:
-        if step in {"name", "edit_name"}:
+        if is_name:
             result = await backend.request("PUT", "/workflows/onboarding/name", actor,
-                                           payload={"name": value, "replace": step == "edit_name"})
+                                           payload={"name": value, "replace": step == "edit_name",
+                                                    "answer_message_id": answer.message_id})
         else:
             field = {"product": "product_description", "audience": "audience", "goal": "goals"}[step]
-            result = await backend.request("PUT", f"/workflows/profile?onboarding_step={step}", actor,
-                                           payload={field: [value] if step == "goal" else value})
+            path = f"/workflows/profile?onboarding_step={step}&answer_message_id={answer.message_id}"
+            result = await backend.request("PUT", path, actor, payload={field: [value] if step == "goal" else value})
         following = result.get("step")
-        if following == "ready":
-            await message.answer("Имя сохранено." if step in {"name", "edit_name"} else "Профиль сохранён.")
-            await show_menu(message)
-        elif following in {"name", "product", "audience", "goal"}:
-            await ask_onboarding(message, following)
-        else:
+        if following == "replayed":
+            # A save can commit while its HTTP response is lost. Recover the
+            # committed step without applying the same answer a second time.
+            await state.update_data(onboarding_prompt=None, onboarding_consumed=answer.message_id)
+            if not await resume_onboarding(message, actor, state):
+                await show_menu(message, ONBOARDING_COMPLETE)
+            return
+        if following not in {"ready", "name", "product", "audience", "goal"}:
             raise backend.BackendError("Unknown onboarding state")
     except backend.BackendError:
         await message.answer("Сохранение не подтверждено. Повторите сохранение этого ответа.",
                              reply_parameters=types.ReplyParameters(message_id=answer.message_id),
                              reply_markup=inline([("Повторить сохранение", "onboarding_retry:" + step)]))
+        return
+    await state.update_data(onboarding_prompt=None, onboarding_consumed=answer.message_id)
+    if following == "ready":
+        await show_menu(message, "Имя сохранено." if step == "edit_name" else ONBOARDING_COMPLETE)
+    else:
+        await ask_onboarding(message, state, following)
 
 
 @context_router.message(F.text, ~F.text.startswith("/"))

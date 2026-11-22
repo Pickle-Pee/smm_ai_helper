@@ -1,3 +1,6 @@
+from hashlib import sha256
+from typing import Annotated, Literal
+
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
@@ -10,7 +13,8 @@ class Settings(BaseSettings):
     RELEASE_BARRIER_STATE_FILE: str = ""
     RELEASE_BARRIER_TOKEN: SecretStr = SecretStr("")
     TELEGRAM_ONBOARDING_ENABLED: bool = False
-    TELEGRAM_ONBOARDING_COHORT: frozenset[int] = frozenset()
+    TELEGRAM_ONBOARDING_MODE: Literal["cohort", "all-users"] = "cohort"
+    TELEGRAM_ONBOARDING_COHORT: frozenset[Annotated[int, Field(strict=True, gt=0, lt=2**63)]] = frozenset()
     WEB_API_ENABLED: bool = False
     WEB_TELEGRAM_LOGIN_ENABLED: bool = False
     WEB_APP_ORIGIN: str = ""
@@ -57,7 +61,17 @@ class Settings(BaseSettings):
     HTTP_BACKOFF: float = 0.5
 
     def telegram_onboarding_enabled_for(self, actor: int) -> bool:
-        return self.TELEGRAM_ONBOARDING_ENABLED and actor in self.TELEGRAM_ONBOARDING_COHORT
+        return self.TELEGRAM_ONBOARDING_ENABLED and (
+            self.TELEGRAM_ONBOARDING_MODE == "all-users" or actor in self.TELEGRAM_ONBOARDING_COHORT
+        )
+
+    def telegram_onboarding_signature(self) -> str:
+        if not self.TELEGRAM_ONBOARDING_ENABLED:
+            return "disabled"
+        if self.TELEGRAM_ONBOARDING_MODE == "all-users":
+            return "all-users"
+        cohort = ",".join(map(str, sorted(self.TELEGRAM_ONBOARDING_COHORT)))
+        return "cohort:" + sha256(cohort.encode()).hexdigest()
 
     @model_validator(mode="after")
     def graph_execution_window(self):

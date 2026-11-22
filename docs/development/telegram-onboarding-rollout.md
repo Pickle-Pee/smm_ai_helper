@@ -1,13 +1,20 @@
 # Telegram onboarding rollout
 
-Deploy only after review, green PostgreSQL and container CI, and the separate production authorization. Confirm Alembic has one head at the combined release tree. With B4 integrated first, revision 0019 must follow 0018. Bring the schema forward with the feature disabled before changing configuration.
+Build the bot, backend and worker from the same revision. Take a verified database backup and retain the prior image and Compose configuration before replacing the application. Apply the additive Alembic revision 20261122_0020 before starting the new image.
 
-## Cohort and rollback
+## Modes and rollback
 
-- Default: TELEGRAM_ONBOARDING_ENABLED=false in both bot and backend.
-- Closed cohort: use TELEGRAM_ONBOARDING_ENABLED=true with TELEGRAM_ONBOARDING_COHORT set to the same nonempty JSON array of numeric Telegram user IDs in both processes. Keep this array in trusted runtime configuration. An empty or omitted cohort leaves onboarding disabled for everyone.
-- First verify a fresh actor and existing actors with complete and partial profiles. Verify retry, restart, saved results, profile editing, and delivery. Confirm off-cohort behavior with an additional actor.
-- Roll back by setting the flag to false in both processes. Keep revision 0019 and the persisted data in place. Flags control admission and UX only.
+| Settings in bot and backend | Behavior |
+|---|---|
+| TELEGRAM_ONBOARDING_ENABLED=false | Onboarding admission and Telegram prompts are disabled. This is the default. |
+| TELEGRAM_ONBOARDING_ENABLED=true and TELEGRAM_ONBOARDING_MODE=cohort | Only numeric Telegram IDs in TELEGRAM_ONBOARDING_COHORT participate. Omitted and empty cohorts admit nobody. |
+| TELEGRAM_ONBOARDING_ENABLED=true and TELEGRAM_ONBOARDING_MODE=all-users | All authenticated Telegram actors participate. |
+
+Set these values through the shared runtime configuration. The mode defaults to cohort. Invalid modes and invalid cohort IDs fail configuration validation. Before polling, the bot compares its effective mode and cohort signature with the authenticated backend endpoint.
+
+To disable onboarding immediately, set TELEGRAM_ONBOARDING_ENABLED=false for both processes and recreate them together. Preserve persisted names, profiles and messages. The previous application image is compatible with the additive schema.
+
+New Telegram replies are tied to their current question or the prompt that preceded their message. The backend records the highest accepted Telegram message ID with the committed profile change so redelivery after restart cannot become a new generation. Profile readiness and name remain durable, and /start restores the first missing step.
 
 ## Measurement
 
@@ -25,8 +32,6 @@ Use paired offline fixtures first. During a separately approved trial, report sa
 
 ## Release gate
 
-Record the candidate SHA, image digest, observed production schema revision, staged migration evidence, and the release owner before requesting permission. Obtain explicit approval for the deployment and migration window, then apply the schema with the feature disabled. Retain a backup and verify the bot, backend, worker, delivery and Web API before adding any account to the cohort.
+Verify the candidate SHA, image digest and schema revision. Run PostgreSQL and container CI and validate the 12 protected Telegram routes with synthetic actors and a fake provider. A blocked request returns 409 onboarding_required without accepting generation or creating jobs. Check history and saved results by using their read routes. Run B4 and Web Auth regression tests.
 
-Use a dedicated Telegram test account in the closed cohort and a second account outside the cohort. On the fresh in-cohort account, send /start, set a preferred name, stop after the product answer, then restart the bot and resume. Simulate a save failure in staging and retry the original answer. Check that the final committed answer opens the menu. Before completion, exercise a direct request and a legacy callback and verify no new job or provider traffic. After completion use the fake provider for an accepted request, read its result and verify delivery. Reopen /start, edit the preferred name, repeat with a partial existing profile, and confirm history remains visible.
-
-Compare the outside account's entry points and profile to baseline. Check existing Web API and B4 onboarding using test users. Monitor aggregate step completion, allowed, blocked and unavailable admission, and delivery failures. Stop the rollout and disable the flag in both processes if ownership, profile persistence, admission, delivery or Web API regresses. Expand the cohort only after the owner signs off on the closed trial. Any trial involving real paid generation requires separate explicit authorization.
+Use a dedicated Telegram test account for /start, plain-text answers, restart after a partial profile, first generation from stored brand input, saved-result delivery and editing. Test retries with the fake provider and use synthetic brand data for the limited live model check. Keep existing history and profiles intact. Use separate authenticated synthetic actors to verify isolation when only one Telegram account is available. Record separately which steps ran through the real Telegram transport.

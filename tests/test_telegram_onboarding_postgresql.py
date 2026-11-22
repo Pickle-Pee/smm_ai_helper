@@ -36,18 +36,26 @@ def test_resume_partial_profile_and_ignore_duplicate_answers(mvp_database, actor
                 headers = actor_headers(owner)
                 base = "/workflows/onboarding"
                 assert (await bot.get(base, headers=headers)).json() == {"step": "name"}
-                result = await bot.put(base + "/name", headers=headers, json={"name": "Chosen name"})
+                result = await bot.put(base + "/name", headers=headers, json={"name": "Chosen name", "answer_message_id": 10})
                 assert result.json() == {"step": "audience"}
             # A fresh transport and transaction recover the same step from PostgreSQL.
             async with client() as bot:
                 assert (await bot.get(base, headers=headers)).json() == {"step": "audience"}
                 assert (await bot.get(base, headers=actor_headers(stranger))).json() == {"step": "name"}
-                endpoint = "/workflows/profile?onboarding_step=audience"
+                endpoint = "/workflows/profile?onboarding_step=audience&answer_message_id=12"
                 replies = await asyncio.gather(
                     bot.put(endpoint, headers=headers, json={"audience": "Neighbors"}),
                     bot.put(endpoint, headers=headers, json={"audience": "Neighbors"}),
                 )
-                assert [reply.json() for reply in replies] == [{"step": "ready"}] * 2
+                assert sorted(reply.json()["step"] for reply in replies) == ["ready", "replayed"]
+                assert (await bot.get(base + "?message_id=12", headers=headers)).json() == {"step": "replayed"}
+                assert (await bot.get(base + "?message_id=12", headers=actor_headers(stranger))).json() == {
+                    "step": "name",
+                }
+                assert (await bot.get(base + "?message_id=13", headers=headers)).json() == {"step": "ready"}
+                assert (await bot.get(base + "?include_name=true", headers=headers)).json() == {
+                    "step": "ready", "preferred_name": "Chosen name",
+                }
                 updated = await bot.put(base + "/name", headers=headers, json={"name": "Edited", "replace": True})
                 assert updated.json() == {"step": "ready"}
             async with mvp_database() as db:

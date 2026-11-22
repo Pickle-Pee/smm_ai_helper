@@ -91,6 +91,99 @@ def test_telegram_explicit_competitor_and_ignored_url_use_real_http_composition(
     asyncio.run(check())
 
 
+def test_telegram_onboarding_plain_text_reaches_fake_provider_and_saved_history(mvp_database, monkeypatch):
+    from aiogram import Bot
+    from aiogram.methods import SendMessage
+
+    from app.db import get_session
+    from app.marketing_copilot.production import build_production_copilot_api
+    from app.routers import projects, workflows
+    from bot import project_navigation as nav
+    from bot.main import create_dispatcher
+    from tests.test_copilot_api import queue
+    from tests.test_copilot_application import intent_model
+    from tests.test_module_executors import FakeModel
+    from tests.test_telegram_navigation import close_dispatcher, update
+
+    actor = int(uuid.uuid4().hex[:12], 16)
+    text = "Напиши пост. Запишитесь на пробное занятие."
+    model = FakeModel()
+    api = build_production_copilot_api(
+        sessions=mvp_database, queue=queue(), analyzer=analyzer(), module_model=model,
+        intent_model=intent_model(IntentKind.POST_GENERATION, facts={"message": "Запишитесь на пробное занятие"}),
+    )
+    app = application(api)
+    app.include_router(workflows.router)
+    app.include_router(projects.router)
+
+    async def session():
+        async with mvp_database() as db:
+            yield db
+
+    app.dependency_overrides[get_session] = session
+    monkeypatch.setattr(workflows.workflow, "sessions", mvp_database)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", True)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_MODE", "all-users")
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset())
+    wire(monkeypatch, api, app=app)
+    sent = []
+    clock = 0
+
+    async def send(method):
+        nonlocal clock
+        assert isinstance(method, SendMessage)
+        sent.append(method.text)
+        clock += 1
+        return update(clock, method.text, actor=actor).message
+
+    monkeypatch.setattr(Bot, "__call__", AsyncMock(side_effect=send))
+
+    async def feed(dp, bot, value, message_id=None):
+        nonlocal clock
+        if message_id is None:
+            clock += 1
+            message_id = clock
+        await dp.feed_update(bot, update(message_id, value, actor=actor))
+        return message_id
+
+    async def check():
+        dp, bot = create_dispatcher(), Bot("123456:offline-token")
+        try:
+            await feed(dp, bot, "/start")
+            assert sent[-1] == nav.WELCOME
+            await feed(dp, bot, "Саша")
+            await feed(dp, bot, "Мастерская мозаики")
+            assert sent[-1] == nav.ONBOARDING_QUESTIONS["audience"]
+            assert not model.calls
+        finally:
+            await close_dispatcher(dp, bot)
+        dp, bot = create_dispatcher(), Bot("123456:offline-token")
+        try:
+            await feed(dp, bot, "/start")
+            assert sent[-1] == nav.ONBOARDING_QUESTIONS["audience"]
+            await feed(dp, bot, "Взрослые новички")
+            final_answer = await feed(dp, bot, "Больше заявок на занятие")
+            assert sent[-1] == nav.ONBOARDING_COMPLETE
+        finally:
+            await close_dispatcher(dp, bot)
+        dp, bot = create_dispatcher(), Bot("123456:offline-token")
+        try:
+            await feed(dp, bot, "Больше заявок на занятие", final_answer)
+            assert not model.calls
+            await feed(dp, bot, text)
+            assert len(model.calls) == 1, sent
+            inputs = model.calls[0]["text"]
+            assert all(value in inputs for value in ("Мастерская мозаики", "Взрослые новички", "Больше заявок на занятие"))
+            assert any("Use the supplied product" in message for message in sent)
+            await feed(dp, bot, "/history")
+            assert "Use the supplied product" in sent[-1] or "Напиши пост" in sent[-1], sent[-1]
+        finally:
+            await close_dispatcher(dp, bot)
+            await remove_actor(mvp_database, actor)
+
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("kind,request_text,expected", [
     (IntentKind.LEAD_FUNNEL_CALCULATION, "Рассчитай лиды при бюджете 10000 и CPL 500", "Лиды: 20"),
     (IntentKind.POST_GENERATION, "Напиши пост", "Use the supplied product"),
