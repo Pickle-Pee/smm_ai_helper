@@ -4,6 +4,7 @@ Only presentation and transport live here. PostgreSQL owns selection, capability
 checks, concurrency and dialogue identity; FSM is used for unsubmitted forms.
 """
 import base64
+import json
 import re
 from datetime import datetime
 from urllib.parse import urlencode
@@ -245,7 +246,7 @@ async def show_result(message, actor, public_id, *, offset=0):
         await send_text(message, "Сохранённый результат пока недоступен. Откройте карточку, чтобы проверить статус.")
     elif meta["source_type"] == "graph":
         from bot import copilot_contracts as dto, copilot_rendering as render
-        saved = dto.RunResponse.model_validate(result)
+        saved = dto.RunResponse.model_validate_json(json.dumps(result))
         if saved.run_id != meta["source_id"]: raise ValueError("Wrong graph")
         for section in render.run(saved): await send_text(message, section)
     elif meta["source_type"] == "task":
