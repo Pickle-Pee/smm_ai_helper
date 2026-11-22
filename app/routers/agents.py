@@ -30,11 +30,12 @@ def _normalize_legacy_answers(answers: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-@router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True, dependencies=[Depends(require_ready_profile)])
+@router.post("/{agent_type}/run", response_model=AgentRunResponse, deprecated=True)
 async def run_agent(
     agent_type: str,
     payload: AgentRunRequest,
     session: AsyncSession = Depends(get_session),
+    brand_context: dict = Depends(require_ready_profile),
 ):
     """
     Legacy direct agent endpoint.
@@ -47,7 +48,7 @@ async def run_agent(
 
     user = await UserService.get_or_create(session, payload.user)
     user_id = user.id if user else None
-    run_answers = _normalize_legacy_answers(payload.answers)
+    run_answers = {**brand_context, **_normalize_legacy_answers(payload.answers)}
     decision = task_router.fallback_decision(agent_type)
 
     try:

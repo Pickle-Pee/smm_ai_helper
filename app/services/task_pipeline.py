@@ -40,6 +40,8 @@ class TaskPipelineService:
         mode: str,
         request_id: str = "-",
         user_id: str = "anonymous",
+        *,
+        brand_context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         session_state = TaskSessionState(
             session_id=uuid.uuid4().hex,
@@ -52,7 +54,7 @@ class TaskPipelineService:
         )
         await TaskSessionService.save(db_session, session_state)
         await db_session.commit()
-        return await self._execute_session(db_session, session_state.session_id)
+        return await self._execute_session(db_session, session_state.session_id, brand_context=brand_context)
 
     async def answer(
         self,
@@ -60,10 +62,12 @@ class TaskPipelineService:
         session_id: str,
         key: str,
         value: str,
+        *,
+        brand_context: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        return await self._execute_session(db_session, session_id, answer=(key, value))
+        return await self._execute_session(db_session, session_id, answer=(key, value), brand_context=brand_context)
 
-    async def _execute_session(self, db_session, session_id, answer=None):
+    async def _execute_session(self, db_session, session_id, answer=None, *, brand_context=None):
         timeout = settings.TASK_FINALIZATION_TIMEOUT_SECONDS
         lease_seconds = timeout + 30  # Cancellation/cleanup margin; no lease renewals.
         deadline = monotonic() + lease_seconds + 5
@@ -76,6 +80,7 @@ class TaskPipelineService:
             await asyncio.sleep(0.1)  # acquire committed; no connection/lock is held while waiting.
         if state.completed_response is not None:
             return state.completed_response
+        state.brand_context = brand_context or {}
         try:
             # One execution attempt per request. A retry needs a new claim.
             async with asyncio.timeout(timeout):
@@ -108,7 +113,7 @@ class TaskPipelineService:
         decision, usage = await self.task_router.route(
             session_state.agent_type,
             session_state.task_description,
-            session_state.answers,
+            session_state.generation_answers,
         )
 
         clarification_response = await self._handle_clarification(
@@ -151,7 +156,7 @@ class TaskPipelineService:
         else:
             await TaskFinalizationService.check_owned(db_session, session_state)
             questions = await self.clarification_service.generate_questions(
-                session_state.task_description, session_state.answers, remaining,
+                session_state.task_description, session_state.generation_answers, remaining,
             )
 
         session_state.questions_asked += len(questions)
@@ -176,7 +181,7 @@ class TaskPipelineService:
         result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
             task_description=session_state.task_description,
-            answers=session_state.answers,
+            answers=session_state.generation_answers,
             model=model,
             max_output_tokens=max_output_tokens,
         )
@@ -197,7 +202,7 @@ class TaskPipelineService:
         revised_result = await self.agent_runner.run(
             agent_type=session_state.agent_type,
             task_description=session_state.task_description,
-            answers=session_state.answers,
+            answers=session_state.generation_answers,
             model=model,
             max_output_tokens=max_output_tokens,
             qc_issues=issues,

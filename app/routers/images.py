@@ -15,13 +15,17 @@ router = APIRouter(prefix="/images", tags=["images"])
 image_orchestrator = ImageOrchestrator()
 
 
-@router.post("/generate", response_model=ImageGenerateResponse, dependencies=[Depends(require_ready_profile)])
-async def generate_image(payload: ImageGenerateRequest, actor: int = Depends(require_actor)):
+@router.post("/generate", response_model=ImageGenerateResponse)
+async def generate_image(
+    payload: ImageGenerateRequest, actor: int = Depends(require_actor),
+    brand_context: dict = Depends(require_ready_profile),
+):
+    brand = {**brand_context, **(payload.brand or {})} if brand_context else payload.brand
     result = await image_orchestrator.generate(
         platform=payload.platform,
         use_case=payload.use_case,
         message=payload.message,
-        brand=payload.brand,
+        brand=brand,
         overlay=payload.overlay,
         variants=payload.variants,
         user_id=str(actor),
