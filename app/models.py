@@ -98,6 +98,11 @@ class ExternalIdentity(Base):
             name="ck_external_identities_subject",
         ),
         Index("ix_external_identities_user_id", "user_id"),
+        Index("uq_external_identities_email_user", "user_id", unique=True, postgresql_where=text("provider = 'email'")),
+        CheckConstraint(
+            """provider <> 'email' OR (subject COLLATE "C" ~ '^[!-~]{3,254}$' AND subject = lower(subject COLLATE "C"))""",
+            name="ck_external_identities_email_subject",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -109,6 +114,25 @@ class ExternalIdentity(Base):
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EmailCredential(Base):
+    """Password credential for an existing, verified canonical email identity."""
+
+    __tablename__ = "email_credentials"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["identity_provider", "email"], ["external_identities.provider", "external_identities.subject"],
+            name="fk_email_credentials_verified_identity", ondelete="CASCADE",
+        ),
+        CheckConstraint("identity_provider = 'email'", name="ck_email_credentials_provider"),
+        CheckConstraint("password_hash LIKE '$argon2id$%'", name="ck_email_credentials_argon2id"),
+    )
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    identity_provider: Mapped[str] = mapped_column(String(64), server_default="email")
+    password_hash: Mapped[str] = mapped_column(String(512))
+    password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class OwnedProductSnapshotRecord(Base):

@@ -1,0 +1,16 @@
+{
+  "canonical": [
+    {"input": "First.Last+Offers@EXAMPLE.COM", "subject": "first.last+offers@example.com"},
+    {"input": "owner@XN--E1AFMKFD.XN--P1AI", "subject": "owner@xn--e1afmkfd.xn--p1ai"}
+  ],
+  "rejected": [
+    " first@example.com",
+    "first@example.com\n",
+    "fіrst@example.com",
+    "first@пример.рф",
+    "first..last@example.com",
+    "first@-mail.example",
+    "first@localhost",
+    "\"first\"@example.com"
+  ]
+}
