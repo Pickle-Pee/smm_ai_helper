@@ -11,8 +11,11 @@ from sqlalchemy import delete, func, select
 from app.config import settings
 from app.db import get_session
 from app.main import app
-from app.models import BrandProfile, Job, TaskSessionRecord, User
+from app.models import BrandProfile, Job, Task, TaskSessionRecord, User
+from app.routers.agents import agent_runner
 from app.routers.images import image_orchestrator
+from app.routers.tasks import task_pipeline
+from app.services.brand_profile_service import BrandProfileService
 from bot.backend import actor_headers
 from tests.test_telegram_admission import GENERATION
 from tests.test_web_session_http import client
@@ -131,5 +134,101 @@ def test_valid_generation_reaches_fake_only_for_ready_or_out_of_cohort_users(mvp
             finally:
                 async with mvp_database.begin() as db:
                     await db.execute(delete(BrandProfile).where(BrandProfile.user_id == uid))
+
+    asyncio.run(run())
+
+
+def test_legacy_generation_uses_only_current_owner_brand_as_prompt_defaults(mvp_database, actors, monkeypatch):
+    owner, other = actors
+    monkeypatch.setattr(settings, "BOT_BACKEND_TOKEN", "legacy-brand-test")
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_ENABLED", True)
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_MODE", "all-users")
+    monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
+    network = AsyncMock(side_effect=AssertionError("External HTTP is prohibited"))
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", network)
+
+    result = {"content": "Fake result", "confidence": "high"}
+    direct_agent = AsyncMock(return_value=result)
+    task_agent = AsyncMock(return_value=result)
+    image = AsyncMock(return_value={"mode": "fake", "preset_id": "offline", "image_ids": ["offline"]})
+    task_image = AsyncMock(return_value={"url": "/images/offline.png"})
+    decision = {"needs_clarification": False, "model": "offline", "max_output_tokens": 100}
+    route = AsyncMock(side_effect=[
+        ({**decision, "needs_clarification": True,
+          "next_questions": [{"key": "detail", "question": "Specify a detail"}]}, {}),
+        (decision, {}),
+    ])
+    monkeypatch.setattr(agent_runner, "run", direct_agent)
+    monkeypatch.setattr(task_pipeline.agent_runner, "run", task_agent)
+    monkeypatch.setattr(task_pipeline.task_router, "route", route)
+    monkeypatch.setattr(image_orchestrator, "generate", image)
+    monkeypatch.setattr(task_pipeline.task_image_service.image_orchestrator, "generate", task_image)
+
+    async def database():
+        async with mvp_database() as db:
+            yield db
+
+    monkeypatch.setitem(app.dependency_overrides, get_session, database)
+
+    async def run():
+        brand = {"product_description": "Coffee", "audience": "Neighbors", "goals": ["Visitors"]}
+        updated = {"product_description": "Tea", "audience": "Neighbors", "goals": ["Visitors"]}
+        other_brand = {"product_description": "Flowers", "audience": "Gift shoppers", "goals": ["Sales"]}
+        async with mvp_database.begin() as db:
+            owner_id = await db.scalar(select(User.id).where(User.telegram_id == owner))
+            other_id = await db.scalar(select(User.id).where(User.telegram_id == other))
+            profile = BrandProfile(user_id=owner_id, **brand, tone="Personal",
+                                   extra_json={"private": "Do not send"})
+            db.add_all([profile, BrandProfile(user_id=other_id, **other_brand)])
+        session_id = None
+        try:
+            async with client() as bot:
+                request = {"user": {"telegram_id": owner}, "agent_type": "strategy",
+                           "task_description": "Synthetic input", "answers": {"audience": "Local buyers"}}
+                response = await bot.post("/agents/strategy/run", headers=actor_headers(owner), json=request)
+                assert response.status_code == 200, response.text
+                assert direct_agent.await_args.kwargs["answers"] == {**brand, "audience": "Local buyers"}
+
+                response = await bot.post("/tasks/start", headers=actor_headers(owner),
+                                          json={**request, "mode": "text+image"})
+                assert response.status_code == 200 and response.json()["status"] == "need_info", response.text
+                session_id = response.json()["session_id"]
+                assert route.await_args.args[-1] == {**brand, "audience": "Local buyers"}
+
+                async with mvp_database.begin() as db:
+                    current = await BrandProfileService.get_by_user_id(db, owner_id)
+                    current.product_description = "Tea"
+
+                response = await bot.post("/tasks/answer", headers=actor_headers(owner),
+                                          json={"session_id": session_id, "key": "detail", "value": "Synthetic detail"})
+                assert response.status_code == 200 and response.json()["status"] == "done", response.text
+                assert task_agent.await_args.kwargs["answers"] == {
+                    **updated, "audience": "Local buyers", "detail": "Synthetic detail",
+                }
+                assert task_image.await_args.kwargs["brand"] == updated
+
+                for actor, expected in ((owner, updated), (other, other_brand)):
+                    response = await bot.post("/images/generate", headers=actor_headers(actor), json={"message": "Sample"})
+                    assert response.status_code == 200, response.text
+                    assert image.await_args.kwargs["brand"] == expected
+                monkeypatch.setattr(settings, "OPENAI_BASE_URL", "https://alternative.example/v1")
+                response = await bot.post("/images/generate", headers=actor_headers(owner), json={"message": "Sample"})
+                assert response.status_code == 200, response.text
+                assert image.await_args.kwargs["brand"] is None
+
+            async with mvp_database() as db:
+                session = await db.get(TaskSessionRecord, session_id)
+                assert session.answers == {"audience": "Local buyers", "detail": "Synthetic detail"}
+                saved = (await db.scalars(select(Task).where(Task.user_id == owner_id))).all()
+                assert sorted((item.answers for item in saved), key=len) == [
+                    {"audience": "Local buyers"}, {"audience": "Local buyers", "detail": "Synthetic detail"},
+                ]
+            network.assert_not_awaited()
+        finally:
+            async with mvp_database.begin() as db:
+                if session_id:
+                    await db.execute(delete(TaskSessionRecord).where(TaskSessionRecord.session_id == session_id))
+                await db.execute(delete(Task).where(Task.user_id == owner_id))
+                await db.execute(delete(BrandProfile).where(BrandProfile.user_id.in_([owner_id, other_id])))
 
     asyncio.run(run())

@@ -22,6 +22,11 @@ class TaskSessionState:
     user_id: str = "anonymous"
     completed_response: Dict[str, Any] | None = None
     finalization_token: str | None = None  # Internal ownership, never a public DTO field.
+    brand_context: Dict[str, Any] = field(default_factory=dict)  # Current request only.
+
+    @property
+    def generation_answers(self) -> Dict[str, Any]:
+        return {**self.brand_context, **self.answers}
 
 
 class TaskSessionService:

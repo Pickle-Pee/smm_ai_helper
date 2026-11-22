@@ -20,11 +20,14 @@ class TaskImageService:
             return None
 
         answers = session_state.answers or {}
+        brand = answers.get("brand")
+        if session_state.brand_context and (brand is None or isinstance(brand, dict)):
+            brand = {**session_state.brand_context, **(brand or {})}
         return await self.image_orchestrator.generate(
             platform=answers.get("platform", "auto"),
             use_case=answers.get("use_case", "auto"),
             message=session_state.task_description,
-            brand=answers.get("brand"),
+            brand=brand,
             overlay=answers.get("overlay"),
             variants=int(answers.get("variants", 1) or 1),
             user_id=session_state.user_id,

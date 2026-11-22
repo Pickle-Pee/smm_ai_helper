@@ -48,10 +48,11 @@ async def get_tasks_by_user(
     )
 
 
-@router.post("/start", response_model=TaskNeedInfoResponse | TaskDoneResponse, dependencies=[Depends(require_ready_profile)])
+@router.post("/start", response_model=TaskNeedInfoResponse | TaskDoneResponse)
 async def start_task(
     payload: TaskStartRequest,
     session: AsyncSession = Depends(get_session),
+    brand_context: dict = Depends(require_ready_profile),
 ):
     if not AgentRegistry.is_supported(payload.agent_type):
         raise HTTPException(status_code=404, detail="Unknown agent type")
@@ -65,15 +66,17 @@ async def start_task(
         mode=payload.mode,
         request_id=uuid.uuid4().hex,
         user_id=str(payload.user.telegram_id) if payload.user else "anonymous",
+        brand_context=brand_context,
     )
 
     return response
 
 
-@router.post("/answer", response_model=TaskNeedInfoResponse | TaskDoneResponse, dependencies=[Depends(require_ready_profile)])
+@router.post("/answer", response_model=TaskNeedInfoResponse | TaskDoneResponse)
 async def answer_task(
     payload: TaskAnswerRequest,
     session: AsyncSession = Depends(get_session),
+    brand_context: dict = Depends(require_ready_profile),
 ):
     session_data = await task_pipeline.get_session(session, payload.session_id)
     if not session_data:
@@ -84,6 +87,7 @@ async def answer_task(
         session_id=payload.session_id,
         key=payload.key,
         value=payload.value,
+        brand_context=brand_context,
     )
 
     return response
