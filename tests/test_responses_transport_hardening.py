@@ -95,6 +95,20 @@ def test_successful_plain_and_strict_wire_contract(monkeypatch, caplog, structur
     assert all(c.is_closed for c in clients)
 
 
+@pytest.mark.parametrize("model", ["gpt-4o-mini", "gpt-4.1-mini"])
+def test_gpt4_structured_wire_omits_unsupported_reasoning(monkeypatch, model):
+    requests, _ = install(monkeypatch, httpx.Response(200, json=completed()))
+    fmt = {"type": "json_object"}
+
+    result, _ = asyncio.run(chat(MESSAGES, model, response_format=fmt))
+
+    payload, = wire(requests)
+    assert result == '{"ok":true}'
+    assert payload["model"] == model
+    assert payload["text"]["format"] == fmt
+    assert "reasoning" not in payload
+
+
 @pytest.mark.parametrize("attempt", [1, 2])
 @pytest.mark.parametrize("body,reason", [
     ({"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
