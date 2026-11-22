@@ -64,7 +64,8 @@ def test_all_direct_generation_routes_refuse_an_incomplete_profile(mvp_database,
     network = AsyncMock(side_effect=AssertionError("External HTTP is prohibited"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", network)
     actor = actors[0]
-    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset({actor}))
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_MODE", "all-users")
+    monkeypatch.setattr(settings, "TELEGRAM_ONBOARDING_COHORT", frozenset())
     session_id = uuid.uuid4().hex
 
     async def database():

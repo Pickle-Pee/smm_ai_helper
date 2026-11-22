@@ -166,6 +166,7 @@ class UserPreferredName(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     display_name: Mapped[str] = mapped_column(String(100))
+    last_onboarding_message_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class BrandProfile(Base):
@@ -700,7 +701,7 @@ class Organization(Base):
     __tablename__ = "organizations"
     __table_args__ = (
         UniqueConstraint("id", "personal_user_id", name="uq_org_personal_pair"),
-        CheckConstraint("length(btrim(name)) > 0"),
+        CheckConstraint("length(btrim(name)) > 0", name="organizations_name_check"),
         CheckConstraint("(kind = 'personal' AND personal_user_id IS NOT NULL) OR "
                         "(kind = 'team' AND personal_user_id IS NULL)", name="ck_organization_kind"),
     )
@@ -716,8 +717,8 @@ class Organization(Base):
 class Membership(Base):
     __tablename__ = "memberships"
     __table_args__ = (
-        CheckConstraint("role IN ('owner','editor','viewer')"),
-        CheckConstraint("version >= 1"),
+        CheckConstraint("role IN ('owner','editor','viewer')", name="memberships_role_check"),
+        CheckConstraint("version >= 1", name="memberships_version_check"),
         Index("ix_memberships_user_id", "user_id"),
     )
 
@@ -735,9 +736,9 @@ class Project(Base):
         UniqueConstraint("id", "org_id"),
         UniqueConstraint("created_by", "request_key"),
         ForeignKeyConstraint(["org_id", "default_for_user"], ["organizations.id", "organizations.personal_user_id"]),
-        CheckConstraint("version > 0"),
-        CheckConstraint("status IN ('draft','active','archived')"),
-        CheckConstraint("color IN ('teal','violet','coral','amber','blue','green')"),
+        CheckConstraint("version > 0", name="projects_version_check"),
+        CheckConstraint("status IN ('draft','active','archived')", name="projects_status_check"),
+        CheckConstraint("color IN ('teal','violet','coral','amber','blue','green')", name="projects_color_check"),
         Index("ix_projects_org_updated", "org_id", "updated_at", "id"),
     )
 
@@ -759,8 +760,8 @@ class ProjectBrand(Base):
     __tablename__ = "project_brands"
     __table_args__ = (
         ForeignKeyConstraint(["project_id", "org_id"], ["projects.id", "projects.org_id"], ondelete="CASCADE"),
-        CheckConstraint("version > 0"),
-        CheckConstraint("(imported_at IS NULL) = (imported_by IS NULL)"),
+        CheckConstraint("version > 0", name="project_brands_version_check"),
+        CheckConstraint("(imported_at IS NULL) = (imported_by IS NULL)", name="project_brands_check"),
     )
 
     project_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)

@@ -72,6 +72,7 @@ def test_polling_shutdown_waits_for_update_and_delivery_before_closing(monkeypat
 
     monkeypatch.setattr(runtime, "setup_logging", lambda: None)
     monkeypatch.setattr(runtime, "validate_configuration", lambda: None)
+    monkeypatch.setattr(runtime, "validate_onboarding_configuration", AsyncMock())
     monkeypatch.setattr(runtime.settings, "TELEGRAM_BOT_TOKEN", "123456:offline-token")
 
     async def run():

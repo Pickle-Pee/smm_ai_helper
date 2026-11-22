@@ -36,6 +36,12 @@ def validate_configuration():
         raise ValueError("Bot requires a valid API_BASE_URL, BOT_BACKEND_TOKEN and TELEGRAM_BOT_TOKEN") from None
 
 
+async def validate_onboarding_configuration():
+    config = await request("GET", "/workflows/onboarding/config", None)
+    if config != {"signature": settings.telegram_onboarding_signature()}:
+        raise RuntimeError("Telegram onboarding configuration differs between bot and backend")
+
+
 def actor_headers(telegram_id: int) -> dict[str, str]:
     return {**service_headers(), "X-Telegram-User-ID": str(telegram_id)}
 
@@ -57,7 +63,8 @@ async def request(method, path, actor_id, *, payload=None):
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, settings.API_BASE_URL.rstrip("/") + path,
-                                            headers=actor_headers(actor_id), json=payload)
+                                            headers=service_headers() if actor_id is None else actor_headers(actor_id),
+                                            json=payload)
     except httpx.HTTPError as exc:
         raise BackendError("Ответ сервера не получен. Запрос мог быть принят; проверьте /runs перед повтором."
             if method.upper() in {"POST", "PATCH", "PUT"}
@@ -83,7 +90,11 @@ async def request(method, path, actor_id, *, payload=None):
         data = response.json()
         if not isinstance(data, (dict, list)):
             raise ValueError()
-        if path == "/workflows" or (path.startswith("/workflows/") and path.partition("?")[0] not in {"/workflows/profile", "/workflows/onboarding", "/workflows/onboarding/name"}):
+        resource = path.partition("?")[0]
+        if resource == "/workflows" or (resource.startswith("/workflows/") and resource not in {
+            "/workflows/profile", "/workflows/onboarding", "/workflows/onboarding/name",
+            "/workflows/onboarding/config",
+        }):
             from bot.workflow_contracts import validate_runs, validate_workflow
             return validate_runs(data) if path == "/workflows" and method.upper() == "GET" else validate_workflow(data)
         return data
